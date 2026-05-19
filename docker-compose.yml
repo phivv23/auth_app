@@ -1,0 +1,23 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: auth_mysql
+    restart: unless-stopped
+
+    environment:
+      # Password cho user root trong MySQL.
+      MYSQL_ROOT_PASSWORD: rootpassword
+
+      # Database này được tạo khi container khởi tạo lần đầu.
+      MYSQL_DATABASE: auth_app
+
+    ports:
+      # Port 3306 trong container được map ra máy local.
+      - "3306:3306"
+
+    volumes:
+      # Giữ data MySQL kể cả khi container bị xóa/restart.
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
