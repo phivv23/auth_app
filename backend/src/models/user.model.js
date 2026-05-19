@@ -188,3 +188,32 @@ export async function updateUserPassword(userId, passwordHash) {
     [passwordHash, userId]
   );
 }
+
+export async function findPublicUserProfileById(userId) {
+  const rows = await query(
+    `
+    SELECT
+      u.id,
+      u.name,
+      u.avatar_url AS avatarUrl,
+      u.created_at AS createdAt,
+      COUNT(p.id) AS postCount
+    FROM users u
+    LEFT JOIN posts p ON p.user_id = u.id
+    WHERE u.id = ?
+    GROUP BY u.id
+    `,
+    [userId]
+  );
+
+  const user = rows[0] || null;
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    ...user,
+    postCount: Number(user.postCount),
+  };
+}

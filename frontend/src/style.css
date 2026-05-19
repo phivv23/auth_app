@@ -250,3 +250,78 @@ textarea {
     flex-wrap: wrap;
   }
 }
+
+.avatar-box {
+  margin: 16px 0;
+}
+
+.avatar-preview,
+.avatar-placeholder {
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid #ddd;
+}
+
+.avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eee;
+  font-size: 40px;
+  font-weight: bold;
+}
+
+.form-group {
+  margin-bottom: 12px;
+}
+
+.error {
+  color: #d00;
+}
+
+.success {
+  color: #087f23;
+}
+
+.profile-header {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search-form input {
+  flex: 1;
+}
+
+.post-list {
+  display: grid;
+  gap: 12px;
+}
+
+.post-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.post-meta {
+  display: flex;
+  gap: 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+.pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}

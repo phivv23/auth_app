@@ -140,8 +140,11 @@ export default function PostList() {
                   </h2>
 
                   <p className="muted">
-                    Tác giả: {post.authorName} · Likes: {post.likeCount} ·
-                    Comments: {post.commentCount}
+                    Tác giả:{" "}
+                    <Link to={`/users/${post.userId}`}>
+                      {post.authorName}
+                    </Link>{" "}
+                    · Likes: {post.likeCount} · Comments: {post.commentCount}
                   </p>
 
                   <p>{post.content.slice(0, 180)}...</p>

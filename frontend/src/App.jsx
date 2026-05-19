@@ -12,6 +12,7 @@ import PostDetail from "./pages/PostDetail.jsx";
 import CreatePost from "./pages/CreatePost.jsx";
 import EditPost from "./pages/EditPost.jsx";
 import MyPosts from "./pages/MyPosts.jsx";
+import UserProfile from "./pages/UserProfile";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -63,6 +64,8 @@ export default function App() {
 
           <Route path="/posts" element={<PostList />} />
           <Route path="/posts/:id" element={<PostDetail />} />
+          
+          <Route path="/users/:id" element={<UserProfile />} />
 
           <Route element={<GuestRoute />}>
             <Route path="/register" element={<Register />} />

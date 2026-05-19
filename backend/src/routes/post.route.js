@@ -70,25 +70,24 @@ function validateCommentInput(content) {
  * Public API.
  *
  * Query:
- * ?page=1&limit=10
+ * ?page=1&limit=10&search=react
  */
 router.get("/", optionalAuth, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
 
-    /**
-     * Giới hạn limit tối đa để tránh query quá nặng.
-     */
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
+
+    const search = String(req.query.search || "").trim();
 
     const currentUserId = req.user?.id || null;
 
     const result = await findPosts({
       page,
       limit,
+      search,
       currentUserId,
-      search: req.query.search,
     });
 
     return res.json(result);
@@ -100,19 +99,25 @@ router.get("/", optionalAuth, async (req, res, next) => {
 /**
  * GET /api/posts/me
  *
- * Lấy danh sách bài viết của user đang đăng nhập.
+ * Lấy danh sách bài viết của user hiện tại.
+ *
+ * Cần đặt route này TRƯỚC /:id.
+ * Nếu đặt sau /:id, Express có thể hiểu "me" là id.
  */
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
+
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
+
+    const search = String(req.query.search || "").trim();
 
     const result = await findPosts({
       page,
       limit,
+      search,
       currentUserId: req.user.id,
-      search: req.query.search,
       authorId: req.user.id,
     });
 

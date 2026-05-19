@@ -1,23 +1,21 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { uploadAvatar } from "../config/upload.js";
-import { requireAuth } from "../middleware/requireAuth.js";
+import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
 import {
   findPublicUserByEmail,
   findUserWithPasswordById,
-  updateUserAvatar,
   updateUserPassword,
   updateUserProfile,
+  updateUserAvatar,
+  findPublicUserProfileById,
 } from "../models/user.model.js";
+import { uploadAvatar } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
+import { findPosts } from "../models/post.model.js";
 
 const router = Router();
 
 const SALT_ROUNDS = 12;
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 function handleAvatarUpload(req, res, next) {
   uploadAvatar.single("avatar")(req, res, (error) => {
@@ -27,14 +25,28 @@ function handleAvatarUpload(req, res, next) {
 
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message: "Avatar toi da 2MB.",
+        message: "Avatar tối đa 2MB",
       });
     }
 
     return res.status(400).json({
-      message: error.message || "File avatar khong hop le.",
+      message: error.message || "Upload avatar thất bại",
     });
   });
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizePositiveInt(value, fallback) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return fallback;
+  }
+
+  return number;
 }
 
 /**
@@ -120,44 +132,6 @@ router.patch("/me", requireAuth, async (req, res, next) => {
 });
 
 /**
- * PATCH /api/users/me/avatar
- *
- * Upload avatar cho user hien tai.
- *
- * FormData:
- * avatar: File
- */
-router.patch(
-  "/me/avatar",
-  requireAuth,
-  handleAvatarUpload,
-  async (req, res, next) => {
-    const avatarUrl = req.file ? `/uploads/avatars/${req.file.filename}` : "";
-
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          message: "Vui long chon file avatar.",
-        });
-      }
-
-      const previousAvatarUrl = req.user.avatarUrl;
-      const updatedUser = await updateUserAvatar(req.user.id, avatarUrl);
-
-      await deleteLocalUpload(previousAvatarUrl);
-
-      return res.json({
-        message: "Upload avatar thanh cong.",
-        user: updatedUser,
-      });
-    } catch (error) {
-      await deleteLocalUpload(avatarUrl);
-      next(error);
-    }
-  }
-);
-
-/**
  * PATCH /api/users/me/password
  *
  * Đổi password.
@@ -231,6 +205,104 @@ router.patch("/me/password", requireAuth, async (req, res, next) => {
 
     return res.json({
       message: "Đổi password thành công.",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch(
+  "/me/avatar",
+  requireAuth,
+  handleAvatarUpload,
+  async (req, res, next) => {
+    const avatarUrl = req.file ? `/uploads/avatars/${req.file.filename}` : "";
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          message: "Vui lòng chọn file avatar",
+        });
+      }
+
+      const oldAvatarUrl = req.user.avatarUrl;
+
+      const updatedUser = await updateUserAvatar(req.user.id, avatarUrl);
+
+      // Xóa avatar cũ sau khi DB đã update thành công
+      await deleteLocalUpload(oldAvatarUrl);
+
+      res.json({
+        message: "Upload avatar thành công",
+        user: updatedUser,
+      });
+    } catch (error) {
+      await deleteLocalUpload(avatarUrl);
+      next(error);
+    }
+  }
+);
+
+router.get("/:id/posts", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    const profile = await findPublicUserProfileById(userId);
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+    const search = req.query.search || "";
+
+    const result = await findPosts({
+      page,
+      limit,
+      search,
+      authorId: userId,
+      currentUserId: req.user?.id || null,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    const profile = await findPublicUserProfileById(userId);
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    res.json({
+      profile: {
+        ...profile,
+        isMe: req.user ? req.user.id === profile.id : false,
+      },
     });
   } catch (error) {
     next(error);

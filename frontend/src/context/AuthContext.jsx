@@ -19,19 +19,19 @@ export function AuthProvider({ children }) {
    */
   const [loading, setLoading] = useState(true);
   async function uploadAvatar(file) {
-  const formData = new FormData();
+    const formData = new FormData();
 
-  formData.append("avatar", file);
+    formData.append("avatar", file);
 
-  const data = await apiFetch("/users/me/avatar", {
-    method: "PATCH",
-    body: formData,
-  });
+    const data = await apiFetch("/users/me/avatar", {
+      method: "PATCH",
+      body: formData,
+    });
 
-  setUser(data.user);
+    setUser(data.user);
 
-  return data.user;
-}
+    return data.user;
+  }
   async function loadCurrentUser() {
     try {
       /**
@@ -115,32 +115,32 @@ export function AuthProvider({ children }) {
     }
   }
   async function updateProfile(formData) {
-  const data = await apiFetch("/users/me", {
-    method: "PATCH",
-    body: JSON.stringify(formData),
-  });
+    const data = await apiFetch("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(formData),
+    });
 
-  /**
-   * Backend trả user mới sau khi update.
-   * Frontend cần cập nhật lại user state để Navbar/Dashboard/Profile hiển thị đúng.
-   */
-  setUser(data.user);
+    /**
+     * Backend trả user mới sau khi update.
+     * Frontend cần cập nhật lại user state để Navbar/Dashboard/Profile hiển thị đúng.
+     */
+    setUser(data.user);
 
-  return data.user;
-}
+    return data.user;
+  }
 
-async function changePassword(formData) {
-  const data = await apiFetch("/users/me/password", {
-    method: "PATCH",
-    body: JSON.stringify(formData),
-  });
+  async function changePassword(formData) {
+    const data = await apiFetch("/users/me/password", {
+      method: "PATCH",
+      body: JSON.stringify(formData),
+    });
 
-  /**
-   * Đổi password không làm thay đổi user object.
-   * Vì vậy không cần setUser().
-   */
-  return data;
-}
+    /**
+     * Đổi password không làm thay đổi user object.
+     * Vì vậy không cần setUser().
+     */
+    return data;
+  }
 
   return (
     <AuthContext.Provider

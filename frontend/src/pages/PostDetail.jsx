@@ -197,8 +197,11 @@ export default function PostDetail() {
         <h1>{post.title}</h1>
 
         <p className="muted">
-          Tác giả: {post.authorName} · Likes: {post.likeCount} · Comments:{" "}
-          {post.commentCount}
+          Tác giả:{" "}
+          <Link to={`/users/${post.userId}`}>
+            {post.authorName}
+          </Link>{" "}
+          · Likes: {post.likeCount} · Comments: {post.commentCount}
         </p>
 
         <p className="post-content">{post.content}</p>
@@ -258,53 +261,53 @@ export default function PostDetail() {
 
               return (
                 <div key={comment.id} className="comment-card">
-  {editingCommentId === comment.id ? (
-    <>
-      <textarea
-        value={editingCommentContent}
-        onChange={(event) => setEditingCommentContent(event.target.value)}
-        rows={4}
-      />
+                  {editingCommentId === comment.id ? (
+                    <>
+                      <textarea
+                        value={editingCommentContent}
+                        onChange={(event) => setEditingCommentContent(event.target.value)}
+                        rows={4}
+                      />
 
-      <div className="actions">
-        <button
-          className="button"
-          onClick={() => handleUpdateComment(comment.id)}
-        >
-          Lưu
-        </button>
+                      <div className="actions">
+                        <button
+                          className="button"
+                          onClick={() => handleUpdateComment(comment.id)}
+                        >
+                          Lưu
+                        </button>
 
-        <button className="button secondary" onClick={cancelEditComment}>
-          Hủy
-        </button>
-      </div>
-    </>
-  ) : (
-    <>
-      <p>{comment.content}</p>
+                        <button className="button secondary" onClick={cancelEditComment}>
+                          Hủy
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p>{comment.content}</p>
 
-      <p className="muted">Bởi {comment.authorName}</p>
+                      <p className="muted">Bởi {comment.authorName}</p>
 
-      {isCommentAuthor && (
-        <div className="actions">
-          <button
-            className="button secondary"
-            onClick={() => startEditComment(comment)}
-          >
-            Sửa comment
-          </button>
+                      {isCommentAuthor && (
+                        <div className="actions">
+                          <button
+                            className="button secondary"
+                            onClick={() => startEditComment(comment)}
+                          >
+                            Sửa comment
+                          </button>
 
-          <button
-            className="button danger"
-            onClick={() => handleDeleteComment(comment.id)}
-          >
-            Xóa comment
-          </button>
-        </div>
-      )}
-    </>
-  )}
-</div>
+                          <button
+                            className="button danger"
+                            onClick={() => handleDeleteComment(comment.id)}
+                          >
+                            Xóa comment
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               );
             })
           )}
