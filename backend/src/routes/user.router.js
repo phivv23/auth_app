@@ -12,10 +12,24 @@ import {
 import { uploadAvatar } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
 import { findPosts } from "../models/post.model.js";
+import {
+  followUser,
+  unfollowUser,
+} from "../models/follow.model.js";
 
 const router = Router();
 
 const SALT_ROUNDS = 12;
+
+function parsePositiveInt(value) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return null;
+  }
+
+  return number;
+}
 
 function handleAvatarUpload(req, res, next) {
   uploadAvatar.single("avatar")(req, res, (error) => {
@@ -243,17 +257,106 @@ router.patch(
   }
 );
 
-router.get("/:id/posts", optionalAuth, async (req, res, next) => {
+router.post("/:id/follow", requireAuth, async (req, res, next) => {
   try {
-    const userId = Number(req.params.id);
+    const targetUserId = parsePositiveInt(req.params.id);
 
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (!targetUserId) {
       return res.status(400).json({
         message: "User id không hợp lệ",
       });
     }
 
-    const profile = await findPublicUserProfileById(userId);
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({
+        message: "Bạn không thể follow chính mình",
+      });
+    }
+
+    const targetProfile = await findPublicUserProfileById(
+      targetUserId,
+      req.user.id
+    );
+
+    if (!targetProfile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    await followUser(req.user.id, targetUserId);
+
+    const updatedProfile = await findPublicUserProfileById(
+      targetUserId,
+      req.user.id
+    );
+
+    res.json({
+      message: "Follow thành công",
+      profile: updatedProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/:id/follow", requireAuth, async (req, res, next) => {
+  try {
+    const targetUserId = parsePositiveInt(req.params.id);
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({
+        message: "Bạn không thể unfollow chính mình",
+      });
+    }
+
+    const targetProfile = await findPublicUserProfileById(
+      targetUserId,
+      req.user.id
+    );
+
+    if (!targetProfile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    await unfollowUser(req.user.id, targetUserId);
+
+    const updatedProfile = await findPublicUserProfileById(
+      targetUserId,
+      req.user.id
+    );
+
+    res.json({
+      message: "Unfollow thành công",
+      profile: updatedProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/posts", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = parsePositiveInt(req.params.id);
+
+    if (!userId) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    const profile = await findPublicUserProfileById(
+      userId,
+      req.user?.id || null
+    );
 
     if (!profile) {
       return res.status(404).json({
@@ -282,15 +385,18 @@ router.get("/:id/posts", optionalAuth, async (req, res, next) => {
 
 router.get("/:id", optionalAuth, async (req, res, next) => {
   try {
-    const userId = Number(req.params.id);
+    const userId = parsePositiveInt(req.params.id);
 
-    if (!Number.isInteger(userId) || userId <= 0) {
+    if (!userId) {
       return res.status(400).json({
         message: "User id không hợp lệ",
       });
     }
 
-    const profile = await findPublicUserProfileById(userId);
+    const profile = await findPublicUserProfileById(
+      userId,
+      req.user?.id || null
+    );
 
     if (!profile) {
       return res.status(404).json({
@@ -299,10 +405,7 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
     }
 
     res.json({
-      profile: {
-        ...profile,
-        isMe: req.user ? req.user.id === profile.id : false,
-      },
+      profile,
     });
   } catch (error) {
     next(error);

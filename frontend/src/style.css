@@ -325,3 +325,25 @@ textarea {
   align-items: center;
   margin-top: 16px;
 }
+
+.profile-info {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #555;
+}
+
+.button-link {
+  display: inline-block;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #222;
+  color: white;
+  text-decoration: none;
+}

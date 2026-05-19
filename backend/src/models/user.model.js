@@ -189,7 +189,9 @@ export async function updateUserPassword(userId, passwordHash) {
   );
 }
 
-export async function findPublicUserProfileById(userId) {
+export async function findPublicUserProfileById(userId, currentUserId = null) {
+  const viewerId = currentUserId || 0;
+
   const rows = await query(
     `
     SELECT
@@ -197,23 +199,49 @@ export async function findPublicUserProfileById(userId) {
       u.name,
       u.avatar_url AS avatarUrl,
       u.created_at AS createdAt,
-      COUNT(p.id) AS postCount
+
+      (
+        SELECT COUNT(*)
+        FROM posts p
+        WHERE p.user_id = u.id
+      ) AS postCount,
+
+      (
+        SELECT COUNT(*)
+        FROM follows f
+        WHERE f.following_id = u.id
+      ) AS followerCount,
+
+      (
+        SELECT COUNT(*)
+        FROM follows f
+        WHERE f.follower_id = u.id
+      ) AS followingCount,
+
+      EXISTS(
+        SELECT 1
+        FROM follows f
+        WHERE f.follower_id = ? AND f.following_id = u.id
+      ) AS isFollowing
+
     FROM users u
-    LEFT JOIN posts p ON p.user_id = u.id
     WHERE u.id = ?
-    GROUP BY u.id
     `,
-    [userId]
+    [viewerId, userId]
   );
 
-  const user = rows[0] || null;
+  const profile = rows[0] || null;
 
-  if (!user) {
+  if (!profile) {
     return null;
   }
 
   return {
-    ...user,
-    postCount: Number(user.postCount),
+    ...profile,
+    postCount: Number(profile.postCount),
+    followerCount: Number(profile.followerCount),
+    followingCount: Number(profile.followingCount),
+    isFollowing: Boolean(profile.isFollowing),
+    isMe: currentUserId ? Number(currentUserId) === Number(profile.id) : false,
   };
 }

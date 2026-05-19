@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
+  followUser,
   getPublicUserPosts,
   getPublicUserProfile,
+  unfollowUser,
 } from "../api/user.api.js";
 import { useAuth } from "../context/useAuth.js";
 
 export default function UserProfile() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [profile, setProfile] = useState(null);
@@ -25,9 +28,10 @@ export default function UserProfile() {
 
   const [loading, setLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
+  const [followLoading, setFollowLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const isMyProfile = user && profile && user.id === profile.id;
+  const isMyProfile = Boolean(profile?.isMe);
 
   useEffect(() => {
     async function loadProfile() {
@@ -80,6 +84,32 @@ export default function UserProfile() {
     setSearch(searchInput.trim());
   }
 
+  async function handleToggleFollow() {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!profile || profile.isMe) {
+      return;
+    }
+
+    try {
+      setFollowLoading(true);
+      setError("");
+
+      const data = profile.isFollowing
+        ? await unfollowUser(profile.id)
+        : await followUser(profile.id);
+
+      setProfile(data.profile);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setFollowLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="container">
@@ -120,7 +150,7 @@ export default function UserProfile() {
           )}
         </div>
 
-        <div>
+        <div className="profile-info">
           <h1>{profile.name}</h1>
 
           <p>
@@ -128,13 +158,31 @@ export default function UserProfile() {
             {new Date(profile.createdAt).toLocaleDateString("vi-VN")}
           </p>
 
-          <p>Tổng bài viết: {profile.postCount}</p>
+          <div className="profile-stats">
+            <span>{profile.postCount || 0} bài viết</span>
+            <span>{profile.followerCount || 0} người theo dõi</span>
+            <span>Đang theo dõi {profile.followingCount || 0}</span>
+          </div>
 
-          {isMyProfile && (
-            <Link to="/profile">
+          {isMyProfile ? (
+            <Link to="/profile" className="button-link">
               Chỉnh sửa profile của tôi
             </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handleToggleFollow}
+              disabled={followLoading}
+            >
+              {followLoading
+                ? "Đang xử lý..."
+                : profile.isFollowing
+                  ? "Unfollow"
+                  : "Follow"}
+            </button>
           )}
+
+          {error && <p className="error">{error}</p>}
         </div>
       </section>
 
@@ -150,8 +198,6 @@ export default function UserProfile() {
 
           <button type="submit">Tìm kiếm</button>
         </form>
-
-        {error && <p className="error">{error}</p>}
 
         {postsLoading ? (
           <p>Đang tải bài viết...</p>
@@ -178,6 +224,7 @@ export default function UserProfile() {
 
         <div className="pagination">
           <button
+            type="button"
             disabled={page <= 1}
             onClick={() => setPage((currentPage) => currentPage - 1)}
           >
@@ -189,6 +236,7 @@ export default function UserProfile() {
           </span>
 
           <button
+            type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((currentPage) => currentPage + 1)}
           >
