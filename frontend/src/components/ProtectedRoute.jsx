@@ -6,7 +6,7 @@ import { useAuth } from "../context/useAuth.js";
  *
  * Bảo mật thật vẫn là requireAuth ở backend.
  */
-export default function ProtectedRoute() {
+export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -17,5 +17,5 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  return children || <Outlet />;
 }

@@ -33,14 +33,14 @@ export function getMyPosts({ page = 1, limit = 10, search = "" } = {}) {
 export function createPost(formData) {
   return apiFetch("/posts", {
     method: "POST",
-    body: JSON.stringify(formData),
+    body: formData,
   });
 }
 
 export function updatePost(postId, formData) {
   return apiFetch(`/posts/${postId}`, {
     method: "PATCH",
-    body: JSON.stringify(formData),
+    body: formData,
   });
 }
 
@@ -78,4 +78,13 @@ export function togglePostLike(postId) {
   return apiFetch(`/posts/${postId}/like`, {
     method: "POST",
   });
+}
+
+export function getFeedPosts({ page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  return apiFetch(`/posts/feed?${params.toString()}`);
 }

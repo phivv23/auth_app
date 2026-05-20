@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { getPosts } from "../api/post.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { getFileUrl } from "../api/client";
+import { formatRelativeTime } from "../utils/time";
 
 export default function PostList() {
   const { user } = useAuth();
@@ -146,7 +148,19 @@ export default function PostList() {
                     </Link>{" "}
                     · Likes: {post.likeCount} · Comments: {post.commentCount}
                   </p>
+                  <p className="post-time">
+                    {formatRelativeTime(post.createdAt)}
+                  </p>
 
+                  {post.imageUrl && (
+                    <Link to={`/posts/${post.id}`}>
+                      <img
+                        className="feed-post-image"
+                        src={getFileUrl(post.imageUrl)}
+                        alt={post.title}
+                      />
+                    </Link>
+                  )}
                   <p>{post.content.slice(0, 180)}...</p>
 
                   <Link to={`/posts/${post.id}`}>Đọc tiếp</Link>

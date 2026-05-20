@@ -6,30 +6,15 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// backend/uploads/avatars
 const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
+const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
 
-// Tự tạo folder nếu chưa tồn tại
 fs.mkdirSync(avatarUploadDir, { recursive: true });
+fs.mkdirSync(postUploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, avatarUploadDir);
-  },
+const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
-  filename(req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-
-    // Ví dụ: user-1-1712345678900.png
-    const filename = `user-${req.user.id}-${Date.now()}${ext}`;
-
-    cb(null, filename);
-  },
-});
-
-function fileFilter(req, file, cb) {
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-
+function imageFileFilter(req, file, cb) {
   if (!allowedMimeTypes.includes(file.mimetype)) {
     return cb(new Error("Chỉ cho phép upload ảnh JPG, PNG hoặc WEBP"));
   }
@@ -37,10 +22,40 @@ function fileFilter(req, file, cb) {
   cb(null, true);
 }
 
+function createImageStorage({ uploadDir, prefix }) {
+  return multer.diskStorage({
+    destination(req, file, cb) {
+      cb(null, uploadDir);
+    },
+
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname).toLowerCase();
+
+      const filename = `${prefix}-${req.user.id}-${Date.now()}${ext}`;
+
+      cb(null, filename);
+    },
+  });
+}
+
 export const uploadAvatar = multer({
-  storage,
-  fileFilter,
+  storage: createImageStorage({
+    uploadDir: avatarUploadDir,
+    prefix: "avatar",
+  }),
+  fileFilter: imageFileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB
+    fileSize: 2 * 1024 * 1024,
+  },
+});
+
+export const uploadPostImage = multer({
+  storage: createImageStorage({
+    uploadDir: postUploadDir,
+    prefix: "post",
+  }),
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
   },
 });

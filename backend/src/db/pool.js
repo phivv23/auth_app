@@ -15,6 +15,7 @@ export const pool = mysql.createPool({
   user: env.db.user,
   password: env.db.password,
   database: env.db.database,
+  timezone: "Z",
 
   // Nếu hết connection đang rảnh, request sẽ chờ.
   waitForConnections: true,

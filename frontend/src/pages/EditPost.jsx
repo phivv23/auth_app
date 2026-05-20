@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { getPostById, updatePost } from "../api/post.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { getFileUrl } from "../api/client.js";
 
 export default function EditPost() {
   const { id } = useParams();
@@ -18,6 +19,9 @@ export default function EditPost() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [post, setPost] = useState(null);
+  const [image, setImage] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
 
   useEffect(() => {
     async function loadPost() {
@@ -42,6 +46,7 @@ export default function EditPost() {
           title: post.title,
           content: post.content,
         });
+        setPost(post);
       } catch (error) {
         setError(error.message);
       } finally {
@@ -51,6 +56,41 @@ export default function EditPost() {
 
     loadPost();
   }, [postId, user]);
+
+  function handleImageChange(event) {
+    const selectedFile = event.target.files?.[0];
+
+    setError("");
+
+    if (!selectedFile) {
+      setImage(null);
+      setPreviewUrl("");
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+
+    if (!allowedTypes.includes(selectedFile.type)) {
+      setError("Chỉ được chọn ảnh JPG, PNG hoặc WEBP");
+      setImage(null);
+      setPreviewUrl("");
+      return;
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setError("Ảnh bài viết tối đa 5MB");
+      setImage(null);
+      setPreviewUrl("");
+      return;
+    }
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setImage(selectedFile);
+    setPreviewUrl(URL.createObjectURL(selectedFile));
+  }
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -68,7 +108,16 @@ export default function EditPost() {
     setSubmitting(true);
 
     try {
-      const data = await updatePost(postId, form);
+      const formData = new FormData();
+
+      formData.append("title", form.title);
+      formData.append("content", form.content);
+
+      if (image) {
+        formData.append("image", image);
+      }
+
+      const data = await updatePost(postId, formData);
 
       navigate(`/posts/${data.post.id}`);
     } catch (error) {
@@ -110,6 +159,24 @@ export default function EditPost() {
               rows={10}
             />
           </label>
+          <div className="form-group">
+            <label>Ảnh bài viết</label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageChange}
+            />
+          </div>
+
+          {previewUrl ? (
+            <img className="post-image-preview" src={previewUrl} alt="Preview" />
+          ) : post?.imageUrl ? (
+            <img
+              className="post-image-preview"
+              src={getFileUrl(post.imageUrl)}
+              alt={post.title}
+            />
+          ) : null}
 
           <button className="button" disabled={submitting}>
             {submitting ? "Đang lưu..." : "Lưu thay đổi"}

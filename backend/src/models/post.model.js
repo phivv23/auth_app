@@ -5,16 +5,16 @@ import { query } from "../db/pool.js";
  *
  * userId lấy từ req.user.id sau khi requireAuth verify JWT.
  */
-export async function createPost(userId, { title, content }) {
-    const result = await query(
-        `
-      INSERT INTO posts (user_id, title, content)
-      VALUES (?, ?, ?)
+export async function createPost(userId, { title, content, imageUrl = null }) {
+  const result = await query(
+    `
+    INSERT INTO posts (user_id, title, content, image_url)
+    VALUES (?, ?, ?, ?)
     `,
-        [userId, title, content]
-    );
+    [userId, title, content, imageUrl]
+  );
 
-    return findPostById(result.insertId, userId);
+  return findPostById(result.insertId, userId);
 }
 
 /**
@@ -72,6 +72,7 @@ export async function findPosts({
         p.user_id AS userId,
         p.title,
         p.content,
+        p.image_url AS imageUrl,
         p.created_at AS createdAt,
         p.updated_at AS updatedAt,
 
@@ -139,6 +140,7 @@ export async function findPostById(postId, currentUserId = null) {
         p.user_id AS userId,
         p.title,
         p.content,
+        p.image_url AS imageUrl,
         p.created_at AS createdAt,
         p.updated_at AS updatedAt,
 
@@ -182,15 +184,28 @@ export async function findPostById(postId, currentUserId = null) {
  * Chỉ update title/content.
  * Quyền update sẽ được kiểm tra ở route.
  */
-export async function updatePost(postId, { title, content }) {
+export async function updatePost(postId, { title, content, imageUrl }) {
+  if (imageUrl) {
     await query(
-        `
+      `
+      UPDATE posts
+      SET title = ?, content = ?, image_url = ?
+      WHERE id = ?
+      `,
+      [title, content, imageUrl, postId]
+    );
+  } else {
+    await query(
+      `
       UPDATE posts
       SET title = ?, content = ?
       WHERE id = ?
-    `,
-        [title, content, postId]
+      `,
+      [title, content, postId]
     );
+  }
+
+  return findPostById(postId);
 }
 
 /**
@@ -226,4 +241,90 @@ export async function postExists(postId) {
     );
 
     return Boolean(rows[0]);
+}
+
+
+export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
+  const normalizedPage = Number(page);
+  const normalizedLimit = Number(limit);
+  const safePage =
+    Number.isInteger(normalizedPage) && normalizedPage > 0 ? normalizedPage : 1;
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? Math.min(normalizedLimit, 50)
+      : 10;
+  const offset = (safePage - 1) * safeLimit;
+
+  const posts = await query(
+    `
+    SELECT
+      p.id,
+      p.user_id AS userId,
+      p.title,
+      p.content,
+      p.image_url AS imageUrl,
+      p.created_at AS createdAt,
+      p.updated_at AS updatedAt,
+
+      u.name AS authorName,
+      u.avatar_url AS authorAvatarUrl,
+
+      COUNT(DISTINCT pl.id) AS likeCount,
+      COUNT(DISTINCT c.id) AS commentCount,
+
+      EXISTS(
+        SELECT 1
+        FROM post_likes my_like
+        WHERE my_like.post_id = p.id AND my_like.user_id = ?
+      ) AS likedByMe
+
+    FROM posts p
+    JOIN users u ON u.id = p.user_id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN comments c ON c.post_id = p.id
+
+    WHERE
+      p.user_id = ?
+      OR p.user_id IN (
+        SELECT f.following_id
+        FROM follows f
+        WHERE f.follower_id = ?
+      )
+
+    GROUP BY p.id
+    ORDER BY p.created_at DESC
+    LIMIT ${safeLimit} OFFSET ${offset}
+    `,
+    [currentUserId, currentUserId, currentUserId]
+  );
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM posts p
+    WHERE
+      p.user_id = ?
+      OR p.user_id IN (
+        SELECT f.following_id
+        FROM follows f
+        WHERE f.follower_id = ?
+      )
+    `,
+    [currentUserId, currentUserId]
+  );
+
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    posts: posts.map((post) => ({
+      ...post,
+      likeCount: Number(post.likeCount),
+      commentCount: Number(post.commentCount),
+      likedByMe: Boolean(post.likedByMe),
+    })),
+    page: safePage,
+    limit: safeLimit,
+    total,
+    totalPages: Math.ceil(total / safeLimit),
+  };
 }

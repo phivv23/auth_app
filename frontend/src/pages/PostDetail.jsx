@@ -10,6 +10,8 @@ import {
   updateComment,
 } from "../api/post.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { getFileUrl } from "../api/client";
+import { formatRelativeTime } from "../utils/time";
 
 export default function PostDetail() {
   const { id } = useParams();
@@ -203,6 +205,17 @@ export default function PostDetail() {
           </Link>{" "}
           · Likes: {post.likeCount} · Comments: {post.commentCount}
         </p>
+        <p className="post-time">
+          {formatRelativeTime(post.createdAt)}
+        </p>
+
+        {post.imageUrl && (
+          <img
+            className="post-detail-image"
+            src={getFileUrl(post.imageUrl)}
+            alt={post.title}
+          />
+        )}
 
         <p className="post-content">{post.content}</p>
 

@@ -13,6 +13,7 @@ import CreatePost from "./pages/CreatePost.jsx";
 import EditPost from "./pages/EditPost.jsx";
 import MyPosts from "./pages/MyPosts.jsx";
 import UserProfile from "./pages/UserProfile";
+import Feed from "./pages/Feed.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ function Navbar() {
         {user ? (
           <>
             <Link to="/posts">Blog</Link>
+            <Link to="/feed">Feed</Link>
             <Link to="/my-posts">My Posts</Link>
             <Link to="/dashboard">Dashboard</Link>
             <Link to="/profile">Profile</Link>
@@ -63,8 +65,16 @@ export default function App() {
           <Route path="/" element={<Home />} />
 
           <Route path="/posts" element={<PostList />} />
+          <Route
+            path="/feed"
+            element={
+              <ProtectedRoute>
+                <Feed />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/posts/:id" element={<PostDetail />} />
-          
+
           <Route path="/users/:id" element={<UserProfile />} />
 
           <Route element={<GuestRoute />}>

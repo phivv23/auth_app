@@ -31,7 +31,8 @@ export async function findCommentsByPostId(postId) {
 
         u.id AS authorId,
         u.name AS authorName,
-        u.email AS authorEmail
+        u.email AS authorEmail,
+        u.avatar_url AS authorAvatarUrl
 
       FROM comments c
       JOIN users u ON u.id = c.user_id
@@ -58,7 +59,8 @@ export async function findCommentById(commentId) {
 
         u.id AS authorId,
         u.name AS authorName,
-        u.email AS authorEmail
+        u.email AS authorEmail,
+        u.avatar_url AS authorAvatarUrl
 
       FROM comments c
       JOIN users u ON u.id = c.user_id

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
-import {createPost, deletePost, findPostById, findPosts, postExists, updatePost} from "../models/post.model.js";
+import {createPost, deletePost, findPostById, findPosts, postExists, updatePost, findFeedPosts,} from "../models/post.model.js";
 import { togglePostLike } from "../models/like.model.js";
 import {
   createComment,
@@ -9,6 +9,9 @@ import {
   findCommentsByPostId,
   updateComment,
 } from "../models/comment.model.js";
+import { uploadPostImage } from "../config/upload.js";
+import { deleteLocalUpload } from "../utils/file.js";
+
 
 const router = Router();
 
@@ -42,6 +45,24 @@ function validatePostInput({ title, content }) {
     title: normalizedTitle,
     content: normalizedContent,
   };
+}
+
+function handlePostImageUpload(req, res, next) {
+  uploadPostImage.single("image")(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        message: "Ảnh bài viết tối đa 5MB",
+      });
+    }
+
+    return res.status(400).json({
+      message: error.message || "Upload ảnh bài viết thất bại",
+    });
+  });
 }
 
 function validateCommentInput(content) {
@@ -127,6 +148,25 @@ router.get("/me", requireAuth, async (req, res, next) => {
   }
 });
 
+router.get("/feed", requireAuth, async (req, res, next) => {
+  try {
+    const page = normalizePositiveInt(req.query.page, 1);
+
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    const result = await findFeedPosts({
+      page,
+      limit,
+      currentUserId: req.user.id,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * GET /api/posts/:id
  *
@@ -171,11 +211,15 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
  *   "content": "Nội dung bài viết"
  * }
  */
-router.post("/", requireAuth, async (req, res, next) => {
+router.post("/", requireAuth, handlePostImageUpload, async (req, res, next) => {
+  const imageUrl = req.file ? `/uploads/posts/${req.file.filename}` : null;
+
   try {
-    const result = validatePostInput(req.body);
+    const { title, content } = req.body;
+    const result = validatePostInput({ title, content });
 
     if (result.error) {
+      await deleteLocalUpload(imageUrl);
       return res.status(400).json({
         message: result.error,
       });
@@ -184,13 +228,15 @@ router.post("/", requireAuth, async (req, res, next) => {
     const post = await createPost(req.user.id, {
       title: result.title,
       content: result.content,
+      imageUrl,
     });
 
-    return res.status(201).json({
-      message: "Tạo post thành công.",
+    res.status(201).json({
+      message: "Tạo bài viết thành công",
       post,
     });
   } catch (error) {
+    await deleteLocalUpload(imageUrl);
     next(error);
   }
 });
@@ -200,56 +246,75 @@ router.post("/", requireAuth, async (req, res, next) => {
  *
  * Chỉ tác giả bài viết mới được sửa.
  */
-router.patch("/:id", requireAuth, async (req, res, next) => {
-  try {
-    const postId = Number(req.params.id);
+router.patch(
+  "/:id",
+  requireAuth,
+  handlePostImageUpload,
+  async (req, res, next) => {
+    const imageUrl = req.file
+      ? `/uploads/posts/${req.file.filename}`
+      : null;
 
-    if (!Number.isInteger(postId) || postId <= 0) {
-      return res.status(400).json({
-        message: "Post id không hợp lệ.",
+    try {
+      const postId = Number(req.params.id);
+
+      if (!Number.isInteger(postId) || postId <= 0) {
+        await deleteLocalUpload(imageUrl);
+
+        return res.status(400).json({
+          message: "Post id không hợp lệ",
+        });
+      }
+
+      const existingPost = await findPostById(postId, req.user.id);
+
+      if (!existingPost) {
+        await deleteLocalUpload(imageUrl);
+
+        return res.status(404).json({
+          message: "Không tìm thấy bài viết",
+        });
+      }
+
+      if (existingPost.userId !== req.user.id) {
+        await deleteLocalUpload(imageUrl);
+
+        return res.status(403).json({
+          message: "Bạn không có quyền sửa bài viết này",
+        });
+      }
+
+      const { title, content } = req.body;
+      const result = validatePostInput({ title, content });
+
+      if (result.error) {
+        await deleteLocalUpload(imageUrl);
+
+        return res.status(400).json({
+          message: result.error,
+        });
+      }
+
+      const updatedPost = await updatePost(postId, {
+        title: result.title,
+        content: result.content,
+        imageUrl,
       });
-    }
 
-    const post = await findPostById(postId, req.user.id);
+      if (imageUrl) {
+        await deleteLocalUpload(existingPost.imageUrl);
+      }
 
-    if (!post) {
-      return res.status(404).json({
-        message: "Post không tồn tại.",
+      res.json({
+        message: "Cập nhật bài viết thành công",
+        post: updatedPost,
       });
+    } catch (error) {
+      await deleteLocalUpload(imageUrl);
+      next(error);
     }
-
-    /**
-     * Chỉ author mới được sửa post.
-     */
-    if (post.userId !== req.user.id) {
-      return res.status(403).json({
-        message: "Bạn không có quyền sửa post này.",
-      });
-    }
-
-    const result = validatePostInput(req.body);
-
-    if (result.error) {
-      return res.status(400).json({
-        message: result.error,
-      });
-    }
-
-    await updatePost(postId, {
-      title: result.title,
-      content: result.content,
-    });
-
-    const updatedPost = await findPostById(postId, req.user.id);
-
-    return res.json({
-      message: "Cập nhật post thành công.",
-      post: updatedPost,
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 /**
  * DELETE /api/posts/:id
@@ -262,34 +327,35 @@ router.delete("/:id", requireAuth, async (req, res, next) => {
 
     if (!Number.isInteger(postId) || postId <= 0) {
       return res.status(400).json({
-        message: "Post id không hợp lệ.",
+        message: "Post id không hợp lệ",
       });
     }
 
-    const post = await findPostById(postId, req.user.id);
+    const existingPost = await findPostById(postId, req.user.id);
 
-    if (!post) {
+    if (!existingPost) {
       return res.status(404).json({
-        message: "Post không tồn tại.",
+        message: "Không tìm thấy bài viết",
       });
     }
 
-    if (post.userId !== req.user.id) {
+    if (existingPost.userId !== req.user.id) {
       return res.status(403).json({
-        message: "Bạn không có quyền xóa post này.",
+        message: "Bạn không có quyền xóa bài viết này",
       });
     }
 
     await deletePost(postId);
 
-    return res.json({
-      message: "Xóa post thành công.",
+    await deleteLocalUpload(existingPost.imageUrl);
+
+    res.json({
+      message: "Xóa bài viết thành công",
     });
   } catch (error) {
     next(error);
   }
 });
-
 /**
  * GET /api/posts/:postId/comments
  *
