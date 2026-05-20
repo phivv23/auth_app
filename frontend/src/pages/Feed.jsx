@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -22,11 +22,13 @@ const emptyCommentPanel = {
 
 export default function Feed() {
   const { user } = useAuth();
+  const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
 
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -36,16 +38,30 @@ export default function Feed() {
   const [likingPostIds, setLikingPostIds] = useState({});
 
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [loadMoreError, setLoadMoreError] = useState("");
   const [actionError, setActionError] = useState("");
 
   const userAvatarUrl = getFileUrl(user?.avatarUrl);
+  const hasMore = page < totalPages;
+  const isFetchingFeed = loading || loadingMore;
 
   useEffect(() => {
+    let isActive = true;
+
     async function loadFeed() {
+      const isFirstPage = page === 1;
+
       try {
-        setLoading(true);
-        setError("");
+        if (isFirstPage) {
+          setLoading(true);
+          setError("");
+        } else {
+          setLoadingMore(true);
+        }
+
+        setLoadMoreError("");
         setActionError("");
 
         const data = await getFeedPosts({
@@ -53,18 +69,85 @@ export default function Feed() {
           limit,
         });
 
-        setPosts(data.posts || []);
+        if (!isActive) {
+          return;
+        }
+
+        const nextPosts = data.posts || [];
+
+        setPosts((currentPosts) => {
+          if (isFirstPage) {
+            return nextPosts;
+          }
+
+          const existingPostIds = new Set(
+            currentPosts.map((post) => post.id)
+          );
+
+          return [
+            ...currentPosts,
+            ...nextPosts.filter((post) => !existingPostIds.has(post.id)),
+          ];
+        });
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
       } catch (error) {
-        setError(error.message);
+        if (!isActive) {
+          return;
+        }
+
+        if (isFirstPage) {
+          setError(error.message);
+        } else {
+          setLoadMoreError(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     }
 
     loadFeed();
-  }, [page, limit]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [page, limit, loadAttempt]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+
+    if (!node || !hasMore || isFetchingFeed || error || loadMoreError) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          observer.disconnect();
+          setPage((currentPage) =>
+            currentPage < totalPages ? currentPage + 1 : currentPage
+          );
+        }
+      },
+      {
+        rootMargin: "360px 0px",
+      }
+    );
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [error, hasMore, isFetchingFeed, loadMoreError, totalPages]);
+
+  function handleRetryLoadMore() {
+    setLoadMoreError("");
+    setLoadAttempt((currentAttempt) => currentAttempt + 1);
+  }
 
   function getCommentPanel(postId) {
     return commentPanels[postId] || emptyCommentPanel;
@@ -409,27 +492,22 @@ export default function Feed() {
         </div>
       )}
 
-      {!error && !loading && (
-        <div className="pagination">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((currentPage) => currentPage - 1)}
-          >
-            Trang trước
-          </button>
-
-          <span>
-            Trang {page} / {totalPages} - Tổng {total} bài viết
-          </span>
-
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((currentPage) => currentPage + 1)}
-          >
-            Trang sau
-          </button>
+      {!error && !loading && posts.length > 0 && (
+        <div ref={loadMoreRef} className="infinite-scroll-status">
+          {loadingMore ? (
+            <span>Đang tải thêm bài viết...</span>
+          ) : loadMoreError ? (
+            <>
+              <p className="error">{loadMoreError}</p>
+              <button type="button" onClick={handleRetryLoadMore}>
+                Thử lại
+              </button>
+            </>
+          ) : hasMore ? (
+            <span>Kéo xuống để tải thêm bài viết</span>
+          ) : (
+            <span>Đã hiển thị tất cả {total} bài viết</span>
+          )}
         </div>
       )}
     </div>

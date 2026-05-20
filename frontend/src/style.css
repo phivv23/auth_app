@@ -693,6 +693,30 @@ textarea {
   font-size: 12px;
 }
 
+.infinite-scroll-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 16px;
+  color: #667085;
+  text-align: center;
+}
+
+.infinite-scroll-status button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: #1f2937;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.infinite-scroll-status .error {
+  margin: 0 12px 0 0;
+}
+
 @media (max-width: 640px) {
   .composer-footer {
     align-items: stretch;
