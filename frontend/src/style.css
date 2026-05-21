@@ -341,11 +341,19 @@ textarea {
 .button-link {
   display: inline-block;
   width: fit-content;
+  border: 0;
   padding: 8px 12px;
   border-radius: 6px;
   background: #222;
   color: white;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
+}
+
+.button-link:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .feed-header {
@@ -355,9 +363,26 @@ textarea {
   align-items: center;
 }
 
+.feed-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .feed-list {
   display: grid;
   gap: 16px;
+}
+
+.feed-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #bbd7ff;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #175cd3;
+  font-weight: 600;
 }
 
 .feed-card {
@@ -802,6 +827,11 @@ textarea {
   font-size: 14px;
 }
 
+.user-card-info .suggestion-reason {
+  color: #1877f2;
+  font-weight: 600;
+}
+
 .muted-text {
   color: #666;
   font-size: 14px;
@@ -1047,4 +1077,26 @@ textarea {
 .notifications-back-link {
   width: fit-content;
   color: #344054;
+}
+
+
+.suggested-users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-list.compact {
+  gap: 8px;
+}
+
+.user-list.compact .user-card {
+  padding: 10px;
+}
+
+.user-list.compact .user-card-avatar,
+.user-list.compact .user-card-placeholder {
+  width: 44px;
+  height: 44px;
 }

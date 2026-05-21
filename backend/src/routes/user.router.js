@@ -8,6 +8,8 @@ import {
   updateUserProfile,
   updateUserAvatar,
   findPublicUserProfileById,
+  searchPublicUsers,
+  findSuggestedUsers,
 } from "../models/user.model.js";
 import { uploadAvatar } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
@@ -259,6 +261,54 @@ router.patch(
     }
   }
 );
+
+router.get("/search", optionalAuth, async (req, res, next) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    if (!keyword) {
+      return res.json({
+        users: [],
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+      });
+    }
+
+    const result = await searchPublicUsers({
+      keyword,
+      currentUserId: req.user?.id || null,
+      page,
+      limit,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/suggestions", requireAuth, async (req, res, next) => {
+  try {
+    const requestedLimit = normalizePositiveInt(req.query.limit, 5);
+    const limit = Math.min(requestedLimit, 20);
+
+    const users = await findSuggestedUsers({
+      currentUserId: req.user.id,
+      limit,
+    });
+
+    res.json({
+      users,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post("/:id/follow", requireAuth, async (req, res, next) => {
   try {

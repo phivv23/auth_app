@@ -49,3 +49,24 @@ export function getUserFollowing(userId, { page = 1, limit = 10 } = {}) {
 
   return apiFetch(`/users/${userId}/following?${params.toString()}`);
 }
+
+export function searchUsers(
+  keyword,
+  { page = 1, limit = 10 } = {}
+) {
+  const params = new URLSearchParams();
+
+  params.set("keyword", keyword);
+  params.set("page", page);
+  params.set("limit", limit);
+
+  return apiFetch(`/users/search?${params.toString()}`);
+}
+
+export function getSuggestedUsers({ limit = 5 } = {}) {
+  const params = new URLSearchParams();
+
+  params.set("limit", limit);
+
+  return apiFetch(`/users/suggestions?${params.toString()}`);
+}

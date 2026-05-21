@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-
+import SuggestedUsers from "../components/SuggestedUsers.jsx";
 import { getFileUrl } from "../api/client.js";
 import {
   createComment,
@@ -8,6 +8,7 @@ import {
   getPostComments,
   togglePostLike,
 } from "../api/post.api.js";
+import { getPublicUserPosts } from "../api/user.api.js";
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
@@ -42,6 +43,7 @@ export default function Feed() {
   const [error, setError] = useState("");
   const [loadMoreError, setLoadMoreError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [feedNotice, setFeedNotice] = useState("");
 
   const userAvatarUrl = getFileUrl(user?.avatarUrl);
   const hasMore = page < totalPages;
@@ -147,6 +149,65 @@ export default function Feed() {
   function handleRetryLoadMore() {
     setLoadMoreError("");
     setLoadAttempt((currentAttempt) => currentAttempt + 1);
+  }
+
+  function refreshFeed() {
+    setPage(1);
+    setExpandedComments({});
+    setCommentPanels({});
+    setLoadMoreError("");
+    setActionError("");
+    setFeedNotice("");
+    setLoadAttempt((currentAttempt) => currentAttempt + 1);
+  }
+
+  async function handleSuggestedUserFollowed(followedUser) {
+    setActionError("");
+    setFeedNotice(`Đã follow ${followedUser.name}.`);
+
+    try {
+      const data = await getPublicUserPosts(followedUser.id, {
+        page: 1,
+        limit: 5,
+      });
+
+      const followedPosts = (data.posts || []).map((post) => ({
+        ...post,
+        authorName: post.authorName || followedUser.name,
+        authorAvatarUrl: post.authorAvatarUrl || followedUser.avatarUrl,
+        likeCount: Number(post.likeCount || 0),
+        commentCount: Number(post.commentCount || 0),
+        likedByMe: Boolean(post.likedByMe),
+      }));
+
+      if (followedPosts.length === 0) {
+        return;
+      }
+
+      setPosts((currentPosts) => {
+        const existingPostIds = new Set(
+          currentPosts.map((post) => post.id)
+        );
+        const uniqueFollowedPosts = followedPosts.filter(
+          (post) => !existingPostIds.has(post.id)
+        );
+
+        return [...uniqueFollowedPosts, ...currentPosts].sort(
+          (firstPost, secondPost) =>
+            new Date(secondPost.createdAt).getTime() -
+            new Date(firstPost.createdAt).getTime()
+        );
+      });
+
+      setTotal((currentTotal) => currentTotal + followedPosts.length);
+      setFeedNotice(
+        `Đã thêm ${followedPosts.length} bài viết từ ${followedUser.name}.`
+      );
+    } catch {
+      setFeedNotice(
+        `Đã follow ${followedUser.name}. Bấm Làm mới Feed để cập nhật bài viết.`
+      );
+    }
   }
 
   function getCommentPanel(postId) {
@@ -302,11 +363,26 @@ export default function Feed() {
             <p>Bài viết của bạn và những người bạn đang follow.</p>
           </div>
 
-          <Link className="button-link" to="/posts/create">
-            Tạo bài viết
-          </Link>
+          <div className="feed-header-actions">
+            <button
+              className="button-link"
+              type="button"
+              disabled={isFetchingFeed}
+              onClick={refreshFeed}
+            >
+              Làm mới Feed
+            </button>
+
+            <Link className="button-link" to="/posts/create">
+              Tạo bài viết
+            </Link>
+          </div>
         </div>
       </section>
+
+      <SuggestedUsers limit={5} onFollowed={handleSuggestedUserFollowed} />
+
+      {feedNotice && <p className="feed-notice">{feedNotice}</p>}
 
       {error ? (
         <p className="error">{error}</p>

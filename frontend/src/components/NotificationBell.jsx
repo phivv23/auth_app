@@ -10,7 +10,7 @@ import {
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime } from "../utils/time.js";
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 30000; // 30 seconds
 
 function getNotificationText(notification) {
   const actorName = notification.actorName || "Một người dùng";

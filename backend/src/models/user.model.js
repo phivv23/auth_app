@@ -245,3 +245,254 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
     isMe: currentUserId ? Number(currentUserId) === Number(profile.id) : false,
   };
 }
+
+function normalizeUserListOptions({ page = 1, limit = 10 } = {}) {
+  const normalizedPage = Number(page);
+  const normalizedLimit = Number(limit);
+  const safePage =
+    Number.isInteger(normalizedPage) && normalizedPage > 0 ? normalizedPage : 1;
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? Math.min(normalizedLimit, 50)
+      : 10;
+
+  return {
+    page: safePage,
+    limit: safeLimit,
+    offset: (safePage - 1) * safeLimit,
+  };
+}
+
+function mapPublicUserListRow(
+  user,
+  currentUserId = null,
+  { includeSuggestionReason = false } = {}
+) {
+  const mappedUser = {
+    ...user,
+    followerCount: Number(user.followerCount),
+    followingCount: Number(user.followingCount),
+    mutualFollowCount: Number(user.mutualFollowCount || 0),
+    recentPostCount: Number(user.recentPostCount || 0),
+    postCount: Number(user.postCount || 0),
+    suggestionScore: Number(user.suggestionScore || 0),
+    followsMe: Boolean(user.followsMe),
+    isFollowing: Boolean(user.isFollowing),
+    isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
+  };
+
+  if (includeSuggestionReason) {
+    if (mappedUser.mutualFollowCount > 0) {
+      mappedUser.suggestionReason = `${mappedUser.mutualFollowCount} người bạn đang follow cũng follow`;
+    } else if (mappedUser.followsMe) {
+      mappedUser.suggestionReason = "Đang follow bạn";
+    } else if (mappedUser.recentPostCount > 0) {
+      mappedUser.suggestionReason = "Hoạt động gần đây";
+    } else if (mappedUser.followerCount > 0) {
+      mappedUser.suggestionReason = "Được nhiều người follow";
+    } else {
+      mappedUser.suggestionReason = "Người dùng mới";
+    }
+  }
+
+  return mappedUser;
+}
+
+export async function searchPublicUsers({
+  keyword,
+  currentUserId = null,
+  page = 1,
+  limit = 10,
+}) {
+  const normalizedKeyword = String(keyword || "").trim();
+  const options = normalizeUserListOptions({ page, limit });
+
+  if (!normalizedKeyword) {
+    return {
+      users: [],
+      page: options.page,
+      limit: options.limit,
+      total: 0,
+      totalPages: 0,
+    };
+  }
+
+  const viewerId = currentUserId || 0;
+  const searchPattern = `%${normalizedKeyword}%`;
+
+  const users = await query(
+    `
+    SELECT
+      u.id,
+      u.name,
+      u.avatar_url AS avatarUrl,
+      u.created_at AS createdAt,
+
+      (
+        SELECT COUNT(*)
+        FROM follows follower_count
+        WHERE follower_count.following_id = u.id
+      ) AS followerCount,
+
+      (
+        SELECT COUNT(*)
+        FROM follows following_count
+        WHERE following_count.follower_id = u.id
+      ) AS followingCount,
+
+      EXISTS(
+        SELECT 1
+        FROM follows my_follow
+        WHERE my_follow.follower_id = ? AND my_follow.following_id = u.id
+      ) AS isFollowing
+
+    FROM users u
+    WHERE u.name LIKE ?
+    ORDER BY u.name ASC, u.id ASC
+    LIMIT ${options.limit} OFFSET ${options.offset}
+    `,
+    [viewerId, searchPattern]
+  );
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM users u
+    WHERE u.name LIKE ?
+    `,
+    [searchPattern]
+  );
+
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    users: users.map((user) => mapPublicUserListRow(user, currentUserId)),
+    page: options.page,
+    limit: options.limit,
+    total,
+    totalPages: Math.ceil(total / options.limit),
+  };
+}
+
+export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
+  const normalizedCurrentUserId = Number(currentUserId);
+
+  if (!Number.isInteger(normalizedCurrentUserId) || normalizedCurrentUserId <= 0) {
+    return [];
+  }
+
+  const normalizedLimit = Number(limit);
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? Math.min(normalizedLimit, 20)
+      : 5;
+
+  const users = await query(
+    `
+    SELECT
+      candidates.*,
+      (
+        candidates.mutualFollowCount * 100
+        + candidates.followsMe * 80
+        + candidates.recentPostCount * 8
+        + LEAST(candidates.followerCount, 50)
+        + CASE
+            WHEN candidates.latestPostAt >= NOW() - INTERVAL 7 DAY THEN 20
+            WHEN candidates.latestPostAt >= NOW() - INTERVAL 30 DAY THEN 10
+            ELSE 0
+          END
+      ) AS suggestionScore
+    FROM (
+      SELECT
+        u.id,
+        u.name,
+        u.avatar_url AS avatarUrl,
+        u.created_at AS createdAt,
+
+        (
+          SELECT COUNT(*)
+          FROM follows follower_count
+          WHERE follower_count.following_id = u.id
+        ) AS followerCount,
+
+        (
+          SELECT COUNT(*)
+          FROM follows following_count
+          WHERE following_count.follower_id = u.id
+        ) AS followingCount,
+
+        (
+          SELECT COUNT(*)
+          FROM follows my_network
+          JOIN follows network_follow
+            ON network_follow.follower_id = my_network.following_id
+          WHERE my_network.follower_id = ?
+            AND network_follow.following_id = u.id
+        ) AS mutualFollowCount,
+
+        EXISTS(
+          SELECT 1
+          FROM follows follow_back
+          WHERE follow_back.follower_id = u.id
+            AND follow_back.following_id = ?
+        ) AS followsMe,
+
+        (
+          SELECT COUNT(*)
+          FROM posts p
+          WHERE p.user_id = u.id
+        ) AS postCount,
+
+        (
+          SELECT COUNT(*)
+          FROM posts p
+          WHERE p.user_id = u.id
+            AND p.created_at >= NOW() - INTERVAL 30 DAY
+        ) AS recentPostCount,
+
+        (
+          SELECT MAX(p.created_at)
+          FROM posts p
+          WHERE p.user_id = u.id
+        ) AS latestPostAt,
+
+        EXISTS(
+          SELECT 1
+          FROM follows my_follow
+          WHERE my_follow.follower_id = ? AND my_follow.following_id = u.id
+        ) AS isFollowing
+
+      FROM users u
+      WHERE u.id <> ?
+        AND NOT EXISTS(
+          SELECT 1
+          FROM follows existing_follow
+          WHERE existing_follow.follower_id = ? AND existing_follow.following_id = u.id
+        )
+    ) AS candidates
+    ORDER BY
+      suggestionScore DESC,
+      mutualFollowCount DESC,
+      followsMe DESC,
+      recentPostCount DESC,
+      latestPostAt DESC,
+      followerCount DESC,
+      createdAt DESC,
+      id DESC
+    LIMIT ${safeLimit}
+    `,
+    [
+      normalizedCurrentUserId,
+      normalizedCurrentUserId,
+      normalizedCurrentUserId,
+      normalizedCurrentUserId,
+      normalizedCurrentUserId,
+    ]
+  );
+
+  return users.map((user) =>
+    mapPublicUserListRow(user, normalizedCurrentUserId, {
+      includeSuggestionReason: true,
+    })
+  );
+}

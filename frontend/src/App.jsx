@@ -17,6 +17,7 @@ import Feed from "./pages/Feed.jsx";
 import FollowList from "./pages/FollowList.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
+import UserSearch from "./pages/UserSearch.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -80,6 +81,7 @@ export default function App() {
           />
           <Route path="/posts/:id" element={<PostDetail />} />
 
+          <Route path="/users/search" element={<UserSearch />} />
           <Route path="/users/:id" element={<UserProfile />} />
           <Route path="/users/:id/followers" element={<FollowList type="followers" />} />
           <Route path="/users/:id/following" element={<FollowList type="following" />} />

@@ -48,6 +48,9 @@ export default function UserCard({ user, onUserUpdated }) {
           {user.followerCount || 0} followers · Đang follow{" "}
           {user.followingCount || 0}
         </p>
+        {user.suggestionReason && (
+          <p className="suggestion-reason">{user.suggestionReason}</p>
+        )}
       </div>
 
       {!user.isMe && (
