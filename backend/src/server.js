@@ -8,6 +8,7 @@ import userRoutes from "./routes/user.router.js";
 import postRoutes from "./routes/post.route.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import notificationRoutes from "./routes/notification.routes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -37,6 +38,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/posts", postRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/protected", protectedRoutes);
 
 /**

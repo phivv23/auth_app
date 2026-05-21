@@ -18,6 +18,7 @@ import {
   findFollowers,
   findFollowing,
 } from "../models/follow.model.js";
+import { createNotification } from "../models/notification.model.js";
 
 const router = Router();
 
@@ -287,6 +288,12 @@ router.post("/:id/follow", requireAuth, async (req, res, next) => {
     }
 
     await followUser(req.user.id, targetUserId);
+
+    await createNotification({
+      recipientId: targetUserId,
+      actorId: req.user.id,
+      type: "follow",
+    });
 
     const updatedProfile = await findPublicUserProfileById(
       targetUserId,

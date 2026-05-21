@@ -15,6 +15,8 @@ import MyPosts from "./pages/MyPosts.jsx";
 import UserProfile from "./pages/UserProfile";
 import Feed from "./pages/Feed.jsx";
 import FollowList from "./pages/FollowList.jsx";
+import Notifications from "./pages/Notifications.jsx";
+import NotificationBell from "./components/NotificationBell.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -36,6 +38,7 @@ function Navbar() {
           <>
             <Link to="/posts">Blog</Link>
             <Link to="/feed">Feed</Link>
+            <NotificationBell />
             <Link to="/my-posts">My Posts</Link>
             <Link to="/dashboard">Dashboard</Link>
             <Link to="/profile">Profile</Link>
@@ -66,11 +69,12 @@ export default function App() {
           <Route path="/" element={<Home />} />
 
           <Route path="/posts" element={<PostList />} />
+          <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
           <Route
-            path="/feed"
+            path="/notifications"
             element={
               <ProtectedRoute>
-                <Feed />
+                <Notifications />
               </ProtectedRoute>
             }
           />

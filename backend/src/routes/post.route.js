@@ -1,6 +1,14 @@
 import { Router } from "express";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
-import {createPost, deletePost, findPostById, findPosts, postExists, updatePost, findFeedPosts,} from "../models/post.model.js";
+import {
+  createPost,
+  deletePost,
+  findFeedPosts,
+  findPostById,
+  findPosts,
+  postExists,
+  updatePost,
+} from "../models/post.model.js";
 import { togglePostLike } from "../models/like.model.js";
 import {
   createComment,
@@ -11,7 +19,7 @@ import {
 } from "../models/comment.model.js";
 import { uploadPostImage } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
-
+import { createNotification } from "../models/notification.model.js";
 
 const router = Router();
 
@@ -404,9 +412,9 @@ router.post("/:postId/comments", requireAuth, async (req, res, next) => {
       });
     }
 
-    const exists = await postExists(postId);
+    const post = await findPostById(postId, req.user.id);
 
-    if (!exists) {
+    if (!post) {
       return res.status(404).json({
         message: "Post không tồn tại.",
       });
@@ -421,6 +429,14 @@ router.post("/:postId/comments", requireAuth, async (req, res, next) => {
     }
 
     const comment = await createComment(postId, req.user.id, result.content);
+
+    await createNotification({
+      recipientId: post.userId,
+      actorId: req.user.id,
+      type: "post_comment",
+      postId,
+      commentId: comment.id,
+    });
 
     return res.status(201).json({
       message: "Tạo comment thành công.",
@@ -538,15 +554,25 @@ router.post("/:postId/like", requireAuth, async (req, res, next) => {
       });
     }
 
-    const exists = await postExists(postId);
+    const post = await findPostById(postId, req.user.id);
 
-    if (!exists) {
+    if (!post) {
       return res.status(404).json({
         message: "Post không tồn tại.",
       });
     }
 
     const result = await togglePostLike(postId, req.user.id);
+
+    // Chỉ tạo notification khi like, không tạo khi unlike.
+    if (result.liked) {
+      await createNotification({
+        recipientId: post.userId,
+        actorId: req.user.id,
+        type: "post_like",
+        postId,
+      });
+    }
 
     return res.json({
       message: result.liked ? "Đã like post." : "Đã bỏ like post.",
