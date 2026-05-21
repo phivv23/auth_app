@@ -160,8 +160,14 @@ export default function UserProfile() {
 
           <div className="profile-stats">
             <span>{profile.postCount || 0} bài viết</span>
-            <span>{profile.followerCount || 0} người theo dõi</span>
-            <span>Đang theo dõi {profile.followingCount || 0}</span>
+
+            <Link to={`/users/${profile.id}/followers`}>
+              {profile.followerCount || 0} người theo dõi
+            </Link>
+
+            <Link to={`/users/${profile.id}/following`}>
+              Đang theo dõi {profile.followingCount || 0}
+            </Link>
           </div>
 
           {isMyProfile ? (

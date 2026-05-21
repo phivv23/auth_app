@@ -15,6 +15,8 @@ import { findPosts } from "../models/post.model.js";
 import {
   followUser,
   unfollowUser,
+  findFollowers,
+  findFollowing,
 } from "../models/follow.model.js";
 
 const router = Router();
@@ -378,6 +380,88 @@ router.get("/:id/posts", optionalAuth, async (req, res, next) => {
     });
 
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/followers", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = parsePositiveInt(req.params.id);
+
+    if (!userId) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    const profile = await findPublicUserProfileById(
+      userId,
+      req.user?.id || null
+    );
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    const result = await findFollowers({
+      userId,
+      currentUserId: req.user?.id || null,
+      page,
+      limit,
+    });
+
+    res.json({
+      profile,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/following", optionalAuth, async (req, res, next) => {
+  try {
+    const userId = parsePositiveInt(req.params.id);
+
+    if (!userId) {
+      return res.status(400).json({
+        message: "User id không hợp lệ",
+      });
+    }
+
+    const profile = await findPublicUserProfileById(
+      userId,
+      req.user?.id || null
+    );
+
+    if (!profile) {
+      return res.status(404).json({
+        message: "Không tìm thấy user",
+      });
+    }
+
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    const result = await findFollowing({
+      userId,
+      currentUserId: req.user?.id || null,
+      page,
+      limit,
+    });
+
+    res.json({
+      profile,
+      ...result,
+    });
   } catch (error) {
     next(error);
   }

@@ -14,6 +14,7 @@ import EditPost from "./pages/EditPost.jsx";
 import MyPosts from "./pages/MyPosts.jsx";
 import UserProfile from "./pages/UserProfile";
 import Feed from "./pages/Feed.jsx";
+import FollowList from "./pages/FollowList.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -76,6 +77,8 @@ export default function App() {
           <Route path="/posts/:id" element={<PostDetail />} />
 
           <Route path="/users/:id" element={<UserProfile />} />
+          <Route path="/users/:id/followers" element={<FollowList type="followers" />} />
+          <Route path="/users/:id/following" element={<FollowList type="following" />} />
 
           <Route element={<GuestRoute />}>
             <Route path="/register" element={<Register />} />
