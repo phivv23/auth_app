@@ -58,6 +58,64 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function normalizeOptionalText(value, maxLength, fieldName) {
+  const normalizedValue = String(value || "").trim();
+
+  if (!normalizedValue) {
+    return {
+      value: null,
+    };
+  }
+
+  if (normalizedValue.length > maxLength) {
+    return {
+      error: `${fieldName} không được vượt quá ${maxLength} ký tự.`,
+    };
+  }
+
+  return {
+    value: normalizedValue,
+  };
+}
+
+function normalizeWebsite(value) {
+  const normalizedValue = String(value || "").trim();
+
+  if (!normalizedValue) {
+    return {
+      value: null,
+    };
+  }
+
+  if (normalizedValue.length > 255) {
+    return {
+      error: "Website không được vượt quá 255 ký tự.",
+    };
+  }
+
+  const urlWithProtocol = /^https?:\/\//i.test(normalizedValue)
+    ? normalizedValue
+    : `https://${normalizedValue}`;
+
+  try {
+    const url = new URL(urlWithProtocol);
+
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
+      return {
+        error: "Website phải là URL http hoặc https hợp lệ.",
+      };
+    }
+
+    return {
+      value: url.toString(),
+    };
+  } catch {
+    return {
+      error: "Website không hợp lệ.",
+    };
+  }
+}
+
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
 
@@ -81,7 +139,7 @@ function normalizePositiveInt(value, fallback) {
  */
 router.patch("/me", requireAuth, async (req, res, next) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, bio, location, website } = req.body;
 
     /**
      * req.user đến từ middleware requireAuth.
@@ -113,6 +171,20 @@ router.patch("/me", requireAuth, async (req, res, next) => {
     /**
      * Nếu user đổi email, cần kiểm tra email mới đã bị user khác dùng chưa.
      */
+    const normalizedBio = normalizeOptionalText(bio, 500, "Bio");
+    const normalizedLocation = normalizeOptionalText(location, 100, "Location");
+    const normalizedWebsite = normalizeWebsite(website);
+    const profileFieldError =
+      normalizedBio.error ||
+      normalizedLocation.error ||
+      normalizedWebsite.error;
+
+    if (profileFieldError) {
+      return res.status(400).json({
+        message: profileFieldError,
+      });
+    }
+
     if (normalizedEmail !== currentUser.email) {
       const existingUser = await findPublicUserByEmail(normalizedEmail);
 
@@ -129,6 +201,9 @@ router.patch("/me", requireAuth, async (req, res, next) => {
     const updatedUser = await updateUserProfile(currentUser.id, {
       name: normalizedName,
       email: normalizedEmail,
+      bio: normalizedBio.value,
+      location: normalizedLocation.value,
+      website: normalizedWebsite.value,
     });
 
     return res.json({

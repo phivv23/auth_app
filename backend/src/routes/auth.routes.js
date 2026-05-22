@@ -36,6 +36,9 @@ function toPublicUser(user) {
     name: user.name,
     email: user.email,
     avatarUrl: user.avatarUrl,
+    bio: user.bio,
+    location: user.location,
+    website: user.website,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

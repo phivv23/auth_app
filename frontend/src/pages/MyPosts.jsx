@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { deletePost, getMyPosts } from "../api/post.api.js";
+import PostCard from "../components/PostCard.jsx";
 
 export default function MyPosts() {
   const [posts, setPosts] = useState([]);
@@ -138,34 +139,33 @@ export default function MyPosts() {
           ) : (
             <div className="post-list">
               {posts.map((post) => (
-                <article key={post.id} className="post-card">
-                  <h2>
-                    <Link to={`/posts/${post.id}`}>{post.title}</Link>
-                  </h2>
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  showAuthor={false}
+                  actions={
+                    <div className="actions">
+                      <Link
+                        className="button secondary"
+                        to={`/posts/${post.id}`}
+                      >
+                        Xem
+                      </Link>
 
-                  <p className="muted">
-                    Likes: {post.likeCount} · Comments: {post.commentCount}
-                  </p>
+                      <Link className="button" to={`/posts/${post.id}/edit`}>
+                        Sửa
+                      </Link>
 
-                  <p>{post.content.slice(0, 180)}...</p>
-
-                  <div className="actions">
-                    <Link className="button secondary" to={`/posts/${post.id}`}>
-                      Xem
-                    </Link>
-
-                    <Link className="button" to={`/posts/${post.id}/edit`}>
-                      Sửa
-                    </Link>
-
-                    <button
-                      className="button danger"
-                      onClick={() => handleDeletePost(post.id)}
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                </article>
+                      <button
+                        className="button danger"
+                        type="button"
+                        onClick={() => handleDeletePost(post.id)}
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  }
+                />
               ))}
             </div>
           )}

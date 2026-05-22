@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/useAuth.js";
 import AvatarUpload from "../components/AvatarUpload";
+import { getFileUrl } from "../api/client.js";
 
 export default function Profile() {
   const { user, updateProfile, changePassword } = useAuth();
@@ -12,6 +13,9 @@ export default function Profile() {
   const [profileForm, setProfileForm] = useState({
     name: user.name,
     email: user.email,
+    bio: user.bio || "",
+    location: user.location || "",
+    website: user.website || "",
   });
 
   /**
@@ -108,10 +112,40 @@ export default function Profile() {
     }
   }
 
+  const currentAvatarUrl = getFileUrl(user.avatarUrl);
+
   return (
-    <section className="card">
+    <div className="profile-settings-page">
+      <section className="profile-editor-hero">
+        <div className="profile-editor-cover" aria-hidden="true" />
+
+        <div className="profile-editor-summary">
+          {currentAvatarUrl ? (
+            <img
+              className="profile-editor-avatar"
+              src={currentAvatarUrl}
+              alt={user.name}
+            />
+          ) : (
+            <div className="profile-editor-avatar profile-avatar-fallback">
+              {user.name?.charAt(0)?.toUpperCase() || "U"}
+            </div>
+          )}
+
+          <div>
+            <h1>{user.name}</h1>
+            <p>{user.email}</p>
+          </div>
+        </div>
+      </section>
+
+      <div className="profile-settings-layout">
+        <aside className="profile-settings-sidebar">
+          <AvatarUpload />
+        </aside>
+
+        <section className="card profile-settings-card">
       <h1>Profile</h1>
-      <AvatarUpload />
       <p>Trang này cho phép user cập nhật thông tin cá nhân và đổi password.</p>
 
       <div className="user-box">
@@ -126,6 +160,27 @@ export default function Profile() {
         <p>
           <strong>Email hiện tại:</strong> {user.email}
         </p>
+
+        {user.bio && (
+          <p>
+            <strong>Bio:</strong> {user.bio}
+          </p>
+        )}
+
+        {user.location && (
+          <p>
+            <strong>Location:</strong> {user.location}
+          </p>
+        )}
+
+        {user.website && (
+          <p>
+            <strong>Website:</strong>{" "}
+            <a href={user.website} target="_blank" rel="noreferrer">
+              {user.website}
+            </a>
+          </p>
+        )}
       </div>
 
       <hr />
@@ -151,6 +206,40 @@ export default function Profile() {
             value={profileForm.email}
             onChange={handleProfileChange}
             placeholder="Email mới"
+          />
+        </label>
+
+        <label>
+          Bio
+          <textarea
+            name="bio"
+            value={profileForm.bio}
+            onChange={handleProfileChange}
+            placeholder="Giới thiệu ngắn về bạn"
+            maxLength={500}
+            rows={4}
+          />
+        </label>
+
+        <label>
+          Location
+          <input
+            name="location"
+            value={profileForm.location}
+            onChange={handleProfileChange}
+            placeholder="Bạn đang ở đâu?"
+            maxLength={100}
+          />
+        </label>
+
+        <label>
+          Website
+          <input
+            name="website"
+            value={profileForm.website}
+            onChange={handleProfileChange}
+            placeholder="https://example.com"
+            maxLength={255}
           />
         </label>
 
@@ -207,6 +296,8 @@ export default function Profile() {
           {savingPassword ? "Đang đổi password..." : "Đổi password"}
         </button>
       </form>
-    </section>
+        </section>
+      </div>
+    </div>
   );
 }

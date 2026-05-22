@@ -39,6 +39,9 @@ export async function findUserById(id) {
         name,
         email,
         avatar_url AS avatarUrl,
+        bio,
+        location,
+        website,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -65,6 +68,9 @@ export async function findUserByEmail(email) {
         name,
         email,
         avatar_url AS avatarUrl,
+        bio,
+        location,
+        website,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -92,6 +98,9 @@ export async function findPublicUserByEmail(email) {
         name,
         email,
         avatar_url AS avatarUrl,
+        bio,
+        location,
+        website,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -118,6 +127,9 @@ export async function findUserWithPasswordById(id) {
         name,
         email,
         avatar_url AS avatarUrl,
+        bio,
+        location,
+        website,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -137,14 +149,17 @@ export async function findUserWithPasswordById(id) {
  * Chỉ cho đổi name và email.
  * Không update password trong function này.
  */
-export async function updateUserProfile(userId, { name, email }) {
+export async function updateUserProfile(
+  userId,
+  { name, email, bio = null, location = null, website = null }
+) {
   await query(
     `
       UPDATE users
-      SET name = ?, email = ?
+      SET name = ?, email = ?, bio = ?, location = ?, website = ?
       WHERE id = ?
     `,
-    [name, email, userId]
+    [name, email, bio, location, website, userId]
   );
 
   /**
@@ -198,6 +213,9 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.bio,
+      u.location,
+      u.website,
       u.created_at AS createdAt,
 
       (
@@ -246,7 +264,12 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
   };
 }
 
-function normalizeUserListOptions({ page = 1, limit = 10 } = {}) {
+export async function searchPublicUsers({
+  keyword = "",
+  currentUserId = null,
+  page = 1,
+  limit = 10,
+}) {
   const normalizedPage = Number(page);
   const normalizedLimit = Number(limit);
   const safePage =
@@ -255,70 +278,10 @@ function normalizeUserListOptions({ page = 1, limit = 10 } = {}) {
     Number.isInteger(normalizedLimit) && normalizedLimit > 0
       ? Math.min(normalizedLimit, 50)
       : 10;
-
-  return {
-    page: safePage,
-    limit: safeLimit,
-    offset: (safePage - 1) * safeLimit,
-  };
-}
-
-function mapPublicUserListRow(
-  user,
-  currentUserId = null,
-  { includeSuggestionReason = false } = {}
-) {
-  const mappedUser = {
-    ...user,
-    followerCount: Number(user.followerCount),
-    followingCount: Number(user.followingCount),
-    mutualFollowCount: Number(user.mutualFollowCount || 0),
-    recentPostCount: Number(user.recentPostCount || 0),
-    postCount: Number(user.postCount || 0),
-    suggestionScore: Number(user.suggestionScore || 0),
-    followsMe: Boolean(user.followsMe),
-    isFollowing: Boolean(user.isFollowing),
-    isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
-  };
-
-  if (includeSuggestionReason) {
-    if (mappedUser.mutualFollowCount > 0) {
-      mappedUser.suggestionReason = `${mappedUser.mutualFollowCount} người bạn đang follow cũng follow`;
-    } else if (mappedUser.followsMe) {
-      mappedUser.suggestionReason = "Đang follow bạn";
-    } else if (mappedUser.recentPostCount > 0) {
-      mappedUser.suggestionReason = "Hoạt động gần đây";
-    } else if (mappedUser.followerCount > 0) {
-      mappedUser.suggestionReason = "Được nhiều người follow";
-    } else {
-      mappedUser.suggestionReason = "Người dùng mới";
-    }
-  }
-
-  return mappedUser;
-}
-
-export async function searchPublicUsers({
-  keyword,
-  currentUserId = null,
-  page = 1,
-  limit = 10,
-}) {
-  const normalizedKeyword = String(keyword || "").trim();
-  const options = normalizeUserListOptions({ page, limit });
-
-  if (!normalizedKeyword) {
-    return {
-      users: [],
-      page: options.page,
-      limit: options.limit,
-      total: 0,
-      totalPages: 0,
-    };
-  }
+  const offset = (safePage - 1) * safeLimit;
 
   const viewerId = currentUserId || 0;
-  const searchPattern = `%${normalizedKeyword}%`;
+  const searchKeyword = `%${keyword.trim()}%`;
 
   const users = await query(
     `
@@ -326,55 +289,78 @@ export async function searchPublicUsers({
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.bio,
+      u.location,
+      u.website,
       u.created_at AS createdAt,
 
       (
         SELECT COUNT(*)
-        FROM follows follower_count
-        WHERE follower_count.following_id = u.id
+        FROM posts p
+        WHERE p.user_id = u.id
+      ) AS postCount,
+
+      (
+        SELECT COUNT(*)
+        FROM follows f
+        WHERE f.following_id = u.id
       ) AS followerCount,
 
       (
         SELECT COUNT(*)
-        FROM follows following_count
-        WHERE following_count.follower_id = u.id
+        FROM follows f
+        WHERE f.follower_id = u.id
       ) AS followingCount,
 
       EXISTS(
         SELECT 1
-        FROM follows my_follow
-        WHERE my_follow.follower_id = ? AND my_follow.following_id = u.id
+        FROM follows f
+        WHERE f.follower_id = ? AND f.following_id = u.id
       ) AS isFollowing
 
     FROM users u
-    WHERE u.name LIKE ?
-    ORDER BY u.name ASC, u.id ASC
-    LIMIT ${options.limit} OFFSET ${options.offset}
+    WHERE
+      u.name LIKE ?
+      AND u.id <> ?
+    ORDER BY followerCount DESC, u.created_at DESC
+    LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [viewerId, searchPattern]
+    [viewerId, searchKeyword, viewerId]
   );
 
   const countRows = await query(
     `
     SELECT COUNT(*) AS total
     FROM users u
-    WHERE u.name LIKE ?
+    WHERE
+      u.name LIKE ?
+      AND u.id <> ?
     `,
-    [searchPattern]
+    [searchKeyword, viewerId]
   );
 
   const total = Number(countRows[0]?.total || 0);
 
   return {
-    users: users.map((user) => mapPublicUserListRow(user, currentUserId)),
-    page: options.page,
-    limit: options.limit,
+    users: users.map((user) => ({
+      ...user,
+      postCount: Number(user.postCount),
+      followerCount: Number(user.followerCount),
+      followingCount: Number(user.followingCount),
+      isFollowing: Boolean(user.isFollowing),
+      isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
+    })),
+    page: safePage,
+    limit: safeLimit,
     total,
-    totalPages: Math.ceil(total / options.limit),
+    totalPages: Math.ceil(total / safeLimit),
   };
 }
 
-export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
+export async function findSuggestedUsers({
+  currentUserId,
+  limit = 5,
+}) {
   const normalizedCurrentUserId = Number(currentUserId);
 
   if (!Number.isInteger(normalizedCurrentUserId) || normalizedCurrentUserId <= 0) {
@@ -411,14 +397,20 @@ export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
 
         (
           SELECT COUNT(*)
-          FROM follows follower_count
-          WHERE follower_count.following_id = u.id
+          FROM posts p
+          WHERE p.user_id = u.id
+        ) AS postCount,
+
+        (
+          SELECT COUNT(*)
+          FROM follows f
+          WHERE f.following_id = u.id
         ) AS followerCount,
 
         (
           SELECT COUNT(*)
-          FROM follows following_count
-          WHERE following_count.follower_id = u.id
+          FROM follows f
+          WHERE f.follower_id = u.id
         ) AS followingCount,
 
         (
@@ -441,12 +433,6 @@ export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
           SELECT COUNT(*)
           FROM posts p
           WHERE p.user_id = u.id
-        ) AS postCount,
-
-        (
-          SELECT COUNT(*)
-          FROM posts p
-          WHERE p.user_id = u.id
             AND p.created_at >= NOW() - INTERVAL 30 DAY
         ) AS recentPostCount,
 
@@ -456,18 +442,15 @@ export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
           WHERE p.user_id = u.id
         ) AS latestPostAt,
 
-        EXISTS(
-          SELECT 1
-          FROM follows my_follow
-          WHERE my_follow.follower_id = ? AND my_follow.following_id = u.id
-        ) AS isFollowing
+        0 AS isFollowing
 
       FROM users u
-      WHERE u.id <> ?
-        AND NOT EXISTS(
+      WHERE
+        u.id <> ?
+        AND NOT EXISTS (
           SELECT 1
-          FROM follows existing_follow
-          WHERE existing_follow.follower_id = ? AND existing_follow.following_id = u.id
+          FROM follows f
+          WHERE f.follower_id = ? AND f.following_id = u.id
         )
     ) AS candidates
     ORDER BY
@@ -477,8 +460,7 @@ export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
       recentPostCount DESC,
       latestPostAt DESC,
       followerCount DESC,
-      createdAt DESC,
-      id DESC
+      createdAt DESC
     LIMIT ${safeLimit}
     `,
     [
@@ -486,13 +468,44 @@ export async function findSuggestedUsers({ currentUserId, limit = 5 }) {
       normalizedCurrentUserId,
       normalizedCurrentUserId,
       normalizedCurrentUserId,
-      normalizedCurrentUserId,
     ]
   );
 
-  return users.map((user) =>
-    mapPublicUserListRow(user, normalizedCurrentUserId, {
-      includeSuggestionReason: true,
-    })
-  );
+  return users.map((user) => ({
+    ...user,
+    postCount: Number(user.postCount),
+    followerCount: Number(user.followerCount),
+    followingCount: Number(user.followingCount),
+    mutualFollowCount: Number(user.mutualFollowCount),
+    recentPostCount: Number(user.recentPostCount),
+    suggestionScore: Number(user.suggestionScore),
+    followsMe: Boolean(user.followsMe),
+    suggestionReason: getSuggestionReason(user),
+    isFollowing: Boolean(user.isFollowing),
+    isMe: false,
+  }));
+}
+
+function getSuggestionReason(user) {
+  const mutualFollowCount = Number(user.mutualFollowCount || 0);
+  const recentPostCount = Number(user.recentPostCount || 0);
+  const followerCount = Number(user.followerCount || 0);
+
+  if (mutualFollowCount > 0) {
+    return `${mutualFollowCount} người bạn đang follow cũng follow`;
+  }
+
+  if (Boolean(user.followsMe)) {
+    return "Đang follow bạn";
+  }
+
+  if (recentPostCount > 0) {
+    return "Hoạt động gần đây";
+  }
+
+  if (followerCount > 0) {
+    return "Được nhiều người follow";
+  }
+
+  return "Người dùng mới";
 }
