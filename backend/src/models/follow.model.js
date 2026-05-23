@@ -1,5 +1,51 @@
 import { query } from "../db/pool.js";
 
+function getFriendshipStatusSelectSql(userAlias = "u") {
+  return `
+      (
+        SELECT COUNT(*)
+        FROM friendships accepted_friend_count
+        WHERE accepted_friend_count.status = 'accepted'
+          AND (
+            accepted_friend_count.requester_id = ${userAlias}.id
+            OR accepted_friend_count.addressee_id = ${userAlias}.id
+          )
+      ) AS friendCount,
+
+      CASE
+        WHEN ? = ${userAlias}.id THEN 'self'
+        WHEN EXISTS(
+          SELECT 1
+          FROM friendships accepted_friendship
+          WHERE accepted_friendship.status = 'accepted'
+            AND (
+              (accepted_friendship.requester_id = ? AND accepted_friendship.addressee_id = ${userAlias}.id)
+              OR (accepted_friendship.addressee_id = ? AND accepted_friendship.requester_id = ${userAlias}.id)
+            )
+        ) THEN 'friends'
+        WHEN EXISTS(
+          SELECT 1
+          FROM friendships outgoing_friendship
+          WHERE outgoing_friendship.status = 'pending'
+            AND outgoing_friendship.requester_id = ?
+            AND outgoing_friendship.addressee_id = ${userAlias}.id
+        ) THEN 'outgoing_pending'
+        WHEN EXISTS(
+          SELECT 1
+          FROM friendships incoming_friendship
+          WHERE incoming_friendship.status = 'pending'
+            AND incoming_friendship.requester_id = ${userAlias}.id
+            AND incoming_friendship.addressee_id = ?
+        ) THEN 'incoming_pending'
+        ELSE 'none'
+      END AS friendshipStatus
+  `;
+}
+
+function getFriendshipStatusParams(viewerId) {
+  return [viewerId, viewerId, viewerId, viewerId, viewerId];
+}
+
 export async function isFollowing(followerId, followingId) {
   const rows = await query(
     `
@@ -100,6 +146,8 @@ export async function findFollowers({
         WHERE following_count.follower_id = u.id
       ) AS followingCount,
 
+      ${getFriendshipStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows my_follow
@@ -112,7 +160,7 @@ export async function findFollowers({
     ORDER BY f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [viewerId, userId]
+    [...getFriendshipStatusParams(viewerId), viewerId, userId]
   );
 
   const countRows = await query(
@@ -131,6 +179,8 @@ export async function findFollowers({
       ...user,
       followerCount: Number(user.followerCount),
       followingCount: Number(user.followingCount),
+      friendCount: Number(user.friendCount || 0),
+      friendshipStatus: user.friendshipStatus || "none",
       isFollowing: Boolean(user.isFollowing),
       isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
     })),
@@ -180,6 +230,8 @@ export async function findFollowing({
         WHERE following_count.follower_id = u.id
       ) AS followingCount,
 
+      ${getFriendshipStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows my_follow
@@ -192,7 +244,7 @@ export async function findFollowing({
     ORDER BY f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [viewerId, userId]
+    [...getFriendshipStatusParams(viewerId), viewerId, userId]
   );
 
   const countRows = await query(
@@ -211,6 +263,8 @@ export async function findFollowing({
       ...user,
       followerCount: Number(user.followerCount),
       followingCount: Number(user.followingCount),
+      friendCount: Number(user.friendCount || 0),
+      friendshipStatus: user.friendshipStatus || "none",
       isFollowing: Boolean(user.isFollowing),
       isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
     })),

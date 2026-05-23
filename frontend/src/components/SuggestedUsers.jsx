@@ -73,9 +73,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
 
         return {
           ...user,
-          followerCount: updatedProfile.followerCount,
-          followingCount: updatedProfile.followingCount,
-          isFollowing: updatedProfile.isFollowing,
+          ...updatedProfile,
         };
       })
     );

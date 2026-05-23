@@ -25,6 +25,7 @@ const reactions = [
 const privacyLabels = {
   public: "Công khai",
   followers: "Người theo dõi",
+  friends: "Bạn bè",
   only_me: "Chỉ mình tôi",
 };
 
@@ -604,6 +605,7 @@ export default function SocialPostCard({
             >
               <option value="public">Công khai</option>
               <option value="followers">Người theo dõi</option>
+              <option value="friends">Bạn bè</option>
               <option value="only_me">Chỉ mình tôi</option>
             </select>
 

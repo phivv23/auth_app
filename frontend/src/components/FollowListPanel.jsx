@@ -82,9 +82,7 @@ export default function FollowListPanel({ userId, type, embedded = false }) {
 
         return {
           ...user,
-          followerCount: updatedProfile.followerCount,
-          followingCount: updatedProfile.followingCount,
-          isFollowing: updatedProfile.isFollowing,
+          ...updatedProfile,
         };
       })
     );

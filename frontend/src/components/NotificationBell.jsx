@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
+  getNotificationStreamUrl,
   getNotifications,
   getUnreadNotificationCount,
   markNotificationAsRead,
@@ -10,13 +11,21 @@ import {
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime } from "../utils/time.js";
 
-const POLL_INTERVAL_MS = 30000; // 30 seconds
+const POLL_INTERVAL_MS = 30000;
 
 function getNotificationText(notification) {
   const actorName = notification.actorName || "Một người dùng";
 
   if (notification.type === "follow") {
     return `${actorName} đã follow bạn`;
+  }
+
+  if (notification.type === "friend_request") {
+    return `${actorName} đã gửi lời mời kết bạn`;
+  }
+
+  if (notification.type === "friend_accept") {
+    return `${actorName} đã chấp nhận lời mời kết bạn`;
   }
 
   if (notification.type === "post_like") {
@@ -32,6 +41,14 @@ function getNotificationText(notification) {
 
 function getNotificationTarget(notification) {
   if (notification.type === "follow") {
+    return `/users/${notification.actorId}`;
+  }
+
+  if (notification.type === "friend_request") {
+    return "/friends?tab=incoming";
+  }
+
+  if (notification.type === "friend_accept") {
     return `/users/${notification.actorId}`;
   }
 
@@ -96,15 +113,42 @@ export default function NotificationBell() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const eventSource = new EventSource(getNotificationStreamUrl(), {
+      withCredentials: true,
+    });
+
+    eventSource.addEventListener("notification", (event) => {
+      const notification = JSON.parse(event.data);
+
+      setNotifications((currentNotifications) => {
+        const withoutDuplicate = currentNotifications.filter(
+          (item) => item.id !== notification.id
+        );
+
+        return [notification, ...withoutDuplicate].slice(0, 5);
+      });
+
+      if (!notification.isRead) {
+        setUnreadCount((currentCount) => currentCount + 1);
+      }
+    });
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
+
+  useEffect(() => {
     if (!open) {
       return;
     }
 
     function handlePointerDown(event) {
-      if (
-        wrapperRef.current &&
-        !wrapperRef.current.contains(event.target)
-      ) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
         setOpen(false);
       }
     }

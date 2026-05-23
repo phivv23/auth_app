@@ -1828,6 +1828,56 @@ textarea {
   font-size: 14px;
 }
 
+.user-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.friends-page {
+  display: grid;
+  gap: 16px;
+}
+
+.friends-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.friends-header h1,
+.friends-header p {
+  margin: 0;
+}
+
+.friends-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.friends-tabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: #f2f4f7;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.friends-tabs button:hover,
+.friends-tabs button.active {
+  background: #e8f1ff;
+  color: #1877f2;
+}
+
 .reaction-row {
   display: flex;
   flex-wrap: wrap;

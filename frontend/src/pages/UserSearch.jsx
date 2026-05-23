@@ -77,9 +77,7 @@ export default function UserSearch() {
 
         return {
           ...user,
-          followerCount: updatedProfile.followerCount,
-          followingCount: updatedProfile.followingCount,
-          isFollowing: updatedProfile.isFollowing,
+          ...updatedProfile,
         };
       })
     );

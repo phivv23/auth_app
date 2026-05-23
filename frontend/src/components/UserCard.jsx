@@ -1,12 +1,22 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client";
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  sendFriendRequest,
+  unfriendUser,
+} from "../api/friend.api.js";
 import { followUser, unfollowUser } from "../api/user.api";
 import { useAuth } from "../context/useAuth";
 
 export default function UserCard({ user, onUserUpdated }) {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const friendshipStatus = user.friendshipStatus || "none";
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   async function handleToggleFollow() {
     if (!currentUser) {
@@ -18,11 +28,70 @@ export default function UserCard({ user, onUserUpdated }) {
       return;
     }
 
-    const data = user.isFollowing
-      ? await unfollowUser(user.id)
-      : await followUser(user.id);
+    try {
+      setActionLoading(true);
+      setActionError("");
 
-    onUserUpdated?.(data.profile);
+      const data = user.isFollowing
+        ? await unfollowUser(user.id)
+        : await followUser(user.id);
+
+      onUserUpdated?.(data.profile);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleFriendAction() {
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
+
+    if (user.isMe || friendshipStatus === "self") {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      let data;
+
+      if (friendshipStatus === "incoming_pending") {
+        data = await acceptFriendRequest(user.id);
+      } else if (friendshipStatus === "outgoing_pending") {
+        data = await cancelFriendRequest(user.id);
+      } else if (friendshipStatus === "friends") {
+        data = await unfriendUser(user.id);
+      } else {
+        data = await sendFriendRequest(user.id);
+      }
+
+      onUserUpdated?.(data.profile);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  function getFriendButtonLabel() {
+    if (friendshipStatus === "incoming_pending") {
+      return "Chấp nhận";
+    }
+
+    if (friendshipStatus === "outgoing_pending") {
+      return "Đã gửi";
+    }
+
+    if (friendshipStatus === "friends") {
+      return "Bạn bè";
+    }
+
+    return "Thêm bạn";
   }
 
   const avatarUrl = getFileUrl(user.avatarUrl);
@@ -48,15 +117,23 @@ export default function UserCard({ user, onUserUpdated }) {
           {user.followerCount || 0} followers · Đang follow{" "}
           {user.followingCount || 0}
         </p>
+        <p>{user.friendCount || 0} bạn bè</p>
         {user.suggestionReason && (
           <p className="suggestion-reason">{user.suggestionReason}</p>
         )}
+        {actionError && <p className="error">{actionError}</p>}
       </div>
 
       {!user.isMe && (
-        <button type="button" onClick={handleToggleFollow}>
-          {user.isFollowing ? "Unfollow" : "Follow"}
-        </button>
+        <div className="user-card-actions">
+          <button type="button" onClick={handleFriendAction} disabled={actionLoading}>
+            {getFriendButtonLabel()}
+          </button>
+
+          <button type="button" onClick={handleToggleFollow} disabled={actionLoading}>
+            {user.isFollowing ? "Unfollow" : "Follow"}
+          </button>
+        </div>
       )}
 
       {user.isMe && <span className="muted-text">Bạn</span>}

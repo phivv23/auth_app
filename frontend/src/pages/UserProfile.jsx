@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  sendFriendRequest,
+  unfriendUser,
+} from "../api/friend.api.js";
 import FollowListPanel from "../components/FollowListPanel.jsx";
 import PostComposer from "../components/PostComposer.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
@@ -36,6 +42,7 @@ export default function UserProfile() {
   const [loading, setLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
+  const [friendLoading, setFriendLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isMyProfile = Boolean(profile?.isMe);
@@ -156,6 +163,60 @@ export default function UserProfile() {
     }
   }
 
+  async function handleFriendAction() {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!profile || profile.isMe) {
+      return;
+    }
+
+    try {
+      setFriendLoading(true);
+      setError("");
+
+      let data;
+
+      if (profile.friendshipStatus === "incoming_pending") {
+        data = await acceptFriendRequest(profile.id);
+      } else if (profile.friendshipStatus === "outgoing_pending") {
+        data = await cancelFriendRequest(profile.id);
+      } else if (profile.friendshipStatus === "friends") {
+        data = await unfriendUser(profile.id);
+      } else {
+        data = await sendFriendRequest(profile.id);
+      }
+
+      setProfile(data.profile);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setFriendLoading(false);
+    }
+  }
+
+  function getFriendActionLabel() {
+    if (friendLoading) {
+      return "Đang xử lý...";
+    }
+
+    if (profile?.friendshipStatus === "incoming_pending") {
+      return "Chấp nhận";
+    }
+
+    if (profile?.friendshipStatus === "outgoing_pending") {
+      return "Đã gửi lời mời";
+    }
+
+    if (profile?.friendshipStatus === "friends") {
+      return "Bạn bè";
+    }
+
+    return "Thêm bạn bè";
+  }
+
   if (loading) {
     return (
       <div className="container">
@@ -214,7 +275,7 @@ export default function UserProfile() {
             <h1>{profile.name}</h1>
             <p>
               {profile.followerCount || 0} người theo dõi · Đang theo dõi{" "}
-              {profile.followingCount || 0}
+              {profile.followingCount || 0} · {profile.friendCount || 0} bạn bè
             </p>
           </div>
 
@@ -224,18 +285,31 @@ export default function UserProfile() {
                 Chỉnh sửa profile
               </Link>
             ) : (
-              <button
-                className={`button ${profile.isFollowing ? "secondary" : ""}`}
-                type="button"
-                onClick={handleToggleFollow}
-                disabled={followLoading}
-              >
-                {followLoading
-                  ? "Đang xử lý..."
-                  : profile.isFollowing
-                    ? "Đang follow"
-                    : "Follow"}
-              </button>
+              <>
+                <button
+                  className={`button ${
+                    profile.friendshipStatus === "friends" ? "secondary" : ""
+                  }`}
+                  type="button"
+                  onClick={handleFriendAction}
+                  disabled={friendLoading}
+                >
+                  {getFriendActionLabel()}
+                </button>
+
+                <button
+                  className={`button ${profile.isFollowing ? "secondary" : ""}`}
+                  type="button"
+                  onClick={handleToggleFollow}
+                  disabled={followLoading}
+                >
+                  {followLoading
+                    ? "Đang xử lý..."
+                    : profile.isFollowing
+                      ? "Đang follow"
+                      : "Follow"}
+                </button>
+              </>
             )}
           </div>
         </div>

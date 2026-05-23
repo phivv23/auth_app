@@ -16,8 +16,9 @@ App hien co cac nhom tinh nang chinh:
 - Feed rieng theo nguoi dang follow, co infinite scroll.
 - Comment, sua/xoa comment, reaction nhieu loai cho post.
 - Follow/unfollow user, xem followers/following ngay trong profile.
+- Ket ban hai chieu: gui loi moi, chap nhan, huy/tu choi, unfriend, trang Friends.
 - Tim user, goi y follow user.
-- Notification cho follow, like post, comment post; co bell dropdown, unread count, trang notifications.
+- Notification cho follow, friend request/accept, like post, comment post; co bell dropdown, unread count, trang notifications.
 
 Ten repo/brand trong UI hien van la `Auth App`, nhung codebase da phat trien thanh social network co nhieu tinh nang gan Facebook.
 
@@ -77,6 +78,8 @@ auth-app/
       012_make_post_title_nullable.sql
       013_add_reaction_type_to_post_likes.sql
       014_create_post_media.sql
+      015_add_shared_post_id_to_posts.sql
+      016_create_friendships.sql
     src/
       server.js
       config/
@@ -208,6 +211,16 @@ auth-app/
 - Suggested users dua tren mutual follow, follows me, recent posts, follower count.
 - Tao notification khi follow user khac.
 
+### Friends
+
+- Ket ban hai chieu song song voi follow.
+- Gui loi moi, chap nhan, huy/tu choi loi moi va huy ket ban.
+- Co bang `friendships` voi unique pair `user_low_id`/`user_high_id`.
+- Public profile/search/suggestions tra them `friendCount` va `friendshipStatus`.
+- Trang `/friends` co tabs loi moi den, da gui, ban be va goi y.
+- Privacy post co them `friends`; chi tac gia va accepted friends xem duoc.
+- Tao notification khi co friend request va khi accept friend.
+
 ### Notifications
 
 - Bang `notifications` luu:
@@ -219,6 +232,8 @@ auth-app/
   - created time
 - Notification types hien co:
   - `follow`
+  - `friend_request`
+  - `friend_accept`
   - `post_like`
   - `post_comment`
 - API unread count.
@@ -340,6 +355,28 @@ Rang buoc:
 - Check `follower_id <> following_id`.
 - Cascade delete theo user.
 
+### `friendships`
+
+Luu quan he ket ban hai chieu.
+
+Cot chinh:
+
+- `id`
+- `requester_id`
+- `addressee_id`
+- `user_low_id`
+- `user_high_id`
+- `status`
+- `created_at`
+- `responded_at`
+- `updated_at`
+
+Rang buoc:
+
+- Unique `(user_low_id, user_high_id)`.
+- `status` la `pending` hoac `accepted`.
+- Cascade delete theo user.
+
 ### `notifications`
 
 Luu thong bao.
@@ -393,6 +430,18 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | GET | `/users/:id/followers` | Danh sach followers |
 | GET | `/users/:id/following` | Danh sach following |
 | GET | `/users/:id` | Public profile |
+
+### Friends
+
+| Method | Endpoint | Mo ta |
+| --- | --- | --- |
+| POST | `/friends/requests/:userId` | Gui loi moi ket ban |
+| GET | `/friends/requests` | Xem loi moi, query `type=incoming|outgoing` |
+| PATCH | `/friends/requests/:userId/accept` | Chap nhan loi moi ket ban |
+| DELETE | `/friends/requests/:userId` | Huy hoac tu choi loi moi |
+| GET | `/friends` | Danh sach ban be, optional `userId` |
+| GET | `/friends/suggestions` | Goi y ket ban |
+| DELETE | `/friends/:userId` | Huy ket ban |
 
 ### Posts / Comments / Likes
 

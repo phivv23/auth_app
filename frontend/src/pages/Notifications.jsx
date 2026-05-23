@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
+  getNotificationStreamUrl,
   getNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
@@ -16,6 +17,14 @@ function getNotificationText(notification) {
 
   if (notification.type === "follow") {
     return `${actorName} đã follow bạn`;
+  }
+
+  if (notification.type === "friend_request") {
+    return `${actorName} đã gửi lời mời kết bạn`;
+  }
+
+  if (notification.type === "friend_accept") {
+    return `${actorName} đã chấp nhận lời mời kết bạn`;
   }
 
   if (notification.type === "post_like") {
@@ -34,6 +43,14 @@ function getNotificationTarget(notification) {
     return `/users/${notification.actorId}`;
   }
 
+  if (notification.type === "friend_request") {
+    return "/friends?tab=incoming";
+  }
+
+  if (notification.type === "friend_accept") {
+    return `/users/${notification.actorId}`;
+  }
+
   if (notification.postId) {
     return `/posts/${notification.postId}`;
   }
@@ -45,13 +62,10 @@ export default function Notifications() {
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([]);
-
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -109,6 +123,33 @@ export default function Notifications() {
       if (intervalId) {
         clearInterval(intervalId);
       }
+    };
+  }, [page, limit]);
+
+  useEffect(() => {
+    if (page !== 1) {
+      return;
+    }
+
+    const eventSource = new EventSource(getNotificationStreamUrl(), {
+      withCredentials: true,
+    });
+
+    eventSource.addEventListener("notification", (event) => {
+      const notification = JSON.parse(event.data);
+
+      setNotifications((currentNotifications) => {
+        const withoutDuplicate = currentNotifications.filter(
+          (item) => item.id !== notification.id
+        );
+
+        return [notification, ...withoutDuplicate].slice(0, limit);
+      });
+      setTotal((currentTotal) => currentTotal + 1);
+    });
+
+    return () => {
+      eventSource.close();
     };
   }, [page, limit]);
 

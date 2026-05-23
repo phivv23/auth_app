@@ -2,6 +2,9 @@ import express from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
+  addNotificationClient,
+} from "../realtime/notificationEvents.js";
+import {
   countUnreadNotifications,
   findNotificationsByUserId,
   markAllNotificationsAsRead,
@@ -58,6 +61,27 @@ router.get("/unread-count", requireAuth, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+router.get("/stream", requireAuth, (req, res) => {
+  res.set({
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream",
+  });
+  res.flushHeaders?.();
+
+  res.write("event: connected\ndata: {}\n\n");
+
+  const removeClient = addNotificationClient(req.user.id, res);
+  const heartbeatId = setInterval(() => {
+    res.write(": heartbeat\n\n");
+  }, 25000);
+
+  req.on("close", () => {
+    clearInterval(heartbeatId);
+    removeClient();
+  });
 });
 
 router.patch("/read-all", requireAuth, async (req, res, next) => {

@@ -1,4 +1,8 @@
-import { apiFetch } from "./client.js";
+import { API_URL, apiFetch } from "./client.js";
+
+export function getNotificationStreamUrl() {
+  return `${API_URL}/notifications/stream`;
+}
 
 export function getNotifications({ page = 1, limit = 20 } = {}) {
   const params = new URLSearchParams();

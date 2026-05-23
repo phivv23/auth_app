@@ -2,11 +2,13 @@ import { query } from "../db/pool.js";
 
 const PUBLIC_PRIVACY = "public";
 const FOLLOWERS_PRIVACY = "followers";
+const FRIENDS_PRIVACY = "friends";
 const ONLY_ME_PRIVACY = "only_me";
 
 export const POST_PRIVACY_VALUES = [
   PUBLIC_PRIVACY,
   FOLLOWERS_PRIVACY,
+  FRIENDS_PRIVACY,
   ONLY_ME_PRIVACY,
 ];
 
@@ -44,11 +46,26 @@ function buildVisibilitySql({ currentUserId = null, postAlias = "p" }) {
             AND visibility_follow.following_id = ${postAlias}.user_id
         )
       )
+      OR (
+        ${postAlias}.privacy = ?
+        AND EXISTS (
+          SELECT 1
+          FROM friendships visibility_friend
+          WHERE visibility_friend.status = 'accepted'
+            AND (
+              (visibility_friend.requester_id = ? AND visibility_friend.addressee_id = ${postAlias}.user_id)
+              OR (visibility_friend.addressee_id = ? AND visibility_friend.requester_id = ${postAlias}.user_id)
+            )
+        )
+      )
     )`,
     params: [
       PUBLIC_PRIVACY,
       currentUserId,
       FOLLOWERS_PRIVACY,
+      currentUserId,
+      FRIENDS_PRIVACY,
+      currentUserId,
       currentUserId,
     ],
   };
@@ -629,6 +646,18 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
         )
         AND p.privacy IN (?, ?)
       )
+      OR (
+        p.user_id IN (
+          SELECT CASE
+            WHEN fr.requester_id = ? THEN fr.addressee_id
+            ELSE fr.requester_id
+          END
+          FROM friendships fr
+          WHERE fr.status = 'accepted'
+            AND (fr.requester_id = ? OR fr.addressee_id = ?)
+        )
+        AND p.privacy IN (?, ?)
+      )
 
     GROUP BY p.id
     ORDER BY p.created_at DESC
@@ -641,6 +670,11 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
       currentUserId,
       PUBLIC_PRIVACY,
       FOLLOWERS_PRIVACY,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      PUBLIC_PRIVACY,
+      FRIENDS_PRIVACY,
     ]
   );
 
@@ -658,8 +692,30 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
         )
         AND p.privacy IN (?, ?)
       )
+      OR (
+        p.user_id IN (
+          SELECT CASE
+            WHEN fr.requester_id = ? THEN fr.addressee_id
+            ELSE fr.requester_id
+          END
+          FROM friendships fr
+          WHERE fr.status = 'accepted'
+            AND (fr.requester_id = ? OR fr.addressee_id = ?)
+        )
+        AND p.privacy IN (?, ?)
+      )
     `,
-    [currentUserId, currentUserId, PUBLIC_PRIVACY, FOLLOWERS_PRIVACY]
+    [
+      currentUserId,
+      currentUserId,
+      PUBLIC_PRIVACY,
+      FOLLOWERS_PRIVACY,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      PUBLIC_PRIVACY,
+      FRIENDS_PRIVACY,
+    ]
   );
 
   const total = Number(countRows[0]?.total || 0);

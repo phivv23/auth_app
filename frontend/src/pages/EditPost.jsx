@@ -187,6 +187,7 @@ export default function EditPost() {
             <select name="privacy" value={form.privacy} onChange={handleChange}>
               <option value="public">Công khai</option>
               <option value="followers">Người theo dõi</option>
+              <option value="friends">Bạn bè</option>
               <option value="only_me">Chỉ mình tôi</option>
             </select>
           </label>

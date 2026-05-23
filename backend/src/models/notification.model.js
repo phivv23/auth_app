@@ -1,4 +1,44 @@
 import { query } from "../db/pool.js";
+import { publishNotification } from "../realtime/notificationEvents.js";
+
+export async function findNotificationById(notificationId) {
+  const notifications = await query(
+    `
+    SELECT
+      n.id,
+      n.recipient_id AS recipientId,
+      n.actor_id AS actorId,
+      n.type,
+      n.post_id AS postId,
+      n.comment_id AS commentId,
+      n.is_read AS isRead,
+      n.created_at AS createdAt,
+
+      actor.name AS actorName,
+      actor.avatar_url AS actorAvatarUrl,
+
+      p.title AS postTitle
+
+    FROM notifications n
+    LEFT JOIN users actor ON actor.id = n.actor_id
+    LEFT JOIN posts p ON p.id = n.post_id
+    WHERE n.id = ?
+    LIMIT 1
+    `,
+    [notificationId]
+  );
+
+  const notification = notifications[0];
+
+  if (!notification) {
+    return null;
+  }
+
+  return {
+    ...notification,
+    isRead: Boolean(notification.isRead),
+  };
+}
 
 export async function createNotification({
   recipientId,
@@ -26,7 +66,13 @@ export async function createNotification({
     [recipientId, actorId, type, postId, commentId]
   );
 
-  return result.insertId;
+  const notification = await findNotificationById(result.insertId);
+
+  if (notification) {
+    publishNotification(recipientId, notification);
+  }
+
+  return notification;
 }
 
 export async function findNotificationsByUserId({

@@ -18,6 +18,7 @@ import FollowList from "./pages/FollowList.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
 import UserSearch from "./pages/UserSearch.jsx";
+import Friends from "./pages/Friends.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ function Navbar() {
           <>
             <Link to="/posts">Blog</Link>
             <Link to="/feed">Feed</Link>
+            <Link to="/friends">Friends</Link>
             <NotificationBell />
             <Link to="/my-posts">My Posts</Link>
             <Link to="/dashboard">Dashboard</Link>
@@ -76,6 +78,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Notifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/friends"
+            element={
+              <ProtectedRoute>
+                <Friends />
               </ProtectedRoute>
             }
           />
