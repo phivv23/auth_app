@@ -1,0 +1,2 @@
+ALTER TABLE users
+ADD COLUMN cover_url VARCHAR(500) NULL AFTER avatar_url;

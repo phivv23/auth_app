@@ -5,11 +5,16 @@ import {
   deletePost,
   findFeedPosts,
   findPostById,
+  findPostMediaByPostId,
   findPosts,
-  postExists,
+  POST_PRIVACY_VALUES,
   updatePost,
 } from "../models/post.model.js";
-import { togglePostLike } from "../models/like.model.js";
+import {
+  countPostReactionsByType,
+  findPostReactions,
+  togglePostLike,
+} from "../models/like.model.js";
 import {
   createComment,
   deleteComment,
@@ -23,6 +28,8 @@ import { createNotification } from "../models/notification.model.js";
 
 const router = Router();
 
+const ALLOWED_REACTION_TYPES = ["like", "love", "haha", "wow", "sad", "angry"];
+
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
 
@@ -33,37 +40,70 @@ function normalizePositiveInt(value, fallback) {
   return number;
 }
 
+function parsePositiveInt(value) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return null;
+  }
+
+  return number;
+}
+
 function validatePostInput({ title, content }) {
   const normalizedTitle = String(title || "").trim();
   const normalizedContent = String(content || "").trim();
 
-  if (normalizedTitle.length < 3) {
+  if (normalizedTitle.length > 255) {
     return {
-      error: "Title phải có ít nhất 3 ký tự.",
+      error: "Title không được vượt quá 255 ký tự.",
     };
   }
 
-  if (normalizedContent.length < 10) {
+  if (normalizedContent.length > 5000) {
     return {
-      error: "Content phải có ít nhất 10 ký tự.",
+      error: "Content không được vượt quá 5000 ký tự.",
     };
   }
 
   return {
-    title: normalizedTitle,
+    title: normalizedTitle || null,
     content: normalizedContent,
   };
 }
 
+function normalizePostPrivacy(value) {
+  const normalizedValue = String(value || "public").trim();
+
+  if (!POST_PRIVACY_VALUES.includes(normalizedValue)) {
+    return {
+      error: "Quyền xem bài viết không hợp lệ.",
+    };
+  }
+
+  return {
+    privacy: normalizedValue,
+  };
+}
+
 function handlePostImageUpload(req, res, next) {
-  uploadPostImage.single("image")(req, res, (error) => {
+  uploadPostImage.fields([
+    {
+      name: "image",
+      maxCount: 1,
+    },
+    {
+      name: "media",
+      maxCount: 10,
+    },
+  ])(req, res, (error) => {
     if (!error) {
       return next();
     }
 
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message: "Ảnh bài viết tối đa 5MB",
+        message: "Ảnh bài viết tối đa 5MB mỗi file",
       });
     }
 
@@ -71,6 +111,24 @@ function handlePostImageUpload(req, res, next) {
       message: error.message || "Upload ảnh bài viết thất bại",
     });
   });
+}
+
+function getUploadedPostMedia(req) {
+  const mediaFiles = [
+    ...(req.files?.media || []),
+    ...(req.files?.image || []),
+  ];
+
+  return mediaFiles.map((file) => ({
+    url: `/uploads/posts/${file.filename}`,
+    type: "image",
+  }));
+}
+
+async function deleteUploadedPostMedia(media = []) {
+  for (const item of media) {
+    await deleteLocalUpload(item.url);
+  }
 }
 
 function validateCommentInput(content) {
@@ -93,30 +151,18 @@ function validateCommentInput(content) {
   };
 }
 
-/**
- * GET /api/posts
- *
- * Public API.
- *
- * Query:
- * ?page=1&limit=10&search=react
- */
 router.get("/", optionalAuth, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
-
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
-
     const search = String(req.query.search || "").trim();
-
-    const currentUserId = req.user?.id || null;
 
     const result = await findPosts({
       page,
       limit,
       search,
-      currentUserId,
+      currentUserId: req.user?.id || null,
     });
 
     return res.json(result);
@@ -125,21 +171,11 @@ router.get("/", optionalAuth, async (req, res, next) => {
   }
 });
 
-/**
- * GET /api/posts/me
- *
- * Lấy danh sách bài viết của user hiện tại.
- *
- * Cần đặt route này TRƯỚC /:id.
- * Nếu đặt sau /:id, Express có thể hiểu "me" là id.
- */
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
-
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
-
     const search = String(req.query.search || "").trim();
 
     const result = await findPosts({
@@ -159,7 +195,6 @@ router.get("/me", requireAuth, async (req, res, next) => {
 router.get("/feed", requireAuth, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
-
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
 
@@ -175,28 +210,64 @@ router.get("/feed", requireAuth, async (req, res, next) => {
   }
 });
 
-/**
- * GET /api/posts/:id
- *
- * Public API.
- */
+router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
+  try {
+    const postId = parsePositiveInt(req.params.postId);
+
+    if (!postId) {
+      return res.status(400).json({
+        message: "Post id khong hop le.",
+      });
+    }
+
+    const reactionType = String(req.query.reactionType || "").trim();
+
+    if (reactionType && !ALLOWED_REACTION_TYPES.includes(reactionType)) {
+      return res.status(400).json({
+        message: "Reaction khong hop le.",
+      });
+    }
+
+    const post = await findPostById(postId, req.user?.id || null);
+
+    if (!post) {
+      return res.status(404).json({
+        message: "Post khong ton tai hoac ban khong co quyen xem.",
+      });
+    }
+
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 50);
+    const limit = Math.min(requestedLimit, 100);
+
+    const result = await findPostReactions({
+      postId,
+      page,
+      limit,
+      reactionType,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/:id", optionalAuth, async (req, res, next) => {
   try {
-    const postId = Number(req.params.id);
+    const postId = parsePositiveInt(req.params.id);
 
-    if (!Number.isInteger(postId) || postId <= 0) {
+    if (!postId) {
       return res.status(400).json({
         message: "Post id không hợp lệ.",
       });
     }
 
-    const currentUserId = req.user?.id || null;
-
-    const post = await findPostById(postId, currentUserId);
+    const post = await findPostById(postId, req.user?.id || null);
 
     if (!post) {
       return res.status(404).json({
-        message: "Post không tồn tại.",
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
       });
     }
 
@@ -208,35 +279,32 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   }
 });
 
-/**
- * POST /api/posts
- *
- * Cần login.
- *
- * Body:
- * {
- *   "title": "Tiêu đề",
- *   "content": "Nội dung bài viết"
- * }
- */
 router.post("/", requireAuth, handlePostImageUpload, async (req, res, next) => {
-  const imageUrl = req.file ? `/uploads/posts/${req.file.filename}` : null;
+  const uploadedMedia = getUploadedPostMedia(req);
 
   try {
-    const { title, content } = req.body;
+    const { title, content, privacy } = req.body;
     const result = validatePostInput({ title, content });
+    const privacyResult = normalizePostPrivacy(privacy);
 
-    if (result.error) {
-      await deleteLocalUpload(imageUrl);
+    if (result.error || privacyResult.error) {
+      await deleteUploadedPostMedia(uploadedMedia);
       return res.status(400).json({
-        message: result.error,
+        message: result.error || privacyResult.error,
+      });
+    }
+
+    if (!result.content && uploadedMedia.length === 0) {
+      return res.status(400).json({
+        message: "Bài viết cần có nội dung hoặc ảnh.",
       });
     }
 
     const post = await createPost(req.user.id, {
       title: result.title,
       content: result.content,
-      imageUrl,
+      privacy: privacyResult.privacy,
+      media: uploadedMedia,
     });
 
     res.status(201).json({
@@ -244,30 +312,69 @@ router.post("/", requireAuth, handlePostImageUpload, async (req, res, next) => {
       post,
     });
   } catch (error) {
-    await deleteLocalUpload(imageUrl);
+    await deleteUploadedPostMedia(uploadedMedia);
     next(error);
   }
 });
 
-/**
- * PATCH /api/posts/:id
- *
- * Chỉ tác giả bài viết mới được sửa.
- */
+router.post("/:postId/share", requireAuth, async (req, res, next) => {
+  try {
+    const postId = parsePositiveInt(req.params.postId);
+
+    if (!postId) {
+      return res.status(400).json({
+        message: "Post id không hợp lệ.",
+      });
+    }
+
+    const originalPost = await findPostById(postId, req.user.id);
+
+    if (!originalPost) {
+      return res.status(404).json({
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
+      });
+    }
+
+    const result = validatePostInput({
+      title: "",
+      content: req.body?.content || "",
+    });
+    const privacyResult = normalizePostPrivacy(req.body?.privacy);
+
+    if (result.error || privacyResult.error) {
+      return res.status(400).json({
+        message: result.error || privacyResult.error,
+      });
+    }
+
+    const post = await createPost(req.user.id, {
+      title: null,
+      content: result.content,
+      privacy: privacyResult.privacy,
+      sharedPostId: postId,
+    });
+
+    return res.status(201).json({
+      message: "Đã chia sẻ bài viết về trang cá nhân.",
+      post,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch(
   "/:id",
   requireAuth,
   handlePostImageUpload,
   async (req, res, next) => {
-    const imageUrl = req.file
-      ? `/uploads/posts/${req.file.filename}`
-      : null;
+    const uploadedMedia = getUploadedPostMedia(req);
 
     try {
-      const postId = Number(req.params.id);
+      const postId = parsePositiveInt(req.params.id);
 
-      if (!Number.isInteger(postId) || postId <= 0) {
-        await deleteLocalUpload(imageUrl);
+      if (!postId) {
+        await deleteUploadedPostMedia(uploadedMedia);
 
         return res.status(400).json({
           message: "Post id không hợp lệ",
@@ -277,7 +384,7 @@ router.patch(
       const existingPost = await findPostById(postId, req.user.id);
 
       if (!existingPost) {
-        await deleteLocalUpload(imageUrl);
+        await deleteUploadedPostMedia(uploadedMedia);
 
         return res.status(404).json({
           message: "Không tìm thấy bài viết",
@@ -285,32 +392,56 @@ router.patch(
       }
 
       if (existingPost.userId !== req.user.id) {
-        await deleteLocalUpload(imageUrl);
+        await deleteUploadedPostMedia(uploadedMedia);
 
         return res.status(403).json({
           message: "Bạn không có quyền sửa bài viết này",
         });
       }
 
-      const { title, content } = req.body;
+      const { title, content, privacy } = req.body;
       const result = validatePostInput({ title, content });
+      const privacyResult = normalizePostPrivacy(privacy || existingPost.privacy);
 
-      if (result.error) {
-        await deleteLocalUpload(imageUrl);
+      if (result.error || privacyResult.error) {
+        await deleteUploadedPostMedia(uploadedMedia);
 
         return res.status(400).json({
-          message: result.error,
+          message: result.error || privacyResult.error,
         });
       }
 
-      const updatedPost = await updatePost(postId, {
-        title: result.title,
-        content: result.content,
-        imageUrl,
-      });
+      const hasExistingMedia = Boolean(existingPost.media?.length);
 
-      if (imageUrl) {
-        await deleteLocalUpload(existingPost.imageUrl);
+      if (!result.content && uploadedMedia.length === 0 && !hasExistingMedia) {
+        return res.status(400).json({
+          message: "Bài viết cần có nội dung hoặc ảnh.",
+        });
+      }
+
+      const oldMedia =
+        uploadedMedia.length > 0 ? await findPostMediaByPostId(postId) : [];
+
+      const updatedPost = await updatePost(
+        postId,
+        {
+          title: result.title,
+          content: result.content,
+          privacy: privacyResult.privacy,
+          media: uploadedMedia.length > 0 ? uploadedMedia : null,
+        },
+        req.user.id
+      );
+
+      if (uploadedMedia.length > 0) {
+        await deleteUploadedPostMedia(oldMedia);
+
+        if (
+          existingPost.imageUrl &&
+          !oldMedia.some((item) => item.url === existingPost.imageUrl)
+        ) {
+          await deleteLocalUpload(existingPost.imageUrl);
+        }
       }
 
       res.json({
@@ -318,22 +449,17 @@ router.patch(
         post: updatedPost,
       });
     } catch (error) {
-      await deleteLocalUpload(imageUrl);
+      await deleteUploadedPostMedia(uploadedMedia);
       next(error);
     }
   }
 );
 
-/**
- * DELETE /api/posts/:id
- *
- * Chỉ tác giả bài viết mới được xóa.
- */
 router.delete("/:id", requireAuth, async (req, res, next) => {
   try {
-    const postId = Number(req.params.id);
+    const postId = parsePositiveInt(req.params.id);
 
-    if (!Number.isInteger(postId) || postId <= 0) {
+    if (!postId) {
       return res.status(400).json({
         message: "Post id không hợp lệ",
       });
@@ -354,8 +480,14 @@ router.delete("/:id", requireAuth, async (req, res, next) => {
     }
 
     await deletePost(postId);
+    await deleteUploadedPostMedia(existingPost.media || []);
 
-    await deleteLocalUpload(existingPost.imageUrl);
+    if (
+      existingPost.imageUrl &&
+      !(existingPost.media || []).some((item) => item.url === existingPost.imageUrl)
+    ) {
+      await deleteLocalUpload(existingPost.imageUrl);
+    }
 
     res.json({
       message: "Xóa bài viết thành công",
@@ -364,26 +496,22 @@ router.delete("/:id", requireAuth, async (req, res, next) => {
     next(error);
   }
 });
-/**
- * GET /api/posts/:postId/comments
- *
- * Public API.
- */
-router.get("/:postId/comments", async (req, res, next) => {
-  try {
-    const postId = Number(req.params.postId);
 
-    if (!Number.isInteger(postId) || postId <= 0) {
+router.get("/:postId/comments", optionalAuth, async (req, res, next) => {
+  try {
+    const postId = parsePositiveInt(req.params.postId);
+
+    if (!postId) {
       return res.status(400).json({
         message: "Post id không hợp lệ.",
       });
     }
 
-    const exists = await postExists(postId);
+    const post = await findPostById(postId, req.user?.id || null);
 
-    if (!exists) {
+    if (!post) {
       return res.status(404).json({
-        message: "Post không tồn tại.",
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
       });
     }
 
@@ -397,16 +525,11 @@ router.get("/:postId/comments", async (req, res, next) => {
   }
 });
 
-/**
- * POST /api/posts/:postId/comments
- *
- * Cần login.
- */
 router.post("/:postId/comments", requireAuth, async (req, res, next) => {
   try {
-    const postId = Number(req.params.postId);
+    const postId = parsePositiveInt(req.params.postId);
 
-    if (!Number.isInteger(postId) || postId <= 0) {
+    if (!postId) {
       return res.status(400).json({
         message: "Post id không hợp lệ.",
       });
@@ -416,7 +539,7 @@ router.post("/:postId/comments", requireAuth, async (req, res, next) => {
 
     if (!post) {
       return res.status(404).json({
-        message: "Post không tồn tại.",
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
       });
     }
 
@@ -447,18 +570,11 @@ router.post("/:postId/comments", requireAuth, async (req, res, next) => {
   }
 });
 
-/**
- * PATCH /api/posts/comments/:commentId
- *
- * Chỉ tác giả comment mới được sửa.
- *
- * Ta dùng path này để tránh đụng với /api/posts/:id.
- */
 router.patch("/comments/:commentId", requireAuth, async (req, res, next) => {
   try {
-    const commentId = Number(req.params.commentId);
+    const commentId = parsePositiveInt(req.params.commentId);
 
-    if (!Number.isInteger(commentId) || commentId <= 0) {
+    if (!commentId) {
       return res.status(400).json({
         message: "Comment id không hợp lệ.",
       });
@@ -497,16 +613,11 @@ router.patch("/comments/:commentId", requireAuth, async (req, res, next) => {
   }
 });
 
-/**
- * DELETE /api/posts/comments/:commentId
- *
- * Chỉ tác giả comment mới được xóa.
- */
 router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
   try {
-    const commentId = Number(req.params.commentId);
+    const commentId = parsePositiveInt(req.params.commentId);
 
-    if (!Number.isInteger(commentId) || commentId <= 0) {
+    if (!commentId) {
       return res.status(400).json({
         message: "Comment id không hợp lệ.",
       });
@@ -536,19 +647,11 @@ router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
   }
 });
 
-/**
- * POST /api/posts/:postId/like
- *
- * Toggle like.
- *
- * Nếu chưa like thì like.
- * Nếu đã like thì unlike.
- */
 router.post("/:postId/like", requireAuth, async (req, res, next) => {
   try {
-    const postId = Number(req.params.postId);
+    const postId = parsePositiveInt(req.params.postId);
 
-    if (!Number.isInteger(postId) || postId <= 0) {
+    if (!postId) {
       return res.status(400).json({
         message: "Post id không hợp lệ.",
       });
@@ -558,14 +661,22 @@ router.post("/:postId/like", requireAuth, async (req, res, next) => {
 
     if (!post) {
       return res.status(404).json({
-        message: "Post không tồn tại.",
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
       });
     }
 
-    const result = await togglePostLike(postId, req.user.id);
+    const reactionType = String(req.body?.reactionType || "like");
 
-    // Chỉ tạo notification khi like, không tạo khi unlike.
-    if (result.liked) {
+    if (!ALLOWED_REACTION_TYPES.includes(reactionType)) {
+      return res.status(400).json({
+        message: "Reaction không hợp lệ.",
+      });
+    }
+
+    const wasAlreadyReacted = Boolean(post.likedByMe);
+    const result = await togglePostLike(postId, req.user.id, reactionType);
+
+    if (result.liked && !wasAlreadyReacted) {
       await createNotification({
         recipientId: post.userId,
         actorId: req.user.id,
@@ -575,18 +686,16 @@ router.post("/:postId/like", requireAuth, async (req, res, next) => {
     }
 
     return res.json({
-      message: result.liked ? "Đã like post." : "Đã bỏ like post.",
+      message: result.liked ? "Đã react post." : "Đã bỏ reaction post.",
       liked: result.liked,
+      reactionType: result.reactionType,
       likeCount: result.likeCount,
+      reactionSummary: await countPostReactionsByType(postId),
     });
   } catch (error) {
-    /**
-     * Phòng trường hợp race condition.
-     * Ví dụ user click like rất nhanh tạo trùng unique key.
-     */
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "Bạn đã like post này rồi.",
+        message: "Bạn đã react post này rồi.",
       });
     }
 

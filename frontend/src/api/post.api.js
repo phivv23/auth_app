@@ -54,6 +54,22 @@ export function getPostComments(postId) {
   return apiFetch(`/posts/${postId}/comments`);
 }
 
+export function getPostReactions(
+  postId,
+  { page = 1, limit = 50, reactionType = "" } = {}
+) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  if (reactionType) {
+    params.set("reactionType", reactionType);
+  }
+
+  return apiFetch(`/posts/${postId}/reactions?${params.toString()}`);
+}
+
 export function createComment(postId, content) {
   return apiFetch(`/posts/${postId}/comments`, {
     method: "POST",
@@ -74,9 +90,17 @@ export function deleteComment(commentId) {
   });
 }
 
-export function togglePostLike(postId) {
+export function togglePostLike(postId, reactionType = "like") {
   return apiFetch(`/posts/${postId}/like`, {
     method: "POST",
+    body: JSON.stringify({ reactionType }),
+  });
+}
+
+export function sharePost(postId, { content = "", privacy = "public" } = {}) {
+  return apiFetch(`/posts/${postId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ content, privacy }),
   });
 }
 

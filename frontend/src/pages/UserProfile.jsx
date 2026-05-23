@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
-import PostCard from "../components/PostCard.jsx";
+import FollowListPanel from "../components/FollowListPanel.jsx";
+import PostComposer from "../components/PostComposer.jsx";
+import SocialPostCard from "../components/SocialPostCard.jsx";
 import {
   followUser,
   getPublicUserPosts,
@@ -23,6 +25,10 @@ export default function UserProfile() {
   const [limit] = useState(10);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [profileTab, setProfileTab] = useState({
+    userId: id,
+    section: "posts",
+  });
 
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -33,6 +39,7 @@ export default function UserProfile() {
   const [error, setError] = useState("");
 
   const isMyProfile = Boolean(profile?.isMe);
+  const activeSection = profileTab.userId === id ? profileTab.section : "posts";
 
   useEffect(() => {
     async function loadProfile() {
@@ -83,6 +90,44 @@ export default function UserProfile() {
 
     setPage(1);
     setSearch(searchInput.trim());
+  }
+
+  function handleProfileTabClick(section, targetId) {
+    setProfileTab({
+      userId: id,
+      section,
+    });
+
+    if (!targetId) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  function handlePostCreated(post) {
+    setPosts((currentPosts) => [post, ...currentPosts]);
+    setTotal((currentTotal) => currentTotal + 1);
+  }
+
+  function handlePostUpdated(updatedPost) {
+    setPosts((currentPosts) =>
+      currentPosts.map((post) =>
+        post.id === updatedPost.id ? updatedPost : post
+      )
+    );
+  }
+
+  function handlePostDeleted(postId) {
+    setPosts((currentPosts) =>
+      currentPosts.filter((post) => post.id !== postId)
+    );
+    setTotal((currentTotal) => Math.max(0, currentTotal - 1));
   }
 
   async function handleToggleFollow() {
@@ -137,11 +182,18 @@ export default function UserProfile() {
   }
 
   const avatarUrl = getFileUrl(profile.avatarUrl);
+  const coverUrl = getFileUrl(profile.coverUrl);
+  const showingFollowList =
+    activeSection === "followers" || activeSection === "following";
 
   return (
     <div className="profile-page">
       <section className="profile-hero">
-        <div className="profile-cover" aria-hidden="true" />
+        <div className="profile-cover" aria-hidden="true">
+          {coverUrl && (
+            <img className="profile-cover-image" src={coverUrl} alt="" />
+          )}
+        </div>
 
         <div className="profile-summary">
           <div className="profile-avatar-frame">
@@ -191,16 +243,41 @@ export default function UserProfile() {
         {error && <p className="error profile-error">{error}</p>}
 
         <div className="profile-tabs" aria-label="Profile sections">
-          <a href="#profile-posts" className="active">
+          <button
+            type="button"
+            className={activeSection === "posts" ? "active" : ""}
+            onClick={() => handleProfileTabClick("posts", "profile-posts")}
+          >
             Bài viết
-          </a>
-          <a href="#profile-intro">Giới thiệu</a>
-          <Link to={`/users/${profile.id}/followers`}>Người theo dõi</Link>
-          <Link to={`/users/${profile.id}/following`}>Đang theo dõi</Link>
+          </button>
+          <button
+            type="button"
+            className={activeSection === "intro" ? "active" : ""}
+            onClick={() => handleProfileTabClick("intro", "profile-intro")}
+          >
+            Giới thiệu
+          </button>
+          <button
+            type="button"
+            className={activeSection === "followers" ? "active" : ""}
+            onClick={() => handleProfileTabClick("followers")}
+          >
+            Người theo dõi
+          </button>
+          <button
+            type="button"
+            className={activeSection === "following" ? "active" : ""}
+            onClick={() => handleProfileTabClick("following")}
+          >
+            Đang theo dõi
+          </button>
         </div>
       </section>
 
-      <div className="profile-content-grid">
+      {showingFollowList ? (
+        <FollowListPanel userId={profile.id} type={activeSection} embedded />
+      ) : (
+        <div className="profile-content-grid">
         <aside className="profile-sidebar" id="profile-intro">
           <section className="profile-panel">
             <h2>Giới thiệu</h2>
@@ -244,6 +321,14 @@ export default function UserProfile() {
         </aside>
 
         <section className="profile-timeline" id="profile-posts">
+          {isMyProfile && (
+            <PostComposer
+              compact
+              placeholder="Bạn muốn chia sẻ gì trên trang cá nhân?"
+              onCreated={handlePostCreated}
+            />
+          )}
+
           <div className="profile-panel">
             <div className="profile-section-header">
               <div>
@@ -276,12 +361,12 @@ export default function UserProfile() {
           ) : (
             <div className="post-list profile-post-list">
               {posts.map((post) => (
-                <PostCard
+                <SocialPostCard
                   key={post.id}
                   post={post}
-                  excerpt={false}
-                  showAuthor={false}
-                  titleTag="h3"
+                  onPostUpdated={handlePostUpdated}
+                  onPostDeleted={handlePostDeleted}
+                  onPostShared={isMyProfile ? handlePostCreated : undefined}
                 />
               ))}
             </div>
@@ -309,7 +394,8 @@ export default function UserProfile() {
             </button>
           </div>
         </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

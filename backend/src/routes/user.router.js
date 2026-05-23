@@ -7,11 +7,12 @@ import {
   updateUserPassword,
   updateUserProfile,
   updateUserAvatar,
+  updateUserCover,
   findPublicUserProfileById,
   searchPublicUsers,
   findSuggestedUsers,
 } from "../models/user.model.js";
-import { uploadAvatar } from "../config/upload.js";
+import { uploadAvatar, uploadCover } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
 import { findPosts } from "../models/post.model.js";
 import {
@@ -50,6 +51,24 @@ function handleAvatarUpload(req, res, next) {
 
     return res.status(400).json({
       message: error.message || "Upload avatar thất bại",
+    });
+  });
+}
+
+function handleCoverUpload(req, res, next) {
+  uploadCover.single("cover")(req, res, (error) => {
+    if (!error) {
+      return next();
+    }
+
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        message: "Ảnh bìa tối đa 5MB",
+      });
+    }
+
+    return res.status(400).json({
+      message: error.message || "Upload ảnh bìa thất bại",
     });
   });
 }
@@ -332,6 +351,37 @@ router.patch(
       });
     } catch (error) {
       await deleteLocalUpload(avatarUrl);
+      next(error);
+    }
+  }
+);
+
+router.patch(
+  "/me/cover",
+  requireAuth,
+  handleCoverUpload,
+  async (req, res, next) => {
+    const coverUrl = req.file ? `/uploads/covers/${req.file.filename}` : "";
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          message: "Vui lòng chọn file ảnh bìa",
+        });
+      }
+
+      const oldCoverUrl = req.user.coverUrl;
+
+      const updatedUser = await updateUserCover(req.user.id, coverUrl);
+
+      await deleteLocalUpload(oldCoverUrl);
+
+      res.json({
+        message: "Upload ảnh bìa thành công",
+        user: updatedUser,
+      });
+    } catch (error) {
+      await deleteLocalUpload(coverUrl);
       next(error);
     }
   }

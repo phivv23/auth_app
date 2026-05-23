@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { getFileUrl } from "../api/client.js";
 import { createPost } from "../api/post.api.js";
+import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
+
+const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 
 export default function CreatePost() {
   const navigate = useNavigate();
@@ -12,31 +14,27 @@ export default function CreatePost() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [image, setImage] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [privacy, setPrivacy] = useState("public");
+  const [images, setImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const avatarUrl = getFileUrl(user?.avatarUrl);
   const canSubmit =
-    title.trim().length >= 3 && content.trim().length >= 10 && !submitting;
+    (content.trim().length > 0 || images.length > 0) && !submitting;
 
   useEffect(() => {
     return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
-  }, [previewUrl]);
+  }, [previews]);
 
-  function resetSelectedImage() {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
-    setImage(null);
-    setPreviewUrl("");
+  function resetSelectedImages() {
+    previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    setImages([]);
+    setPreviews([]);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -44,39 +42,42 @@ export default function CreatePost() {
   }
 
   function handleImageChange(event) {
-    const selectedFile = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files || []);
 
     setError("");
 
-    if (!selectedFile) {
-      resetSelectedImage();
+    if (selectedFiles.length === 0) {
+      resetSelectedImages();
       return;
     }
 
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    const invalidFile = selectedFiles.find(
+      (file) =>
+        !allowedImageTypes.includes(file.type) || file.size > 5 * 1024 * 1024
+    );
 
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setError("Chỉ được chọn ảnh JPG, PNG hoặc WEBP");
-      resetSelectedImage();
+    if (selectedFiles.length > 10 || invalidFile) {
+      setError("Chỉ được chọn tối đa 10 ảnh JPG, PNG hoặc WEBP, mỗi ảnh tối đa 5MB.");
+      resetSelectedImages();
       return;
     }
 
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      setError("Ảnh bài viết tối đa 5MB");
-      resetSelectedImage();
-      return;
-    }
-
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
-    setImage(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+    resetSelectedImages();
+    setImages(selectedFiles);
+    setPreviews(
+      selectedFiles.map((file) => ({
+        name: file.name,
+        url: URL.createObjectURL(file),
+      }))
+    );
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (!canSubmit) {
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -86,10 +87,11 @@ export default function CreatePost() {
 
       formData.append("title", title);
       formData.append("content", content);
+      formData.append("privacy", privacy);
 
-      if (image) {
-        formData.append("image", image);
-      }
+      images.forEach((image) => {
+        formData.append("media", image);
+      });
 
       const data = await createPost(formData);
 
@@ -123,7 +125,7 @@ export default function CreatePost() {
           className="composer-title-input"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Tiêu đề bài viết"
+          placeholder="Tiêu đề bài viết (không bắt buộc)"
         />
 
         <textarea
@@ -134,27 +136,43 @@ export default function CreatePost() {
           rows={8}
         />
 
-        {previewUrl && (
-          <div className="composer-preview">
-            <img src={previewUrl} alt="Preview" />
-            <button type="button" onClick={resetSelectedImage}>
-              Xóa ảnh
-            </button>
+        {previews.length > 0 && (
+          <div className="composer-media-grid">
+            {previews.map((preview) => (
+              <img key={preview.url} src={preview.url} alt={preview.name} />
+            ))}
           </div>
         )}
 
         {error && <p className="error">{error}</p>}
 
         <footer className="composer-footer">
+          <select
+            value={privacy}
+            onChange={(event) => setPrivacy(event.target.value)}
+            aria-label="Quyền xem bài viết"
+          >
+            <option value="public">Công khai</option>
+            <option value="followers">Người theo dõi</option>
+            <option value="only_me">Chỉ mình tôi</option>
+          </select>
+
           <label className="composer-file-button">
             Ảnh
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              multiple
               onChange={handleImageChange}
             />
           </label>
+
+          {images.length > 0 && (
+            <button type="button" className="link-button" onClick={resetSelectedImages}>
+              Xóa ảnh
+            </button>
+          )}
 
           <button className="button" type="submit" disabled={!canSubmit}>
             {submitting ? "Đang đăng..." : "Đăng bài"}

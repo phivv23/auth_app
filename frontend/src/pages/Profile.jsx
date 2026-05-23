@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/useAuth.js";
 import AvatarUpload from "../components/AvatarUpload";
+import CoverUpload from "../components/CoverUpload";
 import { getFileUrl } from "../api/client.js";
 
 export default function Profile() {
@@ -113,11 +114,20 @@ export default function Profile() {
   }
 
   const currentAvatarUrl = getFileUrl(user.avatarUrl);
+  const currentCoverUrl = getFileUrl(user.coverUrl);
 
   return (
     <div className="profile-settings-page">
       <section className="profile-editor-hero">
-        <div className="profile-editor-cover" aria-hidden="true" />
+        <div className="profile-editor-cover" aria-hidden="true">
+          {currentCoverUrl && (
+            <img
+              className="profile-cover-image"
+              src={currentCoverUrl}
+              alt=""
+            />
+          )}
+        </div>
 
         <div className="profile-editor-summary">
           {currentAvatarUrl ? (
@@ -142,6 +152,7 @@ export default function Profile() {
       <div className="profile-settings-layout">
         <aside className="profile-settings-sidebar">
           <AvatarUpload />
+          <CoverUpload />
         </aside>
 
         <section className="card profile-settings-card">

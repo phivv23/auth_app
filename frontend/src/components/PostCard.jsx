@@ -28,17 +28,19 @@ export default function PostCard({
 }) {
   const postUrl = `/posts/${post.id}`;
   const authorUrl = post.userId ? `/users/${post.userId}` : "";
-  const imageUrl = showImage ? getFileUrl(post.imageUrl) : "";
+  const firstMedia = post.media?.[0];
+  const imageUrl = showImage ? getFileUrl(firstMedia?.url || post.imageUrl) : "";
   const renderedActions =
     typeof actions === "function" ? actions(post) : actions;
   const content = excerpt
     ? getPostExcerpt(post.content, excerptLength)
     : post.content;
+  const title = post.title || "Bài viết";
 
   return (
     <article className={`post-card ${className}`.trim()}>
       <TitleTag>
-        <Link to={postUrl}>{post.title}</Link>
+        <Link to={postUrl}>{title}</Link>
       </TitleTag>
 
       {(showAuthor || showStats) && (
@@ -73,7 +75,7 @@ export default function PostCard({
 
       {imageUrl && (
         <Link to={postUrl}>
-          <img className="feed-post-image" src={imageUrl} alt={post.title} />
+          <img className="feed-post-image" src={imageUrl} alt={title} />
         </Link>
       )}
 

@@ -84,6 +84,7 @@ export async function findFollowers({
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.cover_url AS coverUrl,
       u.created_at AS createdAt,
       f.created_at AS followedAt,
 
@@ -163,6 +164,7 @@ export async function findFollowing({
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.cover_url AS coverUrl,
       u.created_at AS createdAt,
       f.created_at AS followedAt,
 

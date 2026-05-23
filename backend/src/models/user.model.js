@@ -39,6 +39,7 @@ export async function findUserById(id) {
         name,
         email,
         avatar_url AS avatarUrl,
+        cover_url AS coverUrl,
         bio,
         location,
         website,
@@ -68,6 +69,7 @@ export async function findUserByEmail(email) {
         name,
         email,
         avatar_url AS avatarUrl,
+        cover_url AS coverUrl,
         bio,
         location,
         website,
@@ -98,6 +100,7 @@ export async function findPublicUserByEmail(email) {
         name,
         email,
         avatar_url AS avatarUrl,
+        cover_url AS coverUrl,
         bio,
         location,
         website,
@@ -127,6 +130,7 @@ export async function findUserWithPasswordById(id) {
         name,
         email,
         avatar_url AS avatarUrl,
+        cover_url AS coverUrl,
         bio,
         location,
         website,
@@ -188,6 +192,24 @@ export async function updateUserAvatar(userId, avatarUrl) {
 }
 
 /**
+ * Update cover URL for current user.
+ *
+ * The route handles file upload and passes the saved public URL here.
+ */
+export async function updateUserCover(userId, coverUrl) {
+  await query(
+    `
+      UPDATE users
+      SET cover_url = ?
+      WHERE id = ?
+    `,
+    [coverUrl, userId]
+  );
+
+  return findUserById(userId);
+}
+
+/**
  * Update passwordHash.
  *
  * Password gốc không bao giờ được lưu vào database.
@@ -213,6 +235,7 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.cover_url AS coverUrl,
       u.bio,
       u.location,
       u.website,
@@ -289,6 +312,7 @@ export async function searchPublicUsers({
       u.id,
       u.name,
       u.avatar_url AS avatarUrl,
+      u.cover_url AS coverUrl,
       u.bio,
       u.location,
       u.website,
@@ -393,6 +417,7 @@ export async function findSuggestedUsers({
         u.id,
         u.name,
         u.avatar_url AS avatarUrl,
+        u.cover_url AS coverUrl,
         u.created_at AS createdAt,
 
         (

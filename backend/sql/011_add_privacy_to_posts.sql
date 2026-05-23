@@ -1,0 +1,2 @@
+ALTER TABLE posts
+ADD COLUMN privacy VARCHAR(20) NOT NULL DEFAULT 'public' AFTER image_url;

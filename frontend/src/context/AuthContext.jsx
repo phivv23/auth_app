@@ -32,6 +32,22 @@ export function AuthProvider({ children }) {
 
     return data.user;
   }
+
+  async function uploadCover(file) {
+    const formData = new FormData();
+
+    formData.append("cover", file);
+
+    const data = await apiFetch("/users/me/cover", {
+      method: "PATCH",
+      body: formData,
+    });
+
+    setUser(data.user);
+
+    return data.user;
+  }
+
   async function loadCurrentUser() {
     try {
       /**
@@ -154,6 +170,7 @@ export function AuthProvider({ children }) {
         changePassword,
         reloadUser: loadCurrentUser,
         uploadAvatar,
+        uploadCover,
       }}
     >
       {children}

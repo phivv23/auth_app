@@ -1,32 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
-import SuggestedUsers from "../components/SuggestedUsers.jsx";
-import { getFileUrl } from "../api/client.js";
-import {
-  createComment,
-  getFeedPosts,
-  getPostComments,
-  togglePostLike,
-} from "../api/post.api.js";
-import { getPublicUserPosts } from "../api/user.api.js";
-import { useAuth } from "../context/useAuth.js";
-import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
-const emptyCommentPanel = {
-  comments: [],
-  input: "",
-  loading: false,
-  loaded: false,
-  submitting: false,
-  error: "",
-};
+import PostComposer from "../components/PostComposer.jsx";
+import SocialPostCard from "../components/SocialPostCard.jsx";
+import SuggestedUsers from "../components/SuggestedUsers.jsx";
+import { getFeedPosts } from "../api/post.api.js";
+import { getPublicUserPosts } from "../api/user.api.js";
 
 export default function Feed() {
-  const { user } = useAuth();
   const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
-
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -34,18 +17,12 @@ export default function Feed() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const [expandedComments, setExpandedComments] = useState({});
-  const [commentPanels, setCommentPanels] = useState({});
-  const [likingPostIds, setLikingPostIds] = useState({});
-
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [loadMoreError, setLoadMoreError] = useState("");
-  const [actionError, setActionError] = useState("");
   const [feedNotice, setFeedNotice] = useState("");
 
-  const userAvatarUrl = getFileUrl(user?.avatarUrl);
   const hasMore = page < totalPages;
   const isFetchingFeed = loading || loadingMore;
 
@@ -64,7 +41,6 @@ export default function Feed() {
         }
 
         setLoadMoreError("");
-        setActionError("");
 
         const data = await getFeedPosts({
           page,
@@ -82,9 +58,7 @@ export default function Feed() {
             return nextPosts;
           }
 
-          const existingPostIds = new Set(
-            currentPosts.map((post) => post.id)
-          );
+          const existingPostIds = new Set(currentPosts.map((post) => post.id));
 
           return [
             ...currentPosts,
@@ -146,23 +120,41 @@ export default function Feed() {
     };
   }, [error, hasMore, isFetchingFeed, loadMoreError, totalPages]);
 
+  function refreshFeed() {
+    setPage(1);
+    setLoadMoreError("");
+    setFeedNotice("");
+    setLoadAttempt((currentAttempt) => currentAttempt + 1);
+  }
+
   function handleRetryLoadMore() {
     setLoadMoreError("");
     setLoadAttempt((currentAttempt) => currentAttempt + 1);
   }
 
-  function refreshFeed() {
-    setPage(1);
-    setExpandedComments({});
-    setCommentPanels({});
-    setLoadMoreError("");
-    setActionError("");
-    setFeedNotice("");
-    setLoadAttempt((currentAttempt) => currentAttempt + 1);
+  function handlePostCreated(post) {
+    setPosts((currentPosts) => [post, ...currentPosts]);
+    setTotal((currentTotal) => currentTotal + 1);
+    setFeedNotice("Đã đăng bài viết mới.");
+  }
+
+  function handlePostUpdated(updatedPost) {
+    setPosts((currentPosts) =>
+      currentPosts.map((post) =>
+        post.id === updatedPost.id ? updatedPost : post
+      )
+    );
+  }
+
+  function handlePostDeleted(postId) {
+    setPosts((currentPosts) =>
+      currentPosts.filter((post) => post.id !== postId)
+    );
+    setTotal((currentTotal) => Math.max(0, currentTotal - 1));
+    setFeedNotice("Đã xóa bài viết.");
   }
 
   async function handleSuggestedUserFollowed(followedUser) {
-    setActionError("");
     setFeedNotice(`Đã follow ${followedUser.name}.`);
 
     try {
@@ -175,9 +167,6 @@ export default function Feed() {
         ...post,
         authorName: post.authorName || followedUser.name,
         authorAvatarUrl: post.authorAvatarUrl || followedUser.avatarUrl,
-        likeCount: Number(post.likeCount || 0),
-        commentCount: Number(post.commentCount || 0),
-        likedByMe: Boolean(post.likedByMe),
       }));
 
       if (followedPosts.length === 0) {
@@ -185,9 +174,7 @@ export default function Feed() {
       }
 
       setPosts((currentPosts) => {
-        const existingPostIds = new Set(
-          currentPosts.map((post) => post.id)
-        );
+        const existingPostIds = new Set(currentPosts.map((post) => post.id));
         const uniqueFollowedPosts = followedPosts.filter(
           (post) => !existingPostIds.has(post.id)
         );
@@ -210,150 +197,6 @@ export default function Feed() {
     }
   }
 
-  function getCommentPanel(postId) {
-    return commentPanels[postId] || emptyCommentPanel;
-  }
-
-  function updateCommentPanel(postId, patch) {
-    setCommentPanels((currentPanels) => ({
-      ...currentPanels,
-      [postId]: {
-        ...emptyCommentPanel,
-        ...currentPanels[postId],
-        ...patch,
-      },
-    }));
-  }
-
-  function updatePostInFeed(postId, updater) {
-    setPosts((currentPosts) =>
-      currentPosts.map((post) =>
-        post.id === postId ? updater(post) : post
-      )
-    );
-  }
-
-  async function loadComments(postId) {
-    updateCommentPanel(postId, {
-      loading: true,
-      error: "",
-    });
-
-    try {
-      const data = await getPostComments(postId);
-
-      updateCommentPanel(postId, {
-        comments: data.comments || [],
-        loaded: true,
-        loading: false,
-      });
-    } catch (error) {
-      updateCommentPanel(postId, {
-        error: error.message,
-        loading: false,
-      });
-    }
-  }
-
-  function handleToggleComments(postId) {
-    const shouldOpen = !expandedComments[postId];
-    const panel = getCommentPanel(postId);
-
-    setExpandedComments((currentExpanded) => ({
-      ...currentExpanded,
-      [postId]: shouldOpen,
-    }));
-
-    if (shouldOpen && !panel.loaded && !panel.loading) {
-      loadComments(postId);
-    }
-  }
-
-  async function handleToggleLike(postId) {
-    setActionError("");
-    setLikingPostIds((currentIds) => ({
-      ...currentIds,
-      [postId]: true,
-    }));
-
-    try {
-      const data = await togglePostLike(postId);
-
-      updatePostInFeed(postId, (post) => ({
-        ...post,
-        likedByMe: data.liked,
-        likeCount: data.likeCount,
-      }));
-    } catch (error) {
-      setActionError(error.message);
-    } finally {
-      setLikingPostIds((currentIds) => ({
-        ...currentIds,
-        [postId]: false,
-      }));
-    }
-  }
-
-  function handleCommentInput(postId, value) {
-    updateCommentPanel(postId, {
-      input: value,
-      error: "",
-    });
-  }
-
-  async function handleCreateComment(event, postId) {
-    event.preventDefault();
-
-    const panel = getCommentPanel(postId);
-    const content = panel.input.trim();
-
-    if (!content) {
-      updateCommentPanel(postId, {
-        error: "Comment không được để trống.",
-      });
-      return;
-    }
-
-    updateCommentPanel(postId, {
-      submitting: true,
-      error: "",
-    });
-
-    try {
-      const data = await createComment(postId, content);
-      let nextComments = [...panel.comments, data.comment];
-
-      if (!panel.loaded) {
-        const commentData = await getPostComments(postId);
-        nextComments = commentData.comments || nextComments;
-      }
-
-      updateCommentPanel(postId, {
-        comments: nextComments,
-        input: "",
-        loaded: true,
-      });
-
-      updatePostInFeed(postId, (post) => ({
-        ...post,
-        commentCount: Number(post.commentCount || 0) + 1,
-      }));
-
-      setExpandedComments((currentExpanded) => ({
-        ...currentExpanded,
-        [postId]: true,
-      }));
-    } catch (error) {
-      updateCommentPanel(postId, {
-        error: error.message,
-      });
-    } finally {
-      updateCommentPanel(postId, {
-        submitting: false,
-      });
-    }
-  }
-
   return (
     <div className="feed-container">
       <section className="card">
@@ -363,22 +206,18 @@ export default function Feed() {
             <p>Bài viết của bạn và những người bạn đang follow.</p>
           </div>
 
-          <div className="feed-header-actions">
-            <button
-              className="button-link"
-              type="button"
-              disabled={isFetchingFeed}
-              onClick={refreshFeed}
-            >
-              Làm mới Feed
-            </button>
-
-            <Link className="button-link" to="/posts/create">
-              Tạo bài viết
-            </Link>
-          </div>
+          <button
+            className="button-link"
+            type="button"
+            disabled={isFetchingFeed}
+            onClick={refreshFeed}
+          >
+            Làm mới Feed
+          </button>
         </div>
       </section>
+
+      <PostComposer onCreated={handlePostCreated} />
 
       <SuggestedUsers limit={5} onFollowed={handleSuggestedUserFollowed} />
 
@@ -395,176 +234,15 @@ export default function Feed() {
         </section>
       ) : (
         <div className="feed-list">
-          {actionError && <p className="error">{actionError}</p>}
-
-          {posts.map((post) => {
-            const postImageUrl = getFileUrl(post.imageUrl);
-            const authorAvatarUrl = getFileUrl(post.authorAvatarUrl);
-            const panel = getCommentPanel(post.id);
-            const commentsOpen = Boolean(expandedComments[post.id]);
-
-            return (
-              <article key={post.id} className="feed-card">
-                <div className="feed-author">
-                  <Link to={`/users/${post.userId}`}>
-                    {authorAvatarUrl ? (
-                      <img
-                        className="feed-author-avatar"
-                        src={authorAvatarUrl}
-                        alt={post.authorName}
-                      />
-                    ) : (
-                      <div className="feed-author-placeholder">
-                        {post.authorName?.charAt(0)?.toUpperCase() || "U"}
-                      </div>
-                    )}
-                  </Link>
-
-                  <div>
-                    <Link to={`/users/${post.userId}`}>
-                      <strong>{post.authorName}</strong>
-                    </Link>
-
-                    <p
-                      className="post-time"
-                      title={formatVietnamDateTime(post.createdAt)}
-                    >
-                      {formatRelativeTime(post.createdAt)}
-                    </p>
-                  </div>
-                </div>
-
-                <h2>
-                  <Link to={`/posts/${post.id}`}>{post.title}</Link>
-                </h2>
-
-                <p className="feed-post-content">{post.content}</p>
-
-                {postImageUrl && (
-                  <Link to={`/posts/${post.id}`}>
-                    <img
-                      className="feed-post-image"
-                      src={postImageUrl}
-                      alt={post.title}
-                    />
-                  </Link>
-                )}
-
-                <div className="post-meta feed-post-stats">
-                  <span>{post.likeCount || 0} lượt thích</span>
-                  <button
-                    className="feed-stat-button"
-                    type="button"
-                    onClick={() => handleToggleComments(post.id)}
-                  >
-                    {post.commentCount || 0} bình luận
-                  </button>
-                </div>
-
-                <div className="feed-action-bar">
-                  <button
-                    className={`feed-action-button ${
-                      post.likedByMe ? "active" : ""
-                    }`}
-                    type="button"
-                    disabled={Boolean(likingPostIds[post.id])}
-                    onClick={() => handleToggleLike(post.id)}
-                  >
-                    {post.likedByMe ? "Đã thích" : "Thích"}
-                  </button>
-
-                  <button
-                    className="feed-action-button"
-                    type="button"
-                    onClick={() => handleToggleComments(post.id)}
-                  >
-                    Bình luận
-                  </button>
-
-                  <Link className="feed-action-button" to={`/posts/${post.id}`}>
-                    Chi tiết
-                  </Link>
-                </div>
-
-                <form
-                  className="feed-comment-composer"
-                  onSubmit={(event) => handleCreateComment(event, post.id)}
-                >
-                  {userAvatarUrl ? (
-                    <img
-                      className="feed-comment-avatar"
-                      src={userAvatarUrl}
-                      alt={user?.name}
-                    />
-                  ) : (
-                    <div className="feed-comment-avatar-placeholder">
-                      {user?.name?.charAt(0)?.toUpperCase() || "U"}
-                    </div>
-                  )}
-
-                  <input
-                    value={panel.input}
-                    onChange={(event) =>
-                      handleCommentInput(post.id, event.target.value)
-                    }
-                    placeholder="Viết bình luận..."
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={!panel.input.trim() || panel.submitting}
-                  >
-                    Gửi
-                  </button>
-                </form>
-
-                {panel.error && <p className="error">{panel.error}</p>}
-
-                {commentsOpen && (
-                  <div className="feed-comments">
-                    {panel.loading ? (
-                      <p className="muted">Đang tải bình luận...</p>
-                    ) : panel.comments.length === 0 ? (
-                      <p className="muted">Chưa có bình luận nào.</p>
-                    ) : (
-                      panel.comments.map((comment) => {
-                        const commentAvatarUrl = getFileUrl(
-                          comment.authorAvatarUrl
-                        );
-
-                        return (
-                          <div key={comment.id} className="feed-comment">
-                            {commentAvatarUrl ? (
-                              <img
-                                className="feed-comment-avatar"
-                                src={commentAvatarUrl}
-                                alt={comment.authorName}
-                              />
-                            ) : (
-                              <div className="feed-comment-avatar-placeholder">
-                                {comment.authorName?.charAt(0)?.toUpperCase() ||
-                                  "U"}
-                              </div>
-                            )}
-
-                            <div className="feed-comment-body">
-                              <strong>{comment.authorName}</strong>
-                              <p>{comment.content}</p>
-                              <span
-                                title={formatVietnamDateTime(comment.createdAt)}
-                              >
-                                {formatRelativeTime(comment.createdAt)}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </article>
-            );
-          })}
+          {posts.map((post) => (
+            <SocialPostCard
+              key={post.id}
+              post={post}
+              onPostUpdated={handlePostUpdated}
+              onPostDeleted={handlePostDeleted}
+              onPostShared={handlePostCreated}
+            />
+          ))}
         </div>
       )}
 

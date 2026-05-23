@@ -7,9 +7,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
+const coverUploadDir = path.resolve(__dirname, "../../uploads/covers");
 const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
 
 fs.mkdirSync(avatarUploadDir, { recursive: true });
+fs.mkdirSync(coverUploadDir, { recursive: true });
 fs.mkdirSync(postUploadDir, { recursive: true });
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -46,6 +48,17 @@ export const uploadAvatar = multer({
   fileFilter: imageFileFilter,
   limits: {
     fileSize: 2 * 1024 * 1024,
+  },
+});
+
+export const uploadCover = multer({
+  storage: createImageStorage({
+    uploadDir: coverUploadDir,
+    prefix: "cover",
+  }),
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
   },
 });
 

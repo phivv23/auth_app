@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { getPostById, updatePost } from "../api/post.api.js";
 import { useAuth } from "../context/useAuth.js";
 import { getFileUrl } from "../api/client.js";
 
+const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+
 export default function EditPost() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
   const { user } = useAuth();
 
   const postId = Number(id);
@@ -14,14 +17,15 @@ export default function EditPost() {
   const [form, setForm] = useState({
     title: "",
     content: "",
+    privacy: "public",
   });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [post, setPost] = useState(null);
-  const [image, setImage] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [images, setImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   useEffect(() => {
     async function loadPost() {
@@ -30,23 +34,19 @@ export default function EditPost() {
         setError("");
 
         const data = await getPostById(postId);
+        const loadedPost = data.post;
 
-        const post = data.post;
-
-        /**
-         * Frontend cũng kiểm tra quyền để UX tốt hơn.
-         * Backend vẫn là nơi kiểm tra quyền thật.
-         */
-        if (!user || user.id !== post.userId) {
+        if (!user || user.id !== loadedPost.userId) {
           setError("Bạn không có quyền sửa bài viết này.");
           return;
         }
 
         setForm({
-          title: post.title,
-          content: post.content,
+          title: loadedPost.title || "",
+          content: loadedPost.content || "",
+          privacy: loadedPost.privacy || "public",
         });
-        setPost(post);
+        setPost(loadedPost);
       } catch (error) {
         setError(error.message);
       } finally {
@@ -57,39 +57,51 @@ export default function EditPost() {
     loadPost();
   }, [postId, user]);
 
+  useEffect(() => {
+    return () => {
+      previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    };
+  }, [previews]);
+
+  function resetSelectedImages() {
+    previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    setImages([]);
+    setPreviews([]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function handleImageChange(event) {
-    const selectedFile = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files || []);
 
     setError("");
 
-    if (!selectedFile) {
-      setImage(null);
-      setPreviewUrl("");
+    if (selectedFiles.length === 0) {
+      resetSelectedImages();
       return;
     }
 
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    const invalidFile = selectedFiles.find(
+      (file) =>
+        !allowedImageTypes.includes(file.type) || file.size > 5 * 1024 * 1024
+    );
 
-    if (!allowedTypes.includes(selectedFile.type)) {
-      setError("Chỉ được chọn ảnh JPG, PNG hoặc WEBP");
-      setImage(null);
-      setPreviewUrl("");
+    if (selectedFiles.length > 10 || invalidFile) {
+      setError("Chỉ được chọn tối đa 10 ảnh JPG, PNG hoặc WEBP, mỗi ảnh tối đa 5MB.");
+      resetSelectedImages();
       return;
     }
 
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      setError("Ảnh bài viết tối đa 5MB");
-      setImage(null);
-      setPreviewUrl("");
-      return;
-    }
-
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-
-    setImage(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+    resetSelectedImages();
+    setImages(selectedFiles);
+    setPreviews(
+      selectedFiles.map((file) => ({
+        name: file.name,
+        url: URL.createObjectURL(file),
+      }))
+    );
   }
 
   function handleChange(event) {
@@ -104,6 +116,13 @@ export default function EditPost() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    const hasMedia = images.length > 0 || Boolean(post?.media?.length);
+
+    if (!form.content.trim() && !hasMedia) {
+      setError("Bài viết cần có nội dung hoặc ảnh.");
+      return;
+    }
+
     setError("");
     setSubmitting(true);
 
@@ -112,10 +131,11 @@ export default function EditPost() {
 
       formData.append("title", form.title);
       formData.append("content", form.content);
+      formData.append("privacy", form.privacy);
 
-      if (image) {
-        formData.append("image", image);
-      }
+      images.forEach((image) => {
+        formData.append("media", image);
+      });
 
       const data = await updatePost(postId, formData);
 
@@ -131,13 +151,15 @@ export default function EditPost() {
     return <p>Đang tải bài viết...</p>;
   }
 
+  const canEdit = post && user && user.id === post.userId;
+
   return (
     <section className="card">
       <h1>Sửa bài viết</h1>
 
       {error && <p className="error">{error}</p>}
 
-      {!error && (
+      {canEdit && (
         <form onSubmit={handleSubmit} className="form">
           <label>
             Title
@@ -145,7 +167,7 @@ export default function EditPost() {
               name="title"
               value={form.title}
               onChange={handleChange}
-              placeholder="Nhập tiêu đề"
+              placeholder="Tiêu đề bài viết (không bắt buộc)"
             />
           </label>
 
@@ -155,28 +177,54 @@ export default function EditPost() {
               name="content"
               value={form.content}
               onChange={handleChange}
-              placeholder="Nhập nội dung"
+              placeholder="Bạn đang nghĩ gì?"
               rows={10}
             />
           </label>
+
+          <label>
+            Quyền xem
+            <select name="privacy" value={form.privacy} onChange={handleChange}>
+              <option value="public">Công khai</option>
+              <option value="followers">Người theo dõi</option>
+              <option value="only_me">Chỉ mình tôi</option>
+            </select>
+          </label>
+
           <div className="form-group">
             <label>Ảnh bài viết</label>
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              multiple
               onChange={handleImageChange}
             />
           </div>
 
-          {previewUrl ? (
-            <img className="post-image-preview" src={previewUrl} alt="Preview" />
-          ) : post?.imageUrl ? (
-            <img
-              className="post-image-preview"
-              src={getFileUrl(post.imageUrl)}
-              alt={post.title}
-            />
+          {previews.length > 0 ? (
+            <div className="composer-media-grid">
+              {previews.map((preview) => (
+                <img key={preview.url} src={preview.url} alt={preview.name} />
+              ))}
+            </div>
+          ) : post?.media?.length ? (
+            <div className="composer-media-grid">
+              {post.media.map((item) => (
+                <img
+                  key={item.url}
+                  src={getFileUrl(item.url)}
+                  alt={post.title || "Ảnh bài viết"}
+                />
+              ))}
+            </div>
           ) : null}
+
+          {images.length > 0 && (
+            <button type="button" className="link-button" onClick={resetSelectedImages}>
+              Xóa ảnh mới chọn
+            </button>
+          )}
 
           <button className="button" disabled={submitting}>
             {submitting ? "Đang lưu..." : "Lưu thay đổi"}
