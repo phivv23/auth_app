@@ -10,6 +10,7 @@ import {
 } from "../api/friend.api.js";
 import { followUser, unfollowUser } from "../api/user.api";
 import { useAuth } from "../context/useAuth";
+import { openMessagePopup } from "../utils/messagePopup.js";
 
 export default function UserCard({ user, onUserUpdated }) {
   const navigate = useNavigate();
@@ -94,6 +95,10 @@ export default function UserCard({ user, onUserUpdated }) {
     return "Thêm bạn";
   }
 
+  function handleOpenMessages() {
+    openMessagePopup(user.id);
+  }
+
   const avatarUrl = getFileUrl(user.avatarUrl);
 
   return (
@@ -132,6 +137,10 @@ export default function UserCard({ user, onUserUpdated }) {
 
           <button type="button" onClick={handleToggleFollow} disabled={actionLoading}>
             {user.isFollowing ? "Unfollow" : "Follow"}
+          </button>
+
+          <button type="button" onClick={handleOpenMessages}>
+            Nhắn tin
           </button>
         </div>
       )}

@@ -11,6 +11,7 @@ export async function findNotificationById(notificationId) {
       n.type,
       n.post_id AS postId,
       n.comment_id AS commentId,
+      n.conversation_id AS conversationId,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 
@@ -46,6 +47,7 @@ export async function createNotification({
   type,
   postId = null,
   commentId = null,
+  conversationId = null,
 }) {
   // Không tự gửi thông báo cho chính mình
   if (!recipientId || !actorId || Number(recipientId) === Number(actorId)) {
@@ -59,11 +61,12 @@ export async function createNotification({
       actor_id,
       type,
       post_id,
-      comment_id
+      comment_id,
+      conversation_id
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     `,
-    [recipientId, actorId, type, postId, commentId]
+    [recipientId, actorId, type, postId, commentId, conversationId]
   );
 
   const notification = await findNotificationById(result.insertId);
@@ -99,6 +102,7 @@ export async function findNotificationsByUserId({
       n.type,
       n.post_id AS postId,
       n.comment_id AS commentId,
+      n.conversation_id AS conversationId,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 

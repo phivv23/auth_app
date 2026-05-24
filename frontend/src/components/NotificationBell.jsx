@@ -36,6 +36,10 @@ function getNotificationText(notification) {
     return `${actorName} đã bình luận bài viết "${notification.postTitle || ""}"`;
   }
 
+  if (notification.type === "message") {
+    return `${actorName} đã nhắn tin cho bạn`;
+  }
+
   return "Bạn có thông báo mới";
 }
 
@@ -50,6 +54,10 @@ function getNotificationTarget(notification) {
 
   if (notification.type === "friend_accept") {
     return `/users/${notification.actorId}`;
+  }
+
+  if (notification.type === "message" && notification.conversationId) {
+    return `/messages?conversationId=${notification.conversationId}`;
   }
 
   if (notification.postId) {
@@ -191,14 +199,15 @@ export default function NotificationBell() {
     <div className="notification-bell-wrapper" ref={wrapperRef}>
       <button
         type="button"
-        className="notification-bell"
+        className="notification-bell nav-icon-button"
         aria-label="Thông báo"
+        title="Thông báo"
         onClick={() => setOpen((currentOpen) => !currentOpen)}
       >
-        <span>Thông báo</span>
+        <span aria-hidden="true">🔔</span>
 
         {unreadCount > 0 && (
-          <span className="notification-badge">
+          <span className="notification-badge nav-icon-badge">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}

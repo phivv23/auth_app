@@ -10,6 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import notificationRoutes from "./routes/notification.routes.js";
 import friendRoutes from "./routes/friend.routes.js";
+import messageRoutes from "./routes/message.routes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/posts", postRoutes);
 app.use("/api/friends", friendRoutes);
+app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/protected", protectedRoutes);
 

@@ -11,6 +11,7 @@ import {
 import FollowListPanel from "../components/FollowListPanel.jsx";
 import PostComposer from "../components/PostComposer.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
+import { openMessagePopup } from "../utils/messagePopup.js";
 import {
   followUser,
   getPublicUserPosts,
@@ -308,6 +309,14 @@ export default function UserProfile() {
                     : profile.isFollowing
                       ? "Đang follow"
                       : "Follow"}
+                </button>
+
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => openMessagePopup(profile.id)}
+                >
+                  Nhắn tin
                 </button>
               </>
             )}

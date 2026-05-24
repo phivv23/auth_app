@@ -17,8 +17,11 @@ import Feed from "./pages/Feed.jsx";
 import FollowList from "./pages/FollowList.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
+import MessagePopups from "./components/MessagePopups.jsx";
+import MessageDropdown from "./components/MessageDropdown.jsx";
 import UserSearch from "./pages/UserSearch.jsx";
 import Friends from "./pages/Friends.jsx";
+import Messages from "./pages/Messages.jsx";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -32,29 +35,43 @@ function Navbar() {
   return (
     <nav className="navbar">
       <Link to="/" className="brand">
-        Auth App
+        <span className="brand-mark">f</span>
+        <span>Auth App</span>
       </Link>
 
       <div className="nav-links">
         {user ? (
           <>
-            <Link to="/posts">Blog</Link>
-            <Link to="/feed">Feed</Link>
-            <Link to="/friends">Friends</Link>
+            <Link className="nav-icon-link" to="/posts" title="Blog" aria-label="Blog">
+              <span aria-hidden="true">📰</span>
+            </Link>
+            <Link className="nav-icon-link" to="/feed" title="Feed" aria-label="Feed">
+              <span aria-hidden="true">🏠</span>
+            </Link>
+            <Link className="nav-icon-link" to="/friends" title="Friends" aria-label="Friends">
+              <span aria-hidden="true">👥</span>
+            </Link>
+            <MessageDropdown />
             <NotificationBell />
-            <Link to="/my-posts">My Posts</Link>
-            <Link to="/dashboard">Dashboard</Link>
-            <Link to="/profile">Profile</Link>
+            <Link className="nav-icon-link" to="/my-posts" title="My Posts" aria-label="My Posts">
+              <span aria-hidden="true">🗂️</span>
+            </Link>
+            <Link className="nav-icon-link" to="/dashboard" title="Dashboard" aria-label="Dashboard">
+              <span aria-hidden="true">📊</span>
+            </Link>
+            <Link className="nav-icon-link" to="/profile" title="Profile" aria-label="Profile">
+              <span aria-hidden="true">👤</span>
+            </Link>
 
-            <button className="link-button" onClick={handleLogout}>
-              Logout
+            <button className="nav-icon-button" title="Logout" aria-label="Logout" onClick={handleLogout}>
+              <span aria-hidden="true">↩</span>
             </button>
           </>
         ) : (
           <>
-            <Link to="/posts">Blog</Link>
-            <Link to="/register">Register</Link>
-            <Link to="/login">Login</Link>
+            <Link className="nav-icon-link" to="/posts">Blog</Link>
+            <Link className="nav-icon-link" to="/register">Register</Link>
+            <Link className="nav-icon-link" to="/login">Login</Link>
           </>
         )}
       </div>
@@ -89,6 +106,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/messages"
+            element={
+              <ProtectedRoute>
+                <Messages />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/posts/:id" element={<PostDetail />} />
 
           <Route path="/users/search" element={<UserSearch />} />
@@ -112,6 +137,8 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      <MessagePopups />
     </>
   );
 }

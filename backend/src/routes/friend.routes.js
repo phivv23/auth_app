@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
 import { createNotification } from "../models/notification.model.js";
+import { acceptMessageConversationBetween } from "../models/message.model.js";
 import { findPublicUserProfileById } from "../models/user.model.js";
 import {
   acceptFriendRequest,
@@ -206,6 +207,8 @@ router.patch("/requests/:userId/accept", requireAuth, async (req, res, next) => 
       actorId: req.user.id,
       type: "friend_accept",
     });
+
+    await acceptMessageConversationBetween(req.user.id, requesterId);
 
     const profile = await findPublicUserProfileById(requesterId, req.user.id);
 
