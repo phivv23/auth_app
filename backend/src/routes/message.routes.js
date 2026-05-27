@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { addMessageClient } from "../realtime/messageEvents.js";
 import {
   createMessage,
@@ -12,6 +13,18 @@ import {
 } from "../models/message.model.js";
 
 const router = Router();
+const startConversationRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyPrefix: "message:start",
+});
+const sendMessageRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyPrefix: "message:send",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn gửi tin nhắn quá nhanh. Vui lòng thử lại sau.",
+});
 
 function parsePositiveInt(value) {
   const number = Number(value);
@@ -110,31 +123,36 @@ router.get("/requests", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/conversations/:userId", requireAuth, async (req, res, next) => {
-  try {
-    const otherUserId = parsePositiveInt(req.params.userId);
+router.post(
+  "/conversations/:userId",
+  requireAuth,
+  startConversationRateLimit,
+  async (req, res, next) => {
+    try {
+      const otherUserId = parsePositiveInt(req.params.userId);
 
-    if (!otherUserId) {
-      return res.status(400).json({
-        message: "User id không hợp lệ.",
+      if (!otherUserId) {
+        return res.status(400).json({
+          message: "User id không hợp lệ.",
+        });
+      }
+
+      const conversation = await findOrCreateConversation(req.user.id, otherUserId);
+
+      if (!conversation) {
+        return res.status(403).json({
+          message: "Bạn chỉ có thể nhắn tin với bạn bè.",
+        });
+      }
+
+      return res.status(201).json({
+        conversation,
       });
+    } catch (error) {
+      next(error);
     }
-
-    const conversation = await findOrCreateConversation(req.user.id, otherUserId);
-
-    if (!conversation) {
-      return res.status(403).json({
-        message: "Bạn chỉ có thể nhắn tin với bạn bè.",
-      });
-    }
-
-    return res.status(201).json({
-      conversation,
-    });
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 router.get(
   "/conversations/:conversationId/messages",
@@ -175,6 +193,7 @@ router.get(
 router.post(
   "/conversations/:conversationId/messages",
   requireAuth,
+  sendMessageRateLimit,
   async (req, res, next) => {
     try {
       const conversationId = parsePositiveInt(req.params.conversationId);

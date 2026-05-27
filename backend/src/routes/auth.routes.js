@@ -12,18 +12,22 @@ import {
   findUserByEmail,
 } from "../models/user.model.js";
 import { signAccessToken } from "../utils/token.js";
+import { rateLimit } from "../middleware/rateLimit.js";
+import { sendError } from "../utils/http.js";
+import {
+  validateLoginInput,
+  validateRegisterInput,
+} from "../validation/auth.validation.js";
 
 const router = Router();
 
 const SALT_ROUNDS = 12;
-
-/**
- * Validate email đơn giản.
- * Production có thể dùng thư viện như zod/yup/validator.
- */
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyPrefix: "auth",
+  message: "Bạn thử đăng nhập/đăng ký quá nhiều lần. Vui lòng thử lại sau.",
+});
 
 /**
  * Chuẩn hóa user trước khi trả về frontend.
@@ -55,52 +59,25 @@ function toPublicUser(user) {
  *   "password": "123456"
  * }
  */
-router.post("/register", async (req, res, next) => {
+router.post("/register", authRateLimit, async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const validation = validateRegisterInput(req.body);
 
-    /**
-     * Kiểm tra thiếu field.
-     */
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message: "Name, email và password là bắt buộc.",
-      });
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
     }
 
-    /**
-     * Chuẩn hóa input.
-     */
-    const normalizedName = String(name).trim();
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const rawPassword = String(password);
-
-    /**
-     * Validate name.
-     */
-    if (normalizedName.length < 2) {
-      return res.status(400).json({
-        message: "Name phải có ít nhất 2 ký tự.",
-      });
-    }
-
-    /**
-     * Validate email.
-     */
-    if (!isValidEmail(normalizedEmail)) {
-      return res.status(400).json({
-        message: "Email không hợp lệ.",
-      });
-    }
-
-    /**
-     * Validate password.
-     */
-    if (rawPassword.length < 6) {
-      return res.status(400).json({
-        message: "Password phải có ít nhất 6 ký tự.",
-      });
-    }
+    const {
+      name: normalizedName,
+      email: normalizedEmail,
+      password: rawPassword,
+    } = validation.value;
 
     /**
      * Kiểm tra email đã tồn tại chưa.
@@ -108,9 +85,7 @@ router.post("/register", async (req, res, next) => {
     const existingUser = await findPublicUserByEmail(normalizedEmail);
 
     if (existingUser) {
-      return res.status(409).json({
-        message: "Email đã được sử dụng.",
-      });
+      return sendError(res, 409, "Email đã được sử dụng.", "EMAIL_TAKEN");
     }
 
     /**
@@ -132,7 +107,7 @@ router.post("/register", async (req, res, next) => {
     /**
      * Tạo JWT chứa user id.
      */
-    const token = signAccessToken(user.id);
+    const token = signAccessToken(user.id, user.tokenVersion || 0);
 
     /**
      * Set JWT vào HttpOnly cookie.
@@ -160,18 +135,21 @@ router.post("/register", async (req, res, next) => {
  *   "password": "123456"
  * }
  */
-router.post("/login", async (req, res, next) => {
+router.post("/login", authRateLimit, async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const validation = validateLoginInput(req.body);
 
-    if (!email || !password) {
-      return res.status(400).json({
-        message: "Email và password là bắt buộc.",
-      });
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const rawPassword = String(password);
+    const { email: normalizedEmail, password: rawPassword } = validation.value;
 
     /**
      * SELECT user theo email.
@@ -184,9 +162,12 @@ router.post("/login", async (req, res, next) => {
      * Làm vậy để tránh lộ email nào đã đăng ký.
      */
     if (!user) {
-      return res.status(401).json({
-        message: "Email hoặc password không đúng.",
-      });
+      return sendError(
+        res,
+        401,
+        "Email hoặc password không đúng.",
+        "INVALID_CREDENTIALS"
+      );
     }
 
     /**
@@ -198,15 +179,18 @@ router.post("/login", async (req, res, next) => {
     );
 
     if (!isPasswordCorrect) {
-      return res.status(401).json({
-        message: "Email hoặc password không đúng.",
-      });
+      return sendError(
+        res,
+        401,
+        "Email hoặc password không đúng.",
+        "INVALID_CREDENTIALS"
+      );
     }
 
     /**
      * Password đúng -> tạo JWT mới.
      */
-    const token = signAccessToken(user.id);
+    const token = signAccessToken(user.id, user.tokenVersion || 0);
 
     /**
      * Set JWT vào cookie.

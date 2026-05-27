@@ -13,6 +13,20 @@ function getPostExcerpt(content, maxLength) {
   return `${text.slice(0, maxLength)}...`;
 }
 
+function getEditedState(post) {
+  const createdAt = new Date(post.createdAt).getTime();
+  const updatedAt = new Date(post.updatedAt).getTime();
+  const isEdited =
+    Number.isFinite(createdAt) &&
+    Number.isFinite(updatedAt) &&
+    updatedAt - createdAt > 1000;
+
+  return {
+    isEdited,
+    displayTime: isEdited ? post.updatedAt : post.createdAt,
+  };
+}
+
 export default function PostCard({
   post,
   actions = null,
@@ -36,6 +50,8 @@ export default function PostCard({
     ? getPostExcerpt(post.content, excerptLength)
     : post.content;
   const title = post.title || "Bài viết";
+
+  const { isEdited, displayTime } = getEditedState(post);
 
   return (
     <article className={`post-card ${className}`.trim()}>
@@ -69,8 +85,11 @@ export default function PostCard({
         </p>
       )}
 
-      {showTime && post.createdAt && (
-        <p className="post-time">{formatRelativeTime(post.createdAt)}</p>
+      {showTime && displayTime && (
+        <p className="post-time">
+          {formatRelativeTime(displayTime)}
+          {isEdited && " · Đã chỉnh sửa"}
+        </p>
       )}
 
       {imageUrl && (

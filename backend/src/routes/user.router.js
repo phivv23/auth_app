@@ -1,5 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import {
+  AUTH_COOKIE_NAME,
+  getAuthCookieOptions,
+} from "../config/cookie.js";
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
 import {
   findPublicUserByEmail,
@@ -22,6 +26,12 @@ import {
   findFollowing,
 } from "../models/follow.model.js";
 import { createNotification } from "../models/notification.model.js";
+import { sendError } from "../utils/http.js";
+import { signAccessToken } from "../utils/token.js";
+import {
+  validatePasswordChangeInput,
+  validateProfileInput,
+} from "../validation/auth.validation.js";
 
 const router = Router();
 
@@ -73,68 +83,6 @@ function handleCoverUpload(req, res, next) {
   });
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function normalizeOptionalText(value, maxLength, fieldName) {
-  const normalizedValue = String(value || "").trim();
-
-  if (!normalizedValue) {
-    return {
-      value: null,
-    };
-  }
-
-  if (normalizedValue.length > maxLength) {
-    return {
-      error: `${fieldName} không được vượt quá ${maxLength} ký tự.`,
-    };
-  }
-
-  return {
-    value: normalizedValue,
-  };
-}
-
-function normalizeWebsite(value) {
-  const normalizedValue = String(value || "").trim();
-
-  if (!normalizedValue) {
-    return {
-      value: null,
-    };
-  }
-
-  if (normalizedValue.length > 255) {
-    return {
-      error: "Website không được vượt quá 255 ký tự.",
-    };
-  }
-
-  const urlWithProtocol = /^https?:\/\//i.test(normalizedValue)
-    ? normalizedValue
-    : `https://${normalizedValue}`;
-
-  try {
-    const url = new URL(urlWithProtocol);
-
-    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
-      return {
-        error: "Website phải là URL http hoặc https hợp lệ.",
-      };
-    }
-
-    return {
-      value: url.toString(),
-    };
-  } catch {
-    return {
-      error: "Website không hợp lệ.",
-    };
-  }
-}
-
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
 
@@ -158,59 +106,44 @@ function normalizePositiveInt(value, fallback) {
  */
 router.patch("/me", requireAuth, async (req, res, next) => {
   try {
-    const { name, email, bio, location, website } = req.body;
+    const validation = validateProfileInput(req.body);
+
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
+    }
 
     /**
      * req.user đến từ middleware requireAuth.
      * Nghĩa là route này chỉ chạy nếu user đã login.
      */
     const currentUser = req.user;
-
-    if (!name || !email) {
-      return res.status(400).json({
-        message: "Name và email là bắt buộc.",
-      });
-    }
-
-    const normalizedName = String(name).trim();
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    if (normalizedName.length < 2) {
-      return res.status(400).json({
-        message: "Name phải có ít nhất 2 ký tự.",
-      });
-    }
-
-    if (!isValidEmail(normalizedEmail)) {
-      return res.status(400).json({
-        message: "Email không hợp lệ.",
-      });
-    }
+    const {
+      name: normalizedName,
+      email: normalizedEmail,
+      bio,
+      location,
+      website,
+    } = validation.value;
 
     /**
      * Nếu user đổi email, cần kiểm tra email mới đã bị user khác dùng chưa.
      */
-    const normalizedBio = normalizeOptionalText(bio, 500, "Bio");
-    const normalizedLocation = normalizeOptionalText(location, 100, "Location");
-    const normalizedWebsite = normalizeWebsite(website);
-    const profileFieldError =
-      normalizedBio.error ||
-      normalizedLocation.error ||
-      normalizedWebsite.error;
-
-    if (profileFieldError) {
-      return res.status(400).json({
-        message: profileFieldError,
-      });
-    }
-
     if (normalizedEmail !== currentUser.email) {
       const existingUser = await findPublicUserByEmail(normalizedEmail);
 
       if (existingUser && existingUser.id !== currentUser.id) {
-        return res.status(409).json({
-          message: "Email này đã được sử dụng bởi tài khoản khác.",
-        });
+        return sendError(
+          res,
+          409,
+          "Email này đã được sử dụng bởi tài khoản khác.",
+          "EMAIL_TAKEN"
+        );
       }
     }
 
@@ -220,9 +153,9 @@ router.patch("/me", requireAuth, async (req, res, next) => {
     const updatedUser = await updateUserProfile(currentUser.id, {
       name: normalizedName,
       email: normalizedEmail,
-      bio: normalizedBio.value,
-      location: normalizedLocation.value,
-      website: normalizedWebsite.value,
+      bio,
+      location,
+      website,
     });
 
     return res.json({
@@ -235,9 +168,12 @@ router.patch("/me", requireAuth, async (req, res, next) => {
      * Hai request cùng đổi sang một email, database unique constraint sẽ báo lỗi.
      */
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({
-        message: "Email này đã được sử dụng.",
-      });
+      return sendError(
+        res,
+        409,
+        "Email này đã được sử dụng.",
+        "EMAIL_TAKEN"
+      );
     }
 
     next(error);
@@ -257,28 +193,22 @@ router.patch("/me", requireAuth, async (req, res, next) => {
  */
 router.patch("/me/password", requireAuth, async (req, res, next) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const validation = validatePasswordChangeInput(req.body);
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        message: "Password hiện tại và password mới là bắt buộc.",
-      });
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
     }
 
-    const rawCurrentPassword = String(currentPassword);
-    const rawNewPassword = String(newPassword);
-
-    if (rawNewPassword.length < 6) {
-      return res.status(400).json({
-        message: "Password mới phải có ít nhất 6 ký tự.",
-      });
-    }
-
-    if (rawCurrentPassword === rawNewPassword) {
-      return res.status(400).json({
-        message: "Password mới không được giống password hiện tại.",
-      });
-    }
+    const {
+      currentPassword: rawCurrentPassword,
+      newPassword: rawNewPassword,
+    } = validation.value;
 
     /**
      * Cần lấy user kèm passwordHash để so sánh password hiện tại.
@@ -286,9 +216,7 @@ router.patch("/me/password", requireAuth, async (req, res, next) => {
     const user = await findUserWithPasswordById(req.user.id);
 
     if (!user) {
-      return res.status(401).json({
-        message: "User không tồn tại.",
-      });
+      return sendError(res, 401, "User không tồn tại.", "USER_NOT_FOUND");
     }
 
     /**
@@ -300,9 +228,12 @@ router.patch("/me/password", requireAuth, async (req, res, next) => {
     );
 
     if (!isCurrentPasswordCorrect) {
-      return res.status(401).json({
-        message: "Password hiện tại không đúng.",
-      });
+      return sendError(
+        res,
+        401,
+        "Password hiện tại không đúng.",
+        "INVALID_CURRENT_PASSWORD"
+      );
     }
 
     /**
@@ -314,7 +245,10 @@ router.patch("/me/password", requireAuth, async (req, res, next) => {
     /**
      * Lưu passwordHash mới.
      */
-    await updateUserPassword(user.id, newPasswordHash);
+    const updatedUser = await updateUserPassword(user.id, newPasswordHash);
+    const token = signAccessToken(updatedUser.id, updatedUser.tokenVersion || 0);
+
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
     return res.json({
       message: "Đổi password thành công.",

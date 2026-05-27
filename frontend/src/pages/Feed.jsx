@@ -6,7 +6,7 @@ import SuggestedUsers from "../components/SuggestedUsers.jsx";
 import { getFeedPosts } from "../api/post.api.js";
 import { getPublicUserPosts } from "../api/user.api.js";
 
-export default function Feed() {
+export default function Feed({ onDeveloping }) {
   const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
@@ -219,7 +219,24 @@ export default function Feed() {
 
       <PostComposer onCreated={handlePostCreated} />
 
-      <SuggestedUsers limit={5} onFollowed={handleSuggestedUserFollowed} />
+      <section className="story-strip" aria-label="Stories">
+        <button type="button" onClick={() => onDeveloping?.("Tin")}>
+          <span>+</span>
+          <strong>Tạo tin</strong>
+        </button>
+        <div className="story-empty">
+          Tin của bạn bè sẽ hiển thị tại đây.
+        </div>
+      </section>
+
+      <div className="feed-toolbar">
+        <span>Bài viết mới nhất</span>
+        <button type="button" disabled={isFetchingFeed} onClick={refreshFeed}>
+          Làm mới
+        </button>
+      </div>
+
+      <SuggestedUsers limit={3} onFollowed={handleSuggestedUserFollowed} />
 
       {feedNotice && <p className="feed-notice">{feedNotice}</p>}
 

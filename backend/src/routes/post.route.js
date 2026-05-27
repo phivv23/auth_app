@@ -1,13 +1,16 @@
 import { Router } from "express";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import {
   createPost,
   deletePost,
+  findBookmarkedPosts,
   findFeedPosts,
   findPostById,
   findPostMediaByPostId,
   findPosts,
   POST_PRIVACY_VALUES,
+  togglePostBookmark,
   updatePost,
 } from "../models/post.model.js";
 import {
@@ -29,6 +32,34 @@ import { createNotification } from "../models/notification.model.js";
 const router = Router();
 
 const ALLOWED_REACTION_TYPES = ["like", "love", "haha", "wow", "sad", "angry"];
+const createPostRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,
+  keyPrefix: "post:create",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn tạo bài viết quá nhanh. Vui lòng thử lại sau.",
+});
+const commentRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyPrefix: "post:comment",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn bình luận quá nhanh. Vui lòng thử lại sau.",
+});
+const reactionRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyPrefix: "post:reaction",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn react quá nhanh. Vui lòng thử lại sau.",
+});
+const bookmarkRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyPrefix: "post:bookmark",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn lưu bài viết quá nhanh. Vui lòng thử lại sau.",
+});
 
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
@@ -210,6 +241,24 @@ router.get("/feed", requireAuth, async (req, res, next) => {
   }
 });
 
+router.get("/bookmarks", requireAuth, async (req, res, next) => {
+  try {
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    const result = await findBookmarkedPosts({
+      page,
+      limit,
+      currentUserId: req.user.id,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
@@ -253,6 +302,43 @@ router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
   }
 });
 
+router.post(
+  "/:postId/bookmark",
+  requireAuth,
+  bookmarkRateLimit,
+  async (req, res, next) => {
+    try {
+      const postId = parsePositiveInt(req.params.postId);
+
+      if (!postId) {
+        return res.status(400).json({
+          message: "Post id không hợp lệ.",
+        });
+      }
+
+      const post = await findPostById(postId, req.user.id);
+
+      if (!post) {
+        return res.status(404).json({
+          message: "Post không tồn tại hoặc bạn không có quyền xem.",
+        });
+      }
+
+      const result = await togglePostBookmark(postId, req.user.id);
+
+      return res.json({
+        message: result.bookmarked
+          ? "Đã lưu bài viết."
+          : "Đã bỏ lưu bài viết.",
+        bookmarked: result.bookmarked,
+        bookmarkCount: result.bookmarkCount,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.get("/:id", optionalAuth, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.id);
@@ -279,7 +365,7 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/", requireAuth, handlePostImageUpload, async (req, res, next) => {
+router.post("/", requireAuth, createPostRateLimit, handlePostImageUpload, async (req, res, next) => {
   const uploadedMedia = getUploadedPostMedia(req);
 
   try {
@@ -317,7 +403,7 @@ router.post("/", requireAuth, handlePostImageUpload, async (req, res, next) => {
   }
 });
 
-router.post("/:postId/share", requireAuth, async (req, res, next) => {
+router.post("/:postId/share", requireAuth, createPostRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 
@@ -525,7 +611,7 @@ router.get("/:postId/comments", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:postId/comments", requireAuth, async (req, res, next) => {
+router.post("/:postId/comments", requireAuth, commentRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 
@@ -570,7 +656,7 @@ router.post("/:postId/comments", requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch("/comments/:commentId", requireAuth, async (req, res, next) => {
+router.patch("/comments/:commentId", requireAuth, commentRateLimit, async (req, res, next) => {
   try {
     const commentId = parsePositiveInt(req.params.commentId);
 
@@ -647,7 +733,7 @@ router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:postId/like", requireAuth, async (req, res, next) => {
+router.post("/:postId/like", requireAuth, reactionRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 

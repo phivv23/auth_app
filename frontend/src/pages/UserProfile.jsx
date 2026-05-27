@@ -20,10 +20,11 @@ import {
 } from "../api/user.api.js";
 import { useAuth } from "../context/useAuth.js";
 
-export default function UserProfile() {
-  const { id } = useParams();
+export default function UserProfile({ profileUserId }) {
+  const { id: routeUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const id = String(profileUserId || routeUserId);
 
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -282,7 +283,7 @@ export default function UserProfile() {
 
           <div className="profile-actions">
             {isMyProfile ? (
-              <Link to="/profile" className="button">
+              <Link to="/settings" className="button">
                 Chỉnh sửa profile
               </Link>
             ) : (

@@ -19,7 +19,9 @@ function normalizePost(row) {
     likeCount: Number(row.likeCount || 0),
     commentCount: Number(row.commentCount || 0),
     shareCount: Number(row.shareCount || 0),
+    bookmarkCount: Number(row.bookmarkCount || 0),
     likedByMe: Boolean(row.likedByMe),
+    bookmarkedByMe: Boolean(row.bookmarkedByMe),
     myReaction: row.myReaction || null,
     reactionSummary: row.reactionSummary || {},
   };
@@ -197,12 +199,25 @@ async function findVisiblePostRowsByIds(postIds, currentUserId = null) {
         WHERE shared_posts.shared_post_id = p.id
       ) AS shareCount,
 
+      (
+        SELECT COUNT(*)
+        FROM post_bookmarks pb
+        WHERE pb.post_id = p.id
+      ) AS bookmarkCount,
+
       EXISTS (
         SELECT 1
         FROM post_likes pl2
         WHERE pl2.post_id = p.id
           AND pl2.user_id = ?
       ) AS likedByMe,
+
+      EXISTS (
+        SELECT 1
+        FROM post_bookmarks pb2
+        WHERE pb2.post_id = p.id
+          AND pb2.user_id = ?
+      ) AS bookmarkedByMe,
 
       (
         SELECT pl3.reaction_type
@@ -217,7 +232,7 @@ async function findVisiblePostRowsByIds(postIds, currentUserId = null) {
     WHERE p.id IN (${placeholders})
       AND ${visibility.sql}
     `,
-    [currentUserId, currentUserId, ...postIds, ...visibility.params]
+    [currentUserId, currentUserId, currentUserId, ...postIds, ...visibility.params]
   );
 }
 
@@ -398,12 +413,25 @@ export async function findPosts({
         WHERE shared_posts.shared_post_id = p.id
       ) AS shareCount,
 
+      (
+        SELECT COUNT(*)
+        FROM post_bookmarks pb
+        WHERE pb.post_id = p.id
+      ) AS bookmarkCount,
+
       EXISTS (
         SELECT 1
         FROM post_likes pl2
         WHERE pl2.post_id = p.id
           AND pl2.user_id = ?
       ) AS likedByMe,
+
+      EXISTS (
+        SELECT 1
+        FROM post_bookmarks pb2
+        WHERE pb2.post_id = p.id
+          AND pb2.user_id = ?
+      ) AS bookmarkedByMe,
 
       (
         SELECT pl3.reaction_type
@@ -419,7 +447,7 @@ export async function findPosts({
     ORDER BY p.created_at DESC
     LIMIT ${safeLimit} OFFSET ${safeOffset}
     `,
-    [currentUserId, currentUserId, ...params]
+    [currentUserId, currentUserId, currentUserId, ...params]
   );
 
   const totalRows = await query(
@@ -486,12 +514,25 @@ export async function findPostById(postId, currentUserId = null) {
         WHERE shared_posts.shared_post_id = p.id
       ) AS shareCount,
 
+      (
+        SELECT COUNT(*)
+        FROM post_bookmarks pb
+        WHERE pb.post_id = p.id
+      ) AS bookmarkCount,
+
       EXISTS (
         SELECT 1
         FROM post_likes pl2
         WHERE pl2.post_id = p.id
           AND pl2.user_id = ?
       ) AS likedByMe,
+
+      EXISTS (
+        SELECT 1
+        FROM post_bookmarks pb2
+        WHERE pb2.post_id = p.id
+          AND pb2.user_id = ?
+      ) AS bookmarkedByMe,
 
       (
         SELECT pl3.reaction_type
@@ -507,7 +548,7 @@ export async function findPostById(postId, currentUserId = null) {
       AND ${visibility.sql}
     LIMIT 1
     `,
-    [currentUserId, currentUserId, postId, ...visibility.params]
+    [currentUserId, currentUserId, currentUserId, postId, ...visibility.params]
   );
 
   const posts = await attachPostExtras(rows, currentUserId);
@@ -581,6 +622,111 @@ export async function postExists(postId) {
   return Boolean(rows[0]);
 }
 
+export async function togglePostBookmark(postId, userId) {
+  const existingRows = await query(
+    `
+    SELECT id
+    FROM post_bookmarks
+    WHERE post_id = ? AND user_id = ?
+    LIMIT 1
+    `,
+    [postId, userId]
+  );
+
+  if (existingRows[0]) {
+    await query(
+      `
+      DELETE FROM post_bookmarks
+      WHERE post_id = ? AND user_id = ?
+      `,
+      [postId, userId]
+    );
+  } else {
+    await query(
+      `
+      INSERT IGNORE INTO post_bookmarks (post_id, user_id)
+      VALUES (?, ?)
+      `,
+      [postId, userId]
+    );
+  }
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS bookmarkCount
+    FROM post_bookmarks
+    WHERE post_id = ?
+    `,
+    [postId]
+  );
+
+  return {
+    bookmarked: !existingRows[0],
+    bookmarkCount: Number(countRows[0]?.bookmarkCount || 0),
+  };
+}
+
+export async function findBookmarkedPosts({
+  currentUserId,
+  page = 1,
+  limit = 10,
+}) {
+  const normalizedPage = Number(page);
+  const normalizedLimit = Number(limit);
+  const safePage =
+    Number.isInteger(normalizedPage) && normalizedPage > 0 ? normalizedPage : 1;
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? Math.min(normalizedLimit, 50)
+      : 10;
+  const offset = (safePage - 1) * safeLimit;
+  const visibility = buildVisibilitySql({
+    currentUserId,
+    postAlias: "p",
+  });
+
+  const bookmarkedRows = await query(
+    `
+    SELECT p.id
+    FROM post_bookmarks pb
+    JOIN posts p ON p.id = pb.post_id
+    WHERE pb.user_id = ?
+      AND ${visibility.sql}
+    ORDER BY pb.created_at DESC, pb.id DESC
+    LIMIT ${safeLimit} OFFSET ${offset}
+    `,
+    [currentUserId, ...visibility.params]
+  );
+
+  const postIds = bookmarkedRows.map((row) => row.id);
+  const postRows = await findVisiblePostRowsByIds(postIds, currentUserId);
+  const postsById = new Map(postRows.map((post) => [post.id, post]));
+  const orderedPosts = postIds
+    .map((postId) => postsById.get(postId))
+    .filter(Boolean);
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM post_bookmarks pb
+    JOIN posts p ON p.id = pb.post_id
+    WHERE pb.user_id = ?
+      AND ${visibility.sql}
+    `,
+    [currentUserId, ...visibility.params]
+  );
+
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    posts: await attachPostExtras(orderedPosts, currentUserId),
+    page: safePage,
+    limit: safeLimit,
+    total,
+    totalPages: Math.ceil(total / safeLimit),
+  };
+}
+
 export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
   const normalizedPage = Number(page);
   const normalizedLimit = Number(limit);
@@ -618,11 +764,23 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
         WHERE shared_posts.shared_post_id = p.id
       ) AS shareCount,
 
+      (
+        SELECT COUNT(*)
+        FROM post_bookmarks pb
+        WHERE pb.post_id = p.id
+      ) AS bookmarkCount,
+
       EXISTS(
         SELECT 1
         FROM post_likes my_like
         WHERE my_like.post_id = p.id AND my_like.user_id = ?
       ) AS likedByMe,
+
+      EXISTS(
+        SELECT 1
+        FROM post_bookmarks my_bookmark
+        WHERE my_bookmark.post_id = p.id AND my_bookmark.user_id = ?
+      ) AS bookmarkedByMe,
 
       (
         SELECT my_reaction.reaction_type
@@ -664,6 +822,7 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
     [
+      currentUserId,
       currentUserId,
       currentUserId,
       currentUserId,

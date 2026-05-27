@@ -11,10 +11,19 @@ import { fileURLToPath } from "url";
 import notificationRoutes from "./routes/notification.routes.js";
 import friendRoutes from "./routes/friend.routes.js";
 import messageRoutes from "./routes/message.routes.js";
+import { requireTrustedOrigin } from "./middleware/csrf.js";
+import { sendError } from "./utils/http.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
 
 // Cho phép frontend truy cập ảnh qua URL:
 // http://localhost:5000/uploads/avatars/ten-file.png
@@ -27,8 +36,9 @@ app.use(
   })
 );
 
-app.use(express.json());
 app.use(cookieParser());
+app.use(requireTrustedOrigin);
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -49,17 +59,21 @@ app.use("/api/protected", protectedRoutes);
  * 404 handler.
  */
 app.use((req, res) => {
-  res.status(404).json({
-    message: "Route không tồn tại.",
-  });
+  return sendError(res, 404, "Route không tồn tại.", "ROUTE_NOT_FOUND");
 });
 
 app.use((err, req, res, next) => {
   console.error(err);
 
-  res.status(500).json({
-    message: "Lỗi server.",
-  });
+  if (err.type === "entity.parse.failed") {
+    return sendError(res, 400, "JSON không hợp lệ.", "INVALID_JSON");
+  }
+
+  if (err.type === "entity.too.large") {
+    return sendError(res, 413, "Payload quá lớn.", "PAYLOAD_TOO_LARGE");
+  }
+
+  return sendError(res, 500, "Lỗi server.", "INTERNAL_SERVER_ERROR");
 });
 
 

@@ -104,6 +104,12 @@ export function sharePost(postId, { content = "", privacy = "public" } = {}) {
   });
 }
 
+export function togglePostBookmark(postId) {
+  return apiFetch(`/posts/${postId}/bookmark`, {
+    method: "POST",
+  });
+}
+
 export function getFeedPosts({ page = 1, limit = 10 } = {}) {
   const params = new URLSearchParams();
 
@@ -111,4 +117,13 @@ export function getFeedPosts({ page = 1, limit = 10 } = {}) {
   params.set("limit", limit);
 
   return apiFetch(`/posts/feed?${params.toString()}`);
+}
+
+export function getBookmarkedPosts({ page = 1, limit = 10 } = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  return apiFetch(`/posts/bookmarks?${params.toString()}`);
 }

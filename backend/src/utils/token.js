@@ -11,9 +11,12 @@ import { env } from "../config/env.js";
  * Không lưu passwordHash.
  * Không lưu thông tin nhạy cảm.
  */
-export function signAccessToken(userId) {
+export function signAccessToken(userId, tokenVersion = 0) {
   return jwt.sign(
-    { userId },
+    {
+      userId,
+      tokenVersion,
+    },
     env.jwtSecret,
     {
       expiresIn: env.jwtExpiresIn,

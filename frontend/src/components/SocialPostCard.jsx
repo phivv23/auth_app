@@ -7,6 +7,7 @@ import {
   getPostComments,
   getPostReactions,
   sharePost,
+  togglePostBookmark,
   togglePostLike,
 } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
@@ -75,6 +76,20 @@ function getPostMedia(post) {
       : [];
 }
 
+function getEditedState(post) {
+  const createdAt = new Date(post.createdAt).getTime();
+  const updatedAt = new Date(post.updatedAt).getTime();
+  const isEdited =
+    Number.isFinite(createdAt) &&
+    Number.isFinite(updatedAt) &&
+    updatedAt - createdAt > 1000;
+
+  return {
+    isEdited,
+    displayTime: isEdited ? post.updatedAt : post.createdAt,
+  };
+}
+
 export default function SocialPostCard({
   post,
   onPostUpdated,
@@ -104,6 +119,7 @@ export default function SocialPostCard({
   const [shareContent, setShareContent] = useState("");
   const [sharePrivacy, setSharePrivacy] = useState("public");
   const [shareSubmitting, setShareSubmitting] = useState(false);
+  const [bookmarking, setBookmarking] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -123,6 +139,7 @@ export default function SocialPostCard({
   const currentReaction = getReactionMeta(post.myReaction || "like");
   const sharedPost = post.sharedPost;
   const sharedMedia = getPostMedia(sharedPost);
+  const { isEdited, displayTime } = getEditedState(post);
 
   useEffect(() => {
     if (defaultCommentsOpen) {
@@ -322,6 +339,33 @@ export default function SocialPostCard({
     }
   }
 
+  async function handleToggleBookmark() {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setBookmarking(true);
+      setError("");
+      setNotice("");
+
+      const data = await togglePostBookmark(post.id);
+
+      onPostUpdated?.({
+        ...post,
+        bookmarkedByMe: data.bookmarked,
+        bookmarkCount: data.bookmarkCount,
+      });
+
+      setNotice(data.bookmarked ? "Đã lưu bài viết." : "Đã bỏ lưu bài viết.");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBookmarking(false);
+    }
+  }
+
   return (
     <article className="social-post-card">
       <header className="social-post-header">
@@ -343,9 +387,12 @@ export default function SocialPostCard({
           <Link to={`/users/${post.userId}`}>
             <strong>{post.authorName}</strong>
           </Link>
-          <span title={formatVietnamDateTime(post.createdAt)}>
-            {formatRelativeTime(post.createdAt)} ·{" "}
-            {privacyLabels[post.privacy] || "Công khai"}
+          <span title={formatVietnamDateTime(displayTime)}>
+            {formatRelativeTime(displayTime)}{" "}
+            {isEdited && (
+              <strong className="post-edited-badge">Đã chỉnh sửa</strong>
+            )}{" "}
+            · {privacyLabels[post.privacy] || "Công khai"}
           </span>
         </div>
 
@@ -450,6 +497,7 @@ export default function SocialPostCard({
           {post.commentCount || 0} bình luận
         </button>
         <span>{post.shareCount || 0} chia sẻ</span>
+        <span>{post.bookmarkCount || 0} lượt lưu</span>
       </div>
 
       {reactionPanelOpen && (
@@ -582,6 +630,15 @@ export default function SocialPostCard({
           onClick={handleToggleSharePanel}
         >
           Chia sẻ
+        </button>
+
+        <button
+          className={`feed-action-button ${post.bookmarkedByMe ? "active" : ""}`}
+          type="button"
+          disabled={bookmarking}
+          onClick={handleToggleBookmark}
+        >
+          {post.bookmarkedByMe ? "Đã lưu" : "Lưu"}
         </button>
 
         <Link className="feed-action-button" to={`/posts/${post.id}`}>

@@ -15,6 +15,7 @@ App hien co cac nhom tinh nang chinh:
 - Danh sach bai viet public, bai viet cua toi, chi tiet bai viet.
 - Feed rieng theo nguoi dang follow, co infinite scroll.
 - Comment, sua/xoa comment, reaction nhieu loai cho post.
+- Save/bookmark post va trang `/saved`.
 - Follow/unfollow user, xem followers/following ngay trong profile.
 - Ket ban hai chieu: gui loi moi, chap nhan, huy/tu choi, unfriend, trang Friends.
 - Tim user, goi y follow user.
@@ -45,6 +46,7 @@ Ten repo/brand trong UI hien van la `Auth App`, nhung codebase da phat trien tha
 - dotenv `^17.4.2`
 - multer `^2.1.1` cho upload anh avatar, cover va post.
 - nodemon cho dev server.
+- Middleware tu viet cho rate limit, trusted Origin check va error response shape co `message`/`code`.
 
 ### Database / Devops
 
@@ -450,6 +452,7 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | GET | `/posts` | Danh sach post public, co pagination/search |
 | GET | `/posts/me` | Bai viet cua current user |
 | GET | `/posts/feed` | Feed cua current user va following |
+| GET | `/posts/bookmarks` | Bai viet current user da luu |
 | GET | `/posts/:id` | Chi tiet post |
 | POST | `/posts` | Tao post, form-data co optional `title`, `content`, `privacy`, nhieu file `media` |
 | PATCH | `/posts/:id` | Sua post/privacy/media, chi tac gia |
@@ -461,6 +464,7 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | POST | `/posts/:postId/like` | Toggle/dổi reaction, body `{ reactionType }` |
 | GET | `/posts/:postId/reactions` | Xem user da reaction, query optional `reactionType` |
 | POST | `/posts/:postId/share` | Chia se bai viet ve profile current user, body optional `{ content, privacy }` |
+| POST | `/posts/:postId/bookmark` | Luu hoac bo luu bai viet |
 
 ### Notifications
 
@@ -468,8 +472,21 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | --- | --- | --- |
 | GET | `/notifications` | Danh sach notifications |
 | GET | `/notifications/unread-count` | Dem unread |
+| GET | `/notifications/stream` | SSE stream cho notification realtime |
 | PATCH | `/notifications/read-all` | Mark all read |
 | PATCH | `/notifications/:id/read` | Mark one read |
+
+### Messages
+
+| Method | Endpoint | Mo ta |
+| --- | --- | --- |
+| GET | `/messages/stream` | SSE stream cho message realtime |
+| GET | `/messages/conversations` | Danh sach conversations cua current user |
+| GET | `/messages/requests` | Danh sach message requests |
+| POST | `/messages/conversations/:userId` | Tao hoac lay conversation voi user khac |
+| GET | `/messages/conversations/:conversationId/messages` | Lay messages trong conversation |
+| POST | `/messages/conversations/:conversationId/messages` | Gui message |
+| PATCH | `/messages/conversations/:conversationId/read` | Mark conversation as read |
 
 ## 7. Cach Chay Local
 
@@ -561,7 +578,7 @@ npm run lint
 npm run build
 ```
 
-Backend hien chua co test runner that su; script `npm test` dang la placeholder.
+Backend da co test runner bang `node --test`, hien co test cho validation auth/profile.
 
 ## 8. Uploads
 
@@ -581,32 +598,38 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 
 ## 9. Gioi Han Hien Tai
 
-- Notifications dang polling moi 30 giay, chua realtime.
-- Chua co chat/messenger.
-- Chua co friend request hai chieu; moi co follow/unfollow.
-- Chia se hien moi copy link bai viet, chua co repost/share object dung nghia.
-- Chua co save/bookmark post.
-- Privacy moi o muc post `public`/`followers`/`only_me`, chua co friends/privacy matrix sau hon.
+- Notifications da co SSE realtime va van giu polling fallback o frontend.
+- Chat/Messenger da co ban: conversation 1-1, message realtime bang SSE, unread count, message popup.
+- Friend request hai chieu da co: send, accept, cancel/reject, unfriend.
+- Share ve profile da co bang `shared_post_id`, nhung UI share dialog/share count con can nang cap.
+- Save/bookmark post da co: luu/bo luu tren card va trang `/saved`.
+- Da co rate limit in-memory cho auth/post/comment/reaction/message, nhung production can chuyen sang Redis/shared store.
+- Da co trusted Origin check cho unsafe request co auth cookie, nhung chua co CSRF token rieng.
+- Error response da co `message` va `code` o mot so middleware/route moi; cac route cu can duoc chuan hoa dan.
+- Save/bookmark post da co ban, nhung chua co collection/folder rieng.
+- Privacy post da co `public`/`followers`/`friends`/`only_me`, nhung chua co privacy matrix sau hon cho profile, comment, media.
 - Chua co albums/photos/videos/stories/reels.
 - Chua co Groups, Pages, Events, Marketplace.
 - Chua co moderation/report/admin dashboard.
 - Upload van la local filesystem, chua dung S3/Cloudinary/object storage.
-- Chua co test tu dong day du cho backend/frontend.
-- SQL migrations hien chay tu file SQL va skip mot so loi duplicate column; chua co migration tracking table.
-- Text trong mot so file/comment hien co dau hieu encoding tieng Viet bi loi, nhung UI van co nhieu chu tieng Viet dung o cac file moi.
+- Chua co test tu dong day du cho backend/frontend; backend moi co test validation auth/profile.
+- SQL migrations da co `schema_migrations` de track file da ap dung, nhung chua co rollback/down migration.
+- Text tieng Viet trong source dang la UTF-8; neu terminal hien `ThÃ´ng bÃ¡o` thi can doi terminal/editor sang UTF-8.
 
 ## 10. Roadmap Full Facebook Clone
 
 ### Phase 0: Stabilize nen tang
 
 - Chuan hoa README, env docs, setup instructions.
-- Lam migration idempotent hon bang migration tracking table.
+- Hoan thien migration workflow: da co tracking table, tiep theo them rollback strategy va migration status command.
 - Chuan hoa error response shape backend.
 - Them validation library nhu Zod hoac express-validator.
-- Them test backend cho auth, post, follow, notification.
-- Them test frontend co ban cho auth flow va core pages.
+- Nang rate limit tu in-memory len Redis/shared store khi deploy nhieu instance.
+- Bo sung CSRF token rieng neu backend can ho tro nhieu client origin hoac form submit ngoai SPA.
+- Them test backend cho auth, post privacy, friend, message, notification.
+- Them test frontend co ban cho auth flow, feed, notification va messages.
 - Lam lai loading/error/empty states cho dong nhat.
-- Chuan hoa encoding tieng Viet trong codebase.
+- Dam bao tat ca editor/terminal/deploy pipeline dung UTF-8.
 
 ### Phase 1: News Feed giong Facebook hon
 
@@ -616,7 +639,7 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 - Ho tro video upload va preview.
 - Edit/delete post inline tren card.
 - Share ve profile da co ban bang `shared_post_id`; tiep theo lam share dialog day du hon va share count UI.
-- Save/bookmark post.
+- Save/bookmark post da co ban; tiep theo them collection/folder va search trong saved posts.
 - Reaction nhieu loai da co ban; tiep theo them summary/icon/count theo tung reaction.
 - Feed ranking theo thoi gian, follow, interaction, goi y, do uu tien tac gia.
 - Skeleton loading va optimistic UI cho like/comment/follow.
@@ -634,10 +657,8 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 
 ### Phase 3: Realtime
 
-- Dung WebSocket hoac Socket.IO.
-- Notifications realtime thay cho polling.
+- Notifications va Messenger 1-1 da co SSE realtime; tiep theo can reconnect/backoff tot hon va typing/presence.
 - Realtime comments/reactions tren post dang mo.
-- Messenger 1-1.
 - Group chat.
 - Typing indicator.
 - Read receipts.

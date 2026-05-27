@@ -1,6 +1,18 @@
 import { query } from "../db/pool.js";
 import { publishNotification } from "../realtime/notificationEvents.js";
 
+const NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES = {
+  follow: 60,
+  friend_request: 60,
+  friend_accept: 60,
+  post_like: 60,
+  post_comment: 10,
+};
+
+function getDedupeWindowInMinutes(type) {
+  return NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES[type] || 15;
+}
+
 export async function findNotificationById(notificationId) {
   const notifications = await query(
     `
@@ -49,9 +61,39 @@ export async function createNotification({
   commentId = null,
   conversationId = null,
 }) {
-  // Không tự gửi thông báo cho chính mình
+  if (type === "message") {
+    return null;
+  }
+
   if (!recipientId || !actorId || Number(recipientId) === Number(actorId)) {
     return null;
+  }
+
+  const existingNotifications = await query(
+    `
+    SELECT id
+    FROM notifications
+    WHERE recipient_id = ?
+      AND actor_id = ?
+      AND type = ?
+      AND post_id <=> ?
+      AND conversation_id <=> ?
+      AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? MINUTE)
+    ORDER BY created_at DESC
+    LIMIT 1
+    `,
+    [
+      recipientId,
+      actorId,
+      type,
+      postId,
+      conversationId,
+      getDedupeWindowInMinutes(type),
+    ]
+  );
+
+  if (existingNotifications[0]) {
+    return findNotificationById(existingNotifications[0].id);
   }
 
   const result = await query(
@@ -115,6 +157,7 @@ export async function findNotificationsByUserId({
     LEFT JOIN users actor ON actor.id = n.actor_id
     LEFT JOIN posts p ON p.id = n.post_id
     WHERE n.recipient_id = ?
+      AND n.type <> 'message'
     ORDER BY n.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
@@ -126,6 +169,7 @@ export async function findNotificationsByUserId({
     SELECT COUNT(*) AS total
     FROM notifications
     WHERE recipient_id = ?
+      AND type <> 'message'
     `,
     [userId]
   );
@@ -149,7 +193,9 @@ export async function countUnreadNotifications(userId) {
     `
     SELECT COUNT(*) AS total
     FROM notifications
-    WHERE recipient_id = ? AND is_read = 0
+    WHERE recipient_id = ?
+      AND is_read = 0
+      AND type <> 'message'
     `,
     [userId]
   );
@@ -173,7 +219,7 @@ export async function markAllNotificationsAsRead(userId) {
     `
     UPDATE notifications
     SET is_read = 1
-    WHERE recipient_id = ? AND is_read = 0
+    WHERE recipient_id = ? AND is_read = 0 AND type <> 'message'
     `,
     [userId]
   );

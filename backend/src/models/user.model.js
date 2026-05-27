@@ -118,6 +118,31 @@ export async function findUserById(id) {
   return rows[0] || null;
 }
 
+export async function findAuthUserById(id) {
+  const rows = await query(
+    `
+      SELECT
+        id,
+        name,
+        email,
+        avatar_url AS avatarUrl,
+        cover_url AS coverUrl,
+        bio,
+        location,
+        website,
+        token_version AS tokenVersion,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [id]
+  );
+
+  return rows[0] || null;
+}
+
 /**
  * Tìm user theo email.
  *
@@ -136,6 +161,7 @@ export async function findUserByEmail(email) {
         bio,
         location,
         website,
+        token_version AS tokenVersion,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -197,6 +223,7 @@ export async function findUserWithPasswordById(id) {
         bio,
         location,
         website,
+        token_version AS tokenVersion,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -282,11 +309,14 @@ export async function updateUserPassword(userId, passwordHash) {
   await query(
     `
       UPDATE users
-      SET password_hash = ?
+      SET password_hash = ?,
+          token_version = token_version + 1
       WHERE id = ?
     `,
     [passwordHash, userId]
   );
+
+  return findAuthUserById(userId);
 }
 
 export async function findPublicUserProfileById(userId, currentUserId = null) {

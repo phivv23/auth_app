@@ -1,87 +1,64 @@
 import { AUTH_COOKIE_NAME } from "../config/cookie.js";
-import { findUserById } from "../models/user.model.js";
+import { findAuthUserById } from "../models/user.model.js";
+import { sendError } from "../utils/http.js";
 import { verifyAccessToken } from "../utils/token.js";
 
+function toRequestUser(user) {
+  const { tokenVersion, ...requestUser } = user;
+  return requestUser;
+}
+
+function isTokenVersionValid(payload, user) {
+  return Number(payload.tokenVersion ?? 0) === Number(user.tokenVersion || 0);
+}
+
 /**
- * Middleware bảo vệ route.
- *
- * Nếu request có JWT hợp lệ:
- * - verify token
- * - lấy user từ database
- * - gắn user vào req.user
- * - cho đi tiếp bằng next()
- *
- * Nếu không hợp lệ:
- * - trả 401
+ * Verify cookie JWT, reload the user from DB, and reject revoked sessions.
  */
 export async function requireAuth(req, res, next) {
   try {
-    /**
-     * cookie-parser sẽ đọc Cookie header
-     * và đưa dữ liệu vào req.cookies.
-     */
     const token = req.cookies?.[AUTH_COOKIE_NAME];
 
     if (!token) {
-      return res.status(401).json({
-        message: "Bạn chưa đăng nhập.",
-      });
+      return sendError(res, 401, "Bạn chưa đăng nhập.", "AUTH_REQUIRED");
     }
 
-    /**
-     * Decode + verify JWT.
-     * Nếu token sai hoặc hết hạn, function này sẽ throw error.
-     */
     const payload = verifyAccessToken(token);
-
     const userId = payload.userId;
 
     if (!userId) {
-      return res.status(401).json({
-        message: "Token không hợp lệ.",
-      });
+      return sendError(res, 401, "Token không hợp lệ.", "INVALID_TOKEN");
     }
 
-    /**
-     * Query lại database để chắc user còn tồn tại.
-     * Không nên chỉ tin dữ liệu trong JWT.
-     */
-    const user = await findUserById(userId);
+    const user = await findAuthUserById(userId);
 
     if (!user) {
-      return res.status(401).json({
-        message: "User không tồn tại.",
-      });
+      return sendError(res, 401, "User không tồn tại.", "USER_NOT_FOUND");
     }
 
-    /**
-     * Gắn user vào request.
-     * Các route phía sau có thể dùng req.user.
-     */
-    req.user = user;
+    if (!isTokenVersionValid(payload, user)) {
+      return sendError(
+        res,
+        401,
+        "Phiên đăng nhập đã hết hiệu lực.",
+        "SESSION_REVOKED"
+      );
+    }
 
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      message: "Token sai hoặc đã hết hạn.",
-    });
+    req.user = toRequestUser(user);
+    return next();
+  } catch {
+    return sendError(
+      res,
+      401,
+      "Token sai hoặc đã hết hạn.",
+      "INVALID_TOKEN"
+    );
   }
 }
 
-
 /**
- * optionalAuth:
- *
- * Khác với requireAuth.
- *
- * requireAuth:
- * - Không có token thì trả 401
- *
- * optionalAuth:
- * - Không có token thì vẫn cho đi tiếp
- * - Có token hợp lệ thì gắn req.user
- *
- * Dùng cho các API public nhưng muốn biết user hiện tại đã like post chưa.
+ * Attach req.user when a valid session exists, but keep public routes public.
  */
 export async function optionalAuth(req, res, next) {
   try {
@@ -92,25 +69,20 @@ export async function optionalAuth(req, res, next) {
     }
 
     const payload = verifyAccessToken(token);
-
     const userId = payload.userId;
 
     if (!userId) {
       return next();
     }
 
-    const user = await findUserById(userId);
+    const user = await findAuthUserById(userId);
 
-    if (user) {
-      req.user = user;
+    if (user && isTokenVersionValid(payload, user)) {
+      req.user = toRequestUser(user);
     }
 
-    next();
-  } catch (error) {
-    /**
-     * Token sai thì bỏ qua.
-     * Vì đây là optional auth, không chặn request.
-     */
-    next();
+    return next();
+  } catch {
+    return next();
   }
 }

@@ -14,6 +14,7 @@ export default function PostComposer({
   const { user } = useAuth();
   const fileInputRef = useRef(null);
 
+  const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [privacy, setPrivacy] = useState("public");
   const [files, setFiles] = useState([]);
@@ -30,6 +31,28 @@ export default function PostComposer({
       previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
   }, [previews]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !submitting) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, submitting]);
 
   function clearFiles() {
     previews.forEach((preview) => URL.revokeObjectURL(preview.url));
@@ -102,6 +125,7 @@ export default function PostComposer({
       setContent("");
       clearFiles();
       setPrivacy("public");
+      setOpen(false);
       onCreated?.(data.post);
     } catch (error) {
       setError(error.message);
@@ -111,11 +135,10 @@ export default function PostComposer({
   }
 
   return (
-    <form
-      className={`social-composer ${compact ? "compact" : ""}`.trim()}
-      onSubmit={handleSubmit}
-    >
-      <div className="social-composer-main">
+    <>
+      <section
+        className={`social-composer-trigger ${compact ? "compact" : ""}`.trim()}
+      >
         {avatarUrl ? (
           <img className="composer-avatar" src={avatarUrl} alt={user?.name} />
         ) : (
@@ -124,57 +147,135 @@ export default function PostComposer({
           </div>
         )}
 
-        <textarea
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder={placeholder}
-          rows={compact ? 3 : 4}
-        />
-      </div>
+        <button
+          className="social-composer-prompt"
+          type="button"
+          onClick={() => {
+            setError("");
+            setOpen(true);
+          }}
+        >
+          {placeholder}
+        </button>
 
-      {previews.length > 0 && (
-        <div className="composer-media-grid">
-          {previews.map((preview) => (
-            <img key={preview.url} src={preview.url} alt={preview.name} />
-          ))}
+        <div className="social-composer-quick-actions" aria-hidden="true">
+          <span>Ảnh</span>
+          <span>Cảm xúc</span>
+        </div>
+      </section>
+
+      {open && (
+        <div
+          className="post-composer-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !submitting) {
+              setOpen(false);
+            }
+          }}
+        >
+          <form
+            className="post-composer-modal"
+            onSubmit={handleSubmit}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="post-composer-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="post-composer-modal-header">
+              <h2 id="post-composer-title">Tạo bài viết</h2>
+              <button
+                type="button"
+                aria-label="Đóng"
+                onClick={() => setOpen(false)}
+                disabled={submitting}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="post-composer-author">
+              {avatarUrl ? (
+                <img className="composer-avatar" src={avatarUrl} alt={user?.name} />
+              ) : (
+                <div className="composer-avatar-placeholder">
+                  {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+              )}
+
+              <div>
+                <strong>{user?.name || "Tài khoản của bạn"}</strong>
+                <select
+                  value={privacy}
+                  onChange={(event) => setPrivacy(event.target.value)}
+                  aria-label="Quyền xem bài viết"
+                >
+                  <option value="public">Công khai</option>
+                  <option value="followers">Người theo dõi</option>
+                  <option value="friends">Bạn bè</option>
+                  <option value="only_me">Chỉ mình tôi</option>
+                </select>
+              </div>
+            </div>
+
+            <textarea
+              className="post-composer-modal-textarea"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder={placeholder}
+              rows={7}
+              autoFocus
+            />
+
+            {previews.length > 0 && (
+              <div className="composer-media-grid post-composer-modal-media">
+                {previews.map((preview) => (
+                  <img key={preview.url} src={preview.url} alt={preview.name} />
+                ))}
+              </div>
+            )}
+
+            {error && <p className="error">{error}</p>}
+
+            <div className="post-composer-addons">
+              <strong>Thêm vào bài viết của bạn</strong>
+
+              <label className="post-composer-icon-button image">
+                Ảnh
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={handleMediaChange}
+                />
+              </label>
+
+              <button type="button" className="post-composer-icon-button" disabled>
+                Cảm xúc
+              </button>
+
+              <button type="button" className="post-composer-icon-button" disabled>
+                Vị trí
+              </button>
+            </div>
+
+            {files.length > 0 && (
+              <button type="button" className="link-button" onClick={clearFiles}>
+                Xóa ảnh
+              </button>
+            )}
+
+            <button
+              className="button post-composer-submit"
+              type="submit"
+              disabled={!canSubmit}
+            >
+              {submitting ? "Đang đăng..." : "Đăng"}
+            </button>
+          </form>
         </div>
       )}
-
-      {error && <p className="error">{error}</p>}
-
-      <footer className="social-composer-footer">
-        <select
-          value={privacy}
-          onChange={(event) => setPrivacy(event.target.value)}
-          aria-label="Quyền xem bài viết"
-        >
-          <option value="public">Công khai</option>
-          <option value="followers">Người theo dõi</option>
-          <option value="friends">Bạn bè</option>
-          <option value="only_me">Chỉ mình tôi</option>
-        </select>
-
-        <label className="composer-file-button">
-          Ảnh
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            onChange={handleMediaChange}
-          />
-        </label>
-
-        {files.length > 0 && (
-          <button type="button" className="link-button" onClick={clearFiles}>
-            Xóa ảnh
-          </button>
-        )}
-
-        <button className="button" type="submit" disabled={!canSubmit}>
-          {submitting ? "Đang đăng..." : "Đăng"}
-        </button>
-      </footer>
-    </form>
+    </>
   );
 }

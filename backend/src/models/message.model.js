@@ -1,6 +1,5 @@
 import { query } from "../db/pool.js";
 import { findFriendshipBetween } from "./friend.model.js";
-import { createNotification } from "./notification.model.js";
 import { findUserById } from "./user.model.js";
 import { publishMessage } from "../realtime/messageEvents.js";
 
@@ -513,13 +512,6 @@ export async function createMessage({
   const message = normalizeMessage(messages[0]);
   publishMessage(recipientId, message);
   publishMessage(senderId, message);
-
-  await createNotification({
-    recipientId,
-    actorId: senderId,
-    type: "message",
-    conversationId,
-  });
 
   return {
     ...message,
