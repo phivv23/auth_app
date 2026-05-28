@@ -1,4 +1,9 @@
 import { query } from "../db/pool.js";
+import {
+  getBlockFilterSql,
+  getBlockStatusParams,
+  getBlockStatusSelectSql,
+} from "./block.model.js";
 
 function getFriendshipStatusSelectSql(userAlias = "u") {
   return `
@@ -59,6 +64,9 @@ function normalizePublicUser(user, currentUserId = null) {
         ? "self"
         : "none"),
     isFollowing: Boolean(user.isFollowing),
+    blockedByMe: Boolean(user.blockedByMe),
+    hasBlockedMe: Boolean(user.hasBlockedMe),
+    isBlocked: Boolean(user.blockedByMe || user.hasBlockedMe),
     isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
   };
 }
@@ -321,6 +329,7 @@ export async function updateUserPassword(userId, passwordHash) {
 
 export async function findPublicUserProfileById(userId, currentUserId = null) {
   const viewerId = currentUserId || 0;
+  const isSelf = Number(viewerId) === Number(userId);
 
   const rows = await query(
     `
@@ -354,6 +363,8 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
 
       ${getFriendshipStatusSelectSql("u")},
 
+      ${getBlockStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows f
@@ -363,12 +374,17 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
     FROM users u
     WHERE u.id = ?
     `,
-    [...getFriendshipStatusParams(viewerId), viewerId, userId]
+    [
+      ...getFriendshipStatusParams(viewerId),
+      ...getBlockStatusParams(viewerId),
+      viewerId,
+      userId,
+    ]
   );
 
   const profile = rows[0] || null;
 
-  if (!profile) {
+  if (!profile || (!isSelf && Boolean(profile.hasBlockedMe))) {
     return null;
   }
 
@@ -393,6 +409,10 @@ export async function searchPublicUsers({
 
   const viewerId = currentUserId || 0;
   const searchKeyword = `%${keyword.trim()}%`;
+  const blockFilter = getBlockFilterSql({
+    currentUserId: viewerId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -426,6 +446,8 @@ export async function searchPublicUsers({
 
       ${getFriendshipStatusSelectSql("u")},
 
+      ${getBlockStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows f
@@ -436,10 +458,18 @@ export async function searchPublicUsers({
     WHERE
       u.name LIKE ?
       AND u.id <> ?
+      AND ${blockFilter.sql}
     ORDER BY followerCount DESC, u.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [...getFriendshipStatusParams(viewerId), viewerId, searchKeyword, viewerId]
+    [
+      ...getFriendshipStatusParams(viewerId),
+      ...getBlockStatusParams(viewerId),
+      viewerId,
+      searchKeyword,
+      viewerId,
+      ...blockFilter.params,
+    ]
   );
 
   const countRows = await query(
@@ -449,8 +479,9 @@ export async function searchPublicUsers({
     WHERE
       u.name LIKE ?
       AND u.id <> ?
+      AND ${blockFilter.sql}
     `,
-    [searchKeyword, viewerId]
+    [searchKeyword, viewerId, ...blockFilter.params]
   );
 
   const total = Number(countRows[0]?.total || 0);
@@ -479,6 +510,10 @@ export async function findSuggestedUsers({
     Number.isInteger(normalizedLimit) && normalizedLimit > 0
       ? Math.min(normalizedLimit, 20)
       : 5;
+  const blockFilter = getBlockFilterSql({
+    currentUserId: normalizedCurrentUserId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -523,6 +558,8 @@ export async function findSuggestedUsers({
 
         ${getFriendshipStatusSelectSql("u")},
 
+        ${getBlockStatusSelectSql("u")},
+
         (
           SELECT COUNT(*)
           FROM follows my_network
@@ -562,6 +599,7 @@ export async function findSuggestedUsers({
           FROM follows f
           WHERE f.follower_id = ? AND f.following_id = u.id
         )
+        AND ${blockFilter.sql}
     ) AS candidates
     ORDER BY
       suggestionScore DESC,
@@ -575,11 +613,12 @@ export async function findSuggestedUsers({
     `,
     [
       ...getFriendshipStatusParams(normalizedCurrentUserId),
+      ...getBlockStatusParams(normalizedCurrentUserId),
       normalizedCurrentUserId,
       normalizedCurrentUserId,
       normalizedCurrentUserId,
       normalizedCurrentUserId,
-      normalizedCurrentUserId,
+      ...blockFilter.params,
     ]
   );
 

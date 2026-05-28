@@ -6,6 +6,7 @@ import {
 } from "../config/cookie.js";
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
 import {
+  findUserById,
   findPublicUserByEmail,
   findUserWithPasswordById,
   updateUserPassword,
@@ -26,6 +27,11 @@ import {
   findFollowing,
 } from "../models/follow.model.js";
 import { createNotification } from "../models/notification.model.js";
+import {
+  blockUser,
+  isBlockedBetween,
+  unblockUser,
+} from "../models/block.model.js";
 import { sendError } from "../utils/http.js";
 import { signAccessToken } from "../utils/token.js";
 import {
@@ -369,6 +375,98 @@ router.get("/suggestions", requireAuth, async (req, res, next) => {
   }
 });
 
+router.post("/:id/block", requireAuth, async (req, res, next) => {
+  try {
+    const targetUserId = parsePositiveInt(req.params.id);
+
+    if (!targetUserId) {
+      return sendError(res, 400, "User id không hợp lệ.", "VALIDATION_ERROR");
+    }
+
+    if (targetUserId === req.user.id) {
+      return sendError(
+        res,
+        400,
+        "Bạn không thể block chính mình.",
+        "VALIDATION_ERROR"
+      );
+    }
+
+    const targetUser = await findUserById(targetUserId);
+
+    if (!targetUser) {
+      return sendError(res, 404, "Không tìm thấy user.", "USER_NOT_FOUND");
+    }
+
+    await blockUser(req.user.id, targetUserId);
+
+    const profile = await findPublicUserProfileById(targetUserId, req.user.id);
+
+    return res.json({
+      message: "Đã block user.",
+      profile: profile || {
+        id: targetUserId,
+        name: targetUser.name,
+        avatarUrl: targetUser.avatarUrl,
+        coverUrl: targetUser.coverUrl,
+        blockedByMe: true,
+        hasBlockedMe: true,
+        isBlocked: true,
+        isFollowing: false,
+        friendshipStatus: "none",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/:id/block", requireAuth, async (req, res, next) => {
+  try {
+    const targetUserId = parsePositiveInt(req.params.id);
+
+    if (!targetUserId) {
+      return sendError(res, 400, "User id không hợp lệ.", "VALIDATION_ERROR");
+    }
+
+    if (targetUserId === req.user.id) {
+      return sendError(
+        res,
+        400,
+        "Bạn không thể unblock chính mình.",
+        "VALIDATION_ERROR"
+      );
+    }
+
+    const targetUser = await findUserById(targetUserId);
+
+    if (!targetUser) {
+      return sendError(res, 404, "Không tìm thấy user.", "USER_NOT_FOUND");
+    }
+
+    await unblockUser(req.user.id, targetUserId);
+
+    const profile = await findPublicUserProfileById(targetUserId, req.user.id);
+
+    return res.json({
+      message: "Đã bỏ block user.",
+      profile: profile || {
+        id: targetUserId,
+        name: targetUser.name,
+        avatarUrl: targetUser.avatarUrl,
+        coverUrl: targetUser.coverUrl,
+        blockedByMe: false,
+        hasBlockedMe: true,
+        isBlocked: true,
+        isFollowing: false,
+        friendshipStatus: "none",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/:id/follow", requireAuth, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.id);
@@ -383,6 +481,15 @@ router.post("/:id/follow", requireAuth, async (req, res, next) => {
       return res.status(400).json({
         message: "Bạn không thể follow chính mình",
       });
+    }
+
+    if (await isBlockedBetween(req.user.id, targetUserId)) {
+      return sendError(
+        res,
+        403,
+        "Không thể follow user đã block hoặc đã block bạn.",
+        "USER_BLOCKED"
+      );
     }
 
     const targetProfile = await findPublicUserProfileById(

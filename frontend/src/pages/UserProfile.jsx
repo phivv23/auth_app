@@ -13,9 +13,11 @@ import PostComposer from "../components/PostComposer.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 import { openMessagePopup } from "../utils/messagePopup.js";
 import {
+  blockUser,
   followUser,
   getPublicUserPosts,
   getPublicUserProfile,
+  unblockUser,
   unfollowUser,
 } from "../api/user.api.js";
 import { useAuth } from "../context/useAuth.js";
@@ -45,6 +47,7 @@ export default function UserProfile({ profileUserId }) {
   const [postsLoading, setPostsLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [friendLoading, setFriendLoading] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isMyProfile = Boolean(profile?.isMe);
@@ -75,6 +78,13 @@ export default function UserProfile({ profileUserId }) {
         setPostsLoading(true);
         setError("");
 
+        if (profile?.isBlocked) {
+          setPosts([]);
+          setTotal(0);
+          setTotalPages(1);
+          return;
+        }
+
         const data = await getPublicUserPosts(id, {
           page,
           limit,
@@ -92,7 +102,7 @@ export default function UserProfile({ profileUserId }) {
     }
 
     loadPosts();
-  }, [id, page, limit, search]);
+  }, [id, page, limit, search, profile?.isBlocked]);
 
   function handleSearchSubmit(event) {
     event.preventDefault();
@@ -145,7 +155,7 @@ export default function UserProfile({ profileUserId }) {
       return;
     }
 
-    if (!profile || profile.isMe) {
+    if (!profile || profile.isMe || profile.isBlocked) {
       return;
     }
 
@@ -171,7 +181,7 @@ export default function UserProfile({ profileUserId }) {
       return;
     }
 
-    if (!profile || profile.isMe) {
+    if (!profile || profile.isMe || profile.isBlocked) {
       return;
     }
 
@@ -219,6 +229,49 @@ export default function UserProfile({ profileUserId }) {
     return "Thêm bạn bè";
   }
 
+  async function handleToggleBlock() {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!profile || profile.isMe) {
+      return;
+    }
+
+    if (
+      !profile.blockedByMe &&
+      !window.confirm(
+        "Block user này? Bạn sẽ hủy follow/kết bạn và hai bên sẽ không thấy nội dung hay nhắn tin với nhau."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setBlockLoading(true);
+      setError("");
+
+      const data = profile.blockedByMe
+        ? await unblockUser(profile.id)
+        : await blockUser(profile.id);
+
+      setProfile(data.profile);
+
+      if (data.profile?.isBlocked) {
+        setPosts([]);
+        setTotal(0);
+        setTotalPages(1);
+      } else {
+        setPage(1);
+      }
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBlockLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="container">
@@ -248,6 +301,7 @@ export default function UserProfile({ profileUserId }) {
   const coverUrl = getFileUrl(profile.coverUrl);
   const showingFollowList =
     activeSection === "followers" || activeSection === "following";
+  const shouldHideProfileContent = !isMyProfile && Boolean(profile.isBlocked);
 
   return (
     <div className="profile-page">
@@ -286,8 +340,19 @@ export default function UserProfile({ profileUserId }) {
               <Link to="/settings" className="button">
                 Chỉnh sửa profile
               </Link>
+            ) : profile.blockedByMe ? (
+              <button
+                className="button secondary"
+                type="button"
+                onClick={handleToggleBlock}
+                disabled={blockLoading}
+              >
+                {blockLoading ? "Đang xử lý..." : "Bỏ block"}
+              </button>
             ) : (
               <>
+                {!profile.hasBlockedMe && (
+                  <>
                 <button
                   className={`button ${
                     profile.friendshipStatus === "friends" ? "secondary" : ""
@@ -319,13 +384,36 @@ export default function UserProfile({ profileUserId }) {
                 >
                   Nhắn tin
                 </button>
+                  </>
+                )}
+
+                <button
+                  className="button danger"
+                  type="button"
+                  onClick={handleToggleBlock}
+                  disabled={blockLoading}
+                >
+                  {blockLoading ? "Đang xử lý..." : "Block"}
+                </button>
               </>
             )}
           </div>
         </div>
 
         {error && <p className="error profile-error">{error}</p>}
+        {profile.blockedByMe && (
+          <p className="profile-blocked-notice">
+            Bạn đã block user này. Bỏ block để xem lại nội dung và tương tác.
+          </p>
+        )}
+        {!profile.blockedByMe && profile.hasBlockedMe && (
+          <p className="profile-blocked-notice">
+            User này đang block bạn nên bạn không thể xem nội dung hoặc tương
+            tác.
+          </p>
+        )}
 
+        {!shouldHideProfileContent && (
         <div className="profile-tabs" aria-label="Profile sections">
           <button
             type="button"
@@ -356,9 +444,18 @@ export default function UserProfile({ profileUserId }) {
             Đang theo dõi
           </button>
         </div>
+        )}
       </section>
 
-      {showingFollowList ? (
+      {shouldHideProfileContent ? (
+        <section className="profile-panel profile-blocked-panel">
+          <h2>Nội dung đã bị ẩn</h2>
+          <p>
+            Khi đang block hoặc bị block, hai bên sẽ không thấy bài viết, danh
+            sách follow và không thể nhắn tin.
+          </p>
+        </section>
+      ) : showingFollowList ? (
         <FollowListPanel userId={profile.id} type={activeSection} embedded />
       ) : (
         <div className="profile-content-grid">

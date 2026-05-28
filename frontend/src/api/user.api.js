@@ -32,6 +32,18 @@ export function unfollowUser(userId) {
   });
 }
 
+export function blockUser(userId) {
+  return apiFetch(`/users/${userId}/block`, {
+    method: "POST",
+  });
+}
+
+export function unblockUser(userId) {
+  return apiFetch(`/users/${userId}/block`, {
+    method: "DELETE",
+  });
+}
+
 export function getUserFollowers(userId, { page = 1, limit = 10 } = {}) {
   const params = new URLSearchParams();
 

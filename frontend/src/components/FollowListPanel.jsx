@@ -74,6 +74,13 @@ export default function FollowListPanel({ userId, type, embedded = false }) {
   }, [userId, page, limit, isFollowersList]);
 
   function handleUserUpdated(updatedProfile) {
+    if (updatedProfile.isBlocked) {
+      setUsers((currentUsers) =>
+        currentUsers.filter((user) => user.id !== updatedProfile.id)
+      );
+      return;
+    }
+
     setUsers((currentUsers) =>
       currentUsers.map((user) => {
         if (user.id !== updatedProfile.id) {

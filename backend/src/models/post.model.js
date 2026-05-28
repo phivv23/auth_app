@@ -36,28 +36,41 @@ function buildVisibilitySql({ currentUserId = null, postAlias = "p" }) {
   }
 
   return {
-    sql: `(
-      ${postAlias}.privacy = ?
-      OR ${postAlias}.user_id = ?
-      OR (
+    sql: `((
         ${postAlias}.privacy = ?
-        AND EXISTS (
-          SELECT 1
-          FROM follows visibility_follow
-          WHERE visibility_follow.follower_id = ?
-            AND visibility_follow.following_id = ${postAlias}.user_id
+        OR ${postAlias}.user_id = ?
+        OR (
+          ${postAlias}.privacy = ?
+          AND EXISTS (
+            SELECT 1
+            FROM follows visibility_follow
+            WHERE visibility_follow.follower_id = ?
+              AND visibility_follow.following_id = ${postAlias}.user_id
+          )
+        )
+        OR (
+          ${postAlias}.privacy = ?
+          AND EXISTS (
+            SELECT 1
+            FROM friendships visibility_friend
+            WHERE visibility_friend.status = 'accepted'
+              AND (
+                (visibility_friend.requester_id = ? AND visibility_friend.addressee_id = ${postAlias}.user_id)
+                OR (visibility_friend.addressee_id = ? AND visibility_friend.requester_id = ${postAlias}.user_id)
+              )
+          )
         )
       )
-      OR (
-        ${postAlias}.privacy = ?
-        AND EXISTS (
-          SELECT 1
-          FROM friendships visibility_friend
-          WHERE visibility_friend.status = 'accepted'
-            AND (
-              (visibility_friend.requester_id = ? AND visibility_friend.addressee_id = ${postAlias}.user_id)
-              OR (visibility_friend.addressee_id = ? AND visibility_friend.requester_id = ${postAlias}.user_id)
-            )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks visibility_block
+        WHERE (
+          visibility_block.blocker_id = ?
+          AND visibility_block.blocked_id = ${postAlias}.user_id
+        )
+        OR (
+          visibility_block.blocked_id = ?
+          AND visibility_block.blocker_id = ${postAlias}.user_id
         )
       )
     )`,
@@ -67,6 +80,8 @@ function buildVisibilitySql({ currentUserId = null, postAlias = "p" }) {
       FOLLOWERS_PRIVACY,
       currentUserId,
       FRIENDS_PRIVACY,
+      currentUserId,
+      currentUserId,
       currentUserId,
       currentUserId,
     ],
@@ -794,7 +809,7 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
     LEFT JOIN post_likes pl ON pl.post_id = p.id
     LEFT JOIN comments c ON c.post_id = p.id
 
-    WHERE
+    WHERE (
       p.user_id = ?
       OR (
         p.user_id IN (
@@ -815,6 +830,19 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
             AND (fr.requester_id = ? OR fr.addressee_id = ?)
         )
         AND p.privacy IN (?, ?)
+      )
+    )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks feed_block
+        WHERE (
+          feed_block.blocker_id = ?
+          AND feed_block.blocked_id = p.user_id
+        )
+        OR (
+          feed_block.blocked_id = ?
+          AND feed_block.blocker_id = p.user_id
+        )
       )
 
     GROUP BY p.id
@@ -834,6 +862,8 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
       currentUserId,
       PUBLIC_PRIVACY,
       FRIENDS_PRIVACY,
+      currentUserId,
+      currentUserId,
     ]
   );
 
@@ -841,7 +871,7 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
     `
     SELECT COUNT(*) AS total
     FROM posts p
-    WHERE
+    WHERE (
       p.user_id = ?
       OR (
         p.user_id IN (
@@ -863,6 +893,19 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
         )
         AND p.privacy IN (?, ?)
       )
+    )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks feed_block
+        WHERE (
+          feed_block.blocker_id = ?
+          AND feed_block.blocked_id = p.user_id
+        )
+        OR (
+          feed_block.blocked_id = ?
+          AND feed_block.blocker_id = p.user_id
+        )
+      )
     `,
     [
       currentUserId,
@@ -874,6 +917,8 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
       currentUserId,
       PUBLIC_PRIVACY,
       FRIENDS_PRIVACY,
+      currentUserId,
+      currentUserId,
     ]
   );
 

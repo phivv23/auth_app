@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
 import { createNotification } from "../models/notification.model.js";
+import { isBlockedBetween } from "../models/block.model.js";
 import { acceptMessageConversationBetween } from "../models/message.model.js";
 import { findPublicUserProfileById } from "../models/user.model.js";
 import {
@@ -131,6 +132,13 @@ router.post("/requests/:userId", requireAuth, async (req, res, next) => {
       });
     }
 
+    if (await isBlockedBetween(req.user.id, targetUserId)) {
+      return res.status(403).json({
+        message: "Không thể gửi lời mời kết bạn khi một trong hai đã block.",
+        code: "USER_BLOCKED",
+      });
+    }
+
     const targetProfile = await findPublicUserProfileById(
       targetUserId,
       req.user.id
@@ -191,6 +199,13 @@ router.patch("/requests/:userId/accept", requireAuth, async (req, res, next) => 
     if (!requesterId) {
       return res.status(400).json({
         message: "User id không hợp lệ.",
+      });
+    }
+
+    if (await isBlockedBetween(req.user.id, requesterId)) {
+      return res.status(403).json({
+        message: "Không thể chấp nhận lời mời khi một trong hai đã block.",
+        code: "USER_BLOCKED",
       });
     }
 

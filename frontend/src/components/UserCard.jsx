@@ -8,7 +8,12 @@ import {
   sendFriendRequest,
   unfriendUser,
 } from "../api/friend.api.js";
-import { followUser, unfollowUser } from "../api/user.api";
+import {
+  blockUser,
+  followUser,
+  unblockUser,
+  unfollowUser,
+} from "../api/user.api";
 import { useAuth } from "../context/useAuth";
 import { openMessagePopup } from "../utils/messagePopup.js";
 
@@ -25,7 +30,7 @@ export default function UserCard({ user, onUserUpdated }) {
       return;
     }
 
-    if (user.isMe) {
+    if (user.isMe || user.isBlocked) {
       return;
     }
 
@@ -51,7 +56,7 @@ export default function UserCard({ user, onUserUpdated }) {
       return;
     }
 
-    if (user.isMe || friendshipStatus === "self") {
+    if (user.isMe || user.isBlocked || friendshipStatus === "self") {
       return;
     }
 
@@ -96,7 +101,46 @@ export default function UserCard({ user, onUserUpdated }) {
   }
 
   function handleOpenMessages() {
+    if (user.isBlocked) {
+      return;
+    }
+
     openMessagePopup(user.id);
+  }
+
+  async function handleToggleBlock() {
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
+
+    if (user.isMe) {
+      return;
+    }
+
+    if (
+      !user.blockedByMe &&
+      !window.confirm(
+        "Block user này? Bạn sẽ hủy follow/kết bạn và hai bên sẽ không thấy nội dung hay nhắn tin với nhau."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      const data = user.blockedByMe
+        ? await unblockUser(user.id)
+        : await blockUser(user.id);
+
+      onUserUpdated?.(data.profile);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   const avatarUrl = getFileUrl(user.avatarUrl);
@@ -131,6 +175,18 @@ export default function UserCard({ user, onUserUpdated }) {
 
       {!user.isMe && (
         <div className="user-card-actions">
+          {user.blockedByMe ? (
+            <button
+              type="button"
+              onClick={handleToggleBlock}
+              disabled={actionLoading}
+            >
+              {actionLoading ? "Đang xử lý..." : "Bỏ block"}
+            </button>
+          ) : (
+            <>
+              {!user.hasBlockedMe && (
+                <>
           <button type="button" onClick={handleFriendAction} disabled={actionLoading}>
             {getFriendButtonLabel()}
           </button>
@@ -142,6 +198,19 @@ export default function UserCard({ user, onUserUpdated }) {
           <button type="button" onClick={handleOpenMessages}>
             Nhắn tin
           </button>
+                </>
+              )}
+
+              <button
+                className="danger"
+                type="button"
+                onClick={handleToggleBlock}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Đang xử lý..." : "Block"}
+              </button>
+            </>
+          )}
         </div>
       )}
 

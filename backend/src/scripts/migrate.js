@@ -46,6 +46,14 @@ async function getAppliedMigrations() {
   return new Set(rows.map((row) => row.filename));
 }
 
+async function getSqlFiles() {
+  const files = await fs.readdir(sqlDir);
+
+  return files
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+}
+
 async function markMigrationApplied(file) {
   await pool.execute(
     "INSERT IGNORE INTO schema_migrations (filename) VALUES (?)",
@@ -53,11 +61,34 @@ async function markMigrationApplied(file) {
   );
 }
 
+async function printMigrationStatus() {
+  await ensureMigrationTable();
+
+  const sqlFiles = await getSqlFiles();
+  const appliedMigrations = await getAppliedMigrations();
+  const pendingFiles = [];
+
+  for (const file of sqlFiles) {
+    const status = appliedMigrations.has(file) ? "applied" : "pending";
+
+    if (status === "pending") {
+      pendingFiles.push(file);
+    }
+
+    console.log(`${status.padEnd(7)} ${file}`);
+  }
+
+  if (pendingFiles.length === 0) {
+    console.log("No pending migrations.");
+    return;
+  }
+
+  console.log(`Pending migrations: ${pendingFiles.length}`);
+}
+
 async function migrate() {
   try {
     await ensureMigrationTable();
-
-    const files = await fs.readdir(sqlDir);
 
     /**
      * Lấy các file .sql và sort theo tên.
@@ -65,9 +96,7 @@ async function migrate() {
      * 001_create_users.sql
      * 002_create_posts.sql
      */
-    const sqlFiles = files
-      .filter((file) => file.endsWith(".sql"))
-      .sort();
+    const sqlFiles = await getSqlFiles();
     const appliedMigrations = await getAppliedMigrations();
 
     for (const file of sqlFiles) {
@@ -113,4 +142,25 @@ async function migrate() {
   }
 }
 
-migrate();
+async function status() {
+  try {
+    await printMigrationStatus();
+  } catch (error) {
+    console.error("Migration status failed:", error);
+    process.exitCode = 1;
+  } finally {
+    await pool.end();
+  }
+}
+
+const command = process.argv[2] || "up";
+
+if (command === "status") {
+  status();
+} else if (command === "up") {
+  migrate();
+} else {
+  console.error(`Unknown migration command: ${command}`);
+  process.exitCode = 1;
+  await pool.end();
+}

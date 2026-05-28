@@ -1,4 +1,9 @@
 import { query } from "../db/pool.js";
+import {
+  getBlockFilterSql,
+  getBlockStatusParams,
+  getBlockStatusSelectSql,
+} from "./block.model.js";
 
 function getFriendshipStatusSelectSql(userAlias = "u") {
   return `
@@ -123,6 +128,10 @@ export async function findFollowers({
       : 10;
   const offset = (safePage - 1) * safeLimit;
   const viewerId = currentUserId || 0;
+  const blockFilter = getBlockFilterSql({
+    currentUserId: viewerId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -148,6 +157,8 @@ export async function findFollowers({
 
       ${getFriendshipStatusSelectSql("u")},
 
+      ${getBlockStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows my_follow
@@ -157,19 +168,28 @@ export async function findFollowers({
     FROM follows f
     JOIN users u ON u.id = f.follower_id
     WHERE f.following_id = ?
+      AND ${blockFilter.sql}
     ORDER BY f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [...getFriendshipStatusParams(viewerId), viewerId, userId]
+    [
+      ...getFriendshipStatusParams(viewerId),
+      ...getBlockStatusParams(viewerId),
+      viewerId,
+      userId,
+      ...blockFilter.params,
+    ]
   );
 
   const countRows = await query(
     `
     SELECT COUNT(*) AS total
-    FROM follows
-    WHERE following_id = ?
+    FROM follows f
+    JOIN users u ON u.id = f.follower_id
+    WHERE f.following_id = ?
+      AND ${blockFilter.sql}
     `,
-    [userId]
+    [userId, ...blockFilter.params]
   );
 
   const total = Number(countRows[0]?.total || 0);
@@ -182,6 +202,9 @@ export async function findFollowers({
       friendCount: Number(user.friendCount || 0),
       friendshipStatus: user.friendshipStatus || "none",
       isFollowing: Boolean(user.isFollowing),
+      blockedByMe: Boolean(user.blockedByMe),
+      hasBlockedMe: Boolean(user.hasBlockedMe),
+      isBlocked: Boolean(user.blockedByMe || user.hasBlockedMe),
       isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
     })),
     page: safePage,
@@ -207,6 +230,10 @@ export async function findFollowing({
       : 10;
   const offset = (safePage - 1) * safeLimit;
   const viewerId = currentUserId || 0;
+  const blockFilter = getBlockFilterSql({
+    currentUserId: viewerId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -232,6 +259,8 @@ export async function findFollowing({
 
       ${getFriendshipStatusSelectSql("u")},
 
+      ${getBlockStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows my_follow
@@ -241,19 +270,28 @@ export async function findFollowing({
     FROM follows f
     JOIN users u ON u.id = f.following_id
     WHERE f.follower_id = ?
+      AND ${blockFilter.sql}
     ORDER BY f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [...getFriendshipStatusParams(viewerId), viewerId, userId]
+    [
+      ...getFriendshipStatusParams(viewerId),
+      ...getBlockStatusParams(viewerId),
+      viewerId,
+      userId,
+      ...blockFilter.params,
+    ]
   );
 
   const countRows = await query(
     `
     SELECT COUNT(*) AS total
-    FROM follows
-    WHERE follower_id = ?
+    FROM follows f
+    JOIN users u ON u.id = f.following_id
+    WHERE f.follower_id = ?
+      AND ${blockFilter.sql}
     `,
-    [userId]
+    [userId, ...blockFilter.params]
   );
 
   const total = Number(countRows[0]?.total || 0);
@@ -266,6 +304,9 @@ export async function findFollowing({
       friendCount: Number(user.friendCount || 0),
       friendshipStatus: user.friendshipStatus || "none",
       isFollowing: Boolean(user.isFollowing),
+      blockedByMe: Boolean(user.blockedByMe),
+      hasBlockedMe: Boolean(user.hasBlockedMe),
+      isBlocked: Boolean(user.blockedByMe || user.hasBlockedMe),
       isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
     })),
     page: safePage,

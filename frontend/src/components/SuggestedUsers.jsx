@@ -55,12 +55,14 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
 
   function handleUserUpdated(updatedProfile) {
     // Nếu user vừa được follow, xóa khỏi danh sách gợi ý
-    if (updatedProfile.isFollowing) {
+    if (updatedProfile.isFollowing || updatedProfile.isBlocked) {
       setUsers((currentUsers) =>
         currentUsers.filter((user) => user.id !== updatedProfile.id)
       );
 
-      onFollowed?.(updatedProfile);
+      if (updatedProfile.isFollowing) {
+        onFollowed?.(updatedProfile);
+      }
 
       return;
     }

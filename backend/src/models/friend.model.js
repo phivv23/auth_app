@@ -1,4 +1,9 @@
 import { query } from "../db/pool.js";
+import {
+  getBlockFilterSql,
+  getBlockStatusParams,
+  getBlockStatusSelectSql,
+} from "./block.model.js";
 
 export const FRIENDSHIP_STATUS = {
   NONE: "none",
@@ -220,13 +225,23 @@ function getUserSelect(viewerId) {
         ELSE 'none'
       END AS friendshipStatus,
 
+      ${getBlockStatusSelectSql("u")},
+
       EXISTS(
         SELECT 1
         FROM follows my_follow
         WHERE my_follow.follower_id = ? AND my_follow.following_id = u.id
       ) AS isFollowing
     `,
-    params: [viewerId, viewerId, viewerId, viewerId, viewerId, viewerId],
+    params: [
+      viewerId,
+      viewerId,
+      viewerId,
+      viewerId,
+      viewerId,
+      ...getBlockStatusParams(viewerId),
+      viewerId,
+    ],
   };
 }
 
@@ -239,6 +254,9 @@ function normalizeFriendUser(user, currentUserId = null) {
     friendCount: Number(user.friendCount || 0),
     isFollowing: Boolean(user.isFollowing),
     friendshipStatus: getViewerFriendshipStatus(user, currentUserId),
+    blockedByMe: Boolean(user.blockedByMe),
+    hasBlockedMe: Boolean(user.hasBlockedMe),
+    isBlocked: Boolean(user.blockedByMe || user.hasBlockedMe),
     isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
   };
 }
@@ -262,6 +280,10 @@ export async function findFriendRequests({
   const userColumn = isOutgoing ? "f.addressee_id" : "f.requester_id";
   const whereColumn = isOutgoing ? "f.requester_id" : "f.addressee_id";
   const userSelect = getUserSelect(currentUserId);
+  const blockFilter = getBlockFilterSql({
+    currentUserId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -272,20 +294,23 @@ export async function findFriendRequests({
     JOIN users u ON u.id = ${userColumn}
     WHERE ${whereColumn} = ?
       AND f.status = 'pending'
+      AND ${blockFilter.sql}
     ORDER BY f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [...userSelect.params, currentUserId]
+    [...userSelect.params, currentUserId, ...blockFilter.params]
   );
 
   const countRows = await query(
     `
     SELECT COUNT(*) AS total
     FROM friendships f
+    JOIN users u ON u.id = ${userColumn}
     WHERE ${whereColumn} = ?
       AND f.status = 'pending'
+      AND ${blockFilter.sql}
     `,
-    [currentUserId]
+    [currentUserId, ...blockFilter.params]
   );
 
   const total = Number(countRows[0]?.total || 0);
@@ -316,6 +341,10 @@ export async function findFriends({
   const offset = (safePage - 1) * safeLimit;
   const viewerId = currentUserId || 0;
   const userSelect = getUserSelect(viewerId);
+  const blockFilter = getBlockFilterSql({
+    currentUserId: viewerId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -329,13 +358,28 @@ export async function findFriends({
     END
     WHERE (f.requester_id = ? OR f.addressee_id = ?)
       AND f.status = 'accepted'
+      AND ${blockFilter.sql}
     ORDER BY f.responded_at DESC, f.created_at DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [...userSelect.params, userId, userId, userId]
+    [...userSelect.params, userId, userId, userId, ...blockFilter.params]
   );
 
-  const total = await countFriends(userId);
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM friendships f
+    JOIN users u ON u.id = CASE
+      WHEN f.requester_id = ? THEN f.addressee_id
+      ELSE f.requester_id
+    END
+    WHERE (f.requester_id = ? OR f.addressee_id = ?)
+      AND f.status = 'accepted'
+      AND ${blockFilter.sql}
+    `,
+    [userId, userId, userId, ...blockFilter.params]
+  );
+  const total = Number(countRows[0]?.total || 0);
 
   return {
     users: users.map((user) => normalizeFriendUser(user, viewerId)),
@@ -356,6 +400,10 @@ export async function findFriendSuggestions({
       ? Math.min(normalizedLimit, 20)
       : 10;
   const userSelect = getUserSelect(currentUserId);
+  const blockFilter = getBlockFilterSql({
+    currentUserId,
+    userAlias: "u",
+  });
 
   const users = await query(
     `
@@ -388,6 +436,7 @@ export async function findFriendSuggestions({
         WHERE existing_friendship.user_low_id = LEAST(?, u.id)
           AND existing_friendship.user_high_id = GREATEST(?, u.id)
       )
+      AND ${blockFilter.sql}
     ORDER BY mutualFriendCount DESC, friendCount DESC, u.created_at DESC
     LIMIT ${safeLimit}
     `,
@@ -400,6 +449,7 @@ export async function findFriendSuggestions({
       currentUserId,
       currentUserId,
       currentUserId,
+      ...blockFilter.params,
     ]
   );
 

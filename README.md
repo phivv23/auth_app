@@ -18,6 +18,7 @@ App hien co cac nhom tinh nang chinh:
 - Save/bookmark post va trang `/saved`.
 - Follow/unfollow user, xem followers/following ngay trong profile.
 - Ket ban hai chieu: gui loi moi, chap nhan, huy/tu choi, unfriend, trang Friends.
+- Block/unblock user, an profile/list/feed/message khi hai user da block nhau.
 - Tim user, goi y follow user.
 - Notification cho follow, friend request/accept, like post, comment post; co bell dropdown, unread count, trang notifications.
 
@@ -82,6 +83,14 @@ auth-app/
       014_create_post_media.sql
       015_add_shared_post_id_to_posts.sql
       016_create_friendships.sql
+      017_create_conversations.sql
+      018_create_conversation_members.sql
+      019_create_messages.sql
+      020_add_conversation_id_to_notifications.sql
+      021_add_status_to_conversations.sql
+      022_add_token_version_to_users.sql
+      023_create_post_bookmarks.sql
+      024_create_user_blocks.sql
     src/
       server.js
       config/
@@ -222,6 +231,14 @@ auth-app/
 - Trang `/friends` co tabs loi moi den, da gui, ban be va goi y.
 - Privacy post co them `friends`; chi tac gia va accepted friends xem duoc.
 - Tao notification khi co friend request va khi accept friend.
+
+### Block
+
+- Block/unblock user tu profile hoac user card.
+- Khi block, backend xoa follow va friendship giua hai user.
+- User da block nhau bi an khoi search, suggestions, followers/following, friends, feed va conversations.
+- Chan follow, friend request, accept friend request va message khi mot trong hai da block.
+- Public profile tra `blockedByMe`, `hasBlockedMe`, `isBlocked` de UI an action/content.
 
 ### Notifications
 
@@ -379,6 +396,23 @@ Rang buoc:
 - `status` la `pending` hoac `accepted`.
 - Cascade delete theo user.
 
+### `user_blocks`
+
+Luu quan he block mot chieu giua hai user.
+
+Cot chinh:
+
+- `id`
+- `blocker_id`
+- `blocked_id`
+- `created_at`
+
+Rang buoc:
+
+- Unique `(blocker_id, blocked_id)`.
+- Check `blocker_id <> blocked_id`.
+- Cascade delete theo user.
+
 ### `notifications`
 
 Luu thong bao.
@@ -428,6 +462,8 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | GET | `/users/suggestions` | Goi y follow |
 | POST | `/users/:id/follow` | Follow user |
 | DELETE | `/users/:id/follow` | Unfollow user |
+| POST | `/users/:id/block` | Block user |
+| DELETE | `/users/:id/block` | Unblock user |
 | GET | `/users/:id/posts` | Lay post cua user |
 | GET | `/users/:id/followers` | Danh sach followers |
 | GET | `/users/:id/following` | Danh sach following |
@@ -533,6 +569,7 @@ Khong commit `.env` that vao repo.
 cd backend
 npm install
 npm run migrate
+npm run migrate:status
 npm run dev
 ```
 
@@ -650,7 +687,6 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 - Friend request hai chieu: send, accept, reject, cancel, unfriend.
 - Song song giu follow neu muon kieu Facebook Follow.
 - Privacy per post/profile: public, friends, followers, only me.
-- Block/unblock user.
 - Report user/post/comment.
 - Gioi thieu chi tiet hon: work, education, relationship, birthday, social links.
 - Activity log ca nhan.

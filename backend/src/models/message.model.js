@@ -1,4 +1,5 @@
 import { query } from "../db/pool.js";
+import { isBlockedBetween } from "./block.model.js";
 import { findFriendshipBetween } from "./friend.model.js";
 import { findUserById } from "./user.model.js";
 import { publishMessage } from "../realtime/messageEvents.js";
@@ -56,11 +57,19 @@ export async function assertCanMessage(userId, otherUserId) {
     return false;
   }
 
+  if (await isBlockedBetween(userId, otherUserId)) {
+    return false;
+  }
+
   const friendship = await findFriendshipBetween(userId, otherUserId);
   return friendship?.status === "accepted";
 }
 
 async function getConversationStatus(currentUserId, otherUserId) {
+  if (await isBlockedBetween(currentUserId, otherUserId)) {
+    return null;
+  }
+
   const friendship = await findFriendshipBetween(currentUserId, otherUserId);
 
   return friendship?.status === "accepted" ? "accepted" : "pending";
@@ -141,7 +150,16 @@ export async function findConversationById(conversationId, currentUserId) {
     ]
   );
 
-  return rows[0] ? normalizeConversation(rows[0]) : null;
+  const conversation = rows[0] ? normalizeConversation(rows[0]) : null;
+
+  if (
+    conversation &&
+    (await isBlockedBetween(currentUserId, conversation.otherUser.id))
+  ) {
+    return null;
+  }
+
+  return conversation;
 }
 
 export async function findOrCreateConversation(currentUserId, otherUserId) {
@@ -155,8 +173,16 @@ export async function findOrCreateConversation(currentUserId, otherUserId) {
     return null;
   }
 
+  if (await isBlockedBetween(currentUserId, otherUserId)) {
+    return null;
+  }
+
   const { userLowId, userHighId } = getUserPair(currentUserId, otherUserId);
   const status = await getConversationStatus(currentUserId, otherUserId);
+
+  if (!status) {
+    return null;
+  }
 
   await query(
     `
@@ -267,10 +293,30 @@ export async function findConversationsByUserId({
         LIMIT 1
       )
     WHERE (c.status = 'accepted' OR c.requester_id = ?)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks conversation_block
+        WHERE (
+          conversation_block.blocker_id = ?
+          AND conversation_block.blocked_id = other_user.id
+        )
+        OR (
+          conversation_block.blocked_id = ?
+          AND conversation_block.blocker_id = other_user.id
+        )
+      )
     ORDER BY COALESCE(last_message.created_at, c.updated_at) DESC, c.id DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [currentUserId, currentUserId, currentUserId, currentUserId, currentUserId]
+    [
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+    ]
   );
 
   const countRows = await query(
@@ -280,8 +326,33 @@ export async function findConversationsByUserId({
     JOIN conversations c ON c.id = cm.conversation_id
     WHERE cm.user_id = ?
       AND (c.status = 'accepted' OR c.requester_id = ?)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks conversation_block
+        WHERE (
+          conversation_block.blocker_id = ?
+          AND conversation_block.blocked_id = CASE
+            WHEN c.user_low_id = ? THEN c.user_high_id
+            ELSE c.user_low_id
+          END
+        )
+        OR (
+          conversation_block.blocked_id = ?
+          AND conversation_block.blocker_id = CASE
+            WHEN c.user_low_id = ? THEN c.user_high_id
+            ELSE c.user_low_id
+          END
+        )
+      )
     `,
-    [currentUserId, currentUserId]
+    [
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+    ]
   );
 
   const total = Number(countRows[0]?.total || 0);
@@ -360,10 +431,30 @@ export async function findMessageRequestsByUserId({
       )
     WHERE c.status = 'pending'
       AND c.requester_id <> ?
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks conversation_block
+        WHERE (
+          conversation_block.blocker_id = ?
+          AND conversation_block.blocked_id = other_user.id
+        )
+        OR (
+          conversation_block.blocked_id = ?
+          AND conversation_block.blocker_id = other_user.id
+        )
+      )
     ORDER BY COALESCE(last_message.created_at, c.updated_at) DESC, c.id DESC
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
-    [currentUserId, currentUserId, currentUserId, currentUserId, currentUserId]
+    [
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+    ]
   );
 
   const countRows = await query(
@@ -374,8 +465,33 @@ export async function findMessageRequestsByUserId({
     WHERE cm.user_id = ?
       AND c.status = 'pending'
       AND c.requester_id <> ?
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks conversation_block
+        WHERE (
+          conversation_block.blocker_id = ?
+          AND conversation_block.blocked_id = CASE
+            WHEN c.user_low_id = ? THEN c.user_high_id
+            ELSE c.user_low_id
+          END
+        )
+        OR (
+          conversation_block.blocked_id = ?
+          AND conversation_block.blocker_id = CASE
+            WHEN c.user_low_id = ? THEN c.user_high_id
+            ELSE c.user_low_id
+          END
+        )
+      )
     `,
-    [currentUserId, currentUserId]
+    [
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      currentUserId,
+    ]
   );
 
   const total = Number(countRows[0]?.total || 0);
