@@ -2,7 +2,7 @@ import { query } from "../db/pool.js";
 import { isBlockedBetween } from "./block.model.js";
 import { findFriendshipBetween } from "./friend.model.js";
 import { findUserById } from "./user.model.js";
-import { publishMessage } from "../realtime/messageEvents.js";
+import { isUserOnline, publishMessage } from "../realtime/messageEvents.js";
 
 function getUserPair(userId, otherUserId) {
   return {
@@ -25,6 +25,8 @@ function normalizeConversation(row) {
       id: row.otherUserId,
       name: row.otherUserName,
       avatarUrl: row.otherUserAvatarUrl,
+      isOnline: isUserOnline(row.otherUserId),
+      lastSeenAt: row.otherUserLastSeenAt || null,
     },
     lastMessage: row.lastMessageId
       ? {
@@ -35,6 +37,8 @@ function normalizeConversation(row) {
         }
       : null,
     unreadCount: Number(row.unreadCount || 0),
+    lastReadMessageId: row.currentLastReadMessageId || null,
+    peerLastReadMessageId: row.peerLastReadMessageId || null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -50,6 +54,31 @@ function normalizeMessage(row) {
     senderName: row.senderName,
     senderAvatarUrl: row.senderAvatarUrl,
   };
+}
+
+export async function findMessageByIdForUser(messageId, currentUserId) {
+  const rows = await query(
+    `
+    SELECT
+      m.id,
+      m.conversation_id AS conversationId,
+      m.sender_id AS senderId,
+      m.content,
+      m.created_at AS createdAt,
+      sender.name AS senderName,
+      sender.avatar_url AS senderAvatarUrl
+    FROM messages m
+    JOIN conversation_members member
+      ON member.conversation_id = m.conversation_id
+      AND member.user_id = ?
+    JOIN users sender ON sender.id = m.sender_id
+    WHERE m.id = ?
+    LIMIT 1
+    `,
+    [currentUserId, messageId]
+  );
+
+  return rows[0] ? normalizeMessage(rows[0]) : null;
 }
 
 export async function assertCanMessage(userId, otherUserId) {
@@ -101,6 +130,9 @@ export async function findConversationById(conversationId, currentUserId) {
       other_user.id AS otherUserId,
       other_user.name AS otherUserName,
       other_user.avatar_url AS otherUserAvatarUrl,
+      other_user.last_seen_at AS otherUserLastSeenAt,
+      member.last_read_message_id AS currentLastReadMessageId,
+      peer_member.last_read_message_id AS peerLastReadMessageId,
 
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
@@ -129,6 +161,9 @@ export async function findConversationById(conversationId, currentUserId) {
         WHEN c.user_low_id = ? THEN c.user_high_id
         ELSE c.user_low_id
       END
+    LEFT JOIN conversation_members peer_member
+      ON peer_member.conversation_id = c.id
+      AND peer_member.user_id = other_user.id
     LEFT JOIN messages last_message
       ON last_message.id = (
         SELECT latest_message.id
@@ -259,6 +294,9 @@ export async function findConversationsByUserId({
       other_user.id AS otherUserId,
       other_user.name AS otherUserName,
       other_user.avatar_url AS otherUserAvatarUrl,
+      other_user.last_seen_at AS otherUserLastSeenAt,
+      member.last_read_message_id AS currentLastReadMessageId,
+      peer_member.last_read_message_id AS peerLastReadMessageId,
 
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
@@ -284,6 +322,9 @@ export async function findConversationsByUserId({
         WHEN c.user_low_id = ? THEN c.user_high_id
         ELSE c.user_low_id
       END
+    LEFT JOIN conversation_members peer_member
+      ON peer_member.conversation_id = c.id
+      AND peer_member.user_id = other_user.id
     LEFT JOIN messages last_message
       ON last_message.id = (
         SELECT latest_message.id
@@ -396,6 +437,9 @@ export async function findMessageRequestsByUserId({
       other_user.id AS otherUserId,
       other_user.name AS otherUserName,
       other_user.avatar_url AS otherUserAvatarUrl,
+      other_user.last_seen_at AS otherUserLastSeenAt,
+      member.last_read_message_id AS currentLastReadMessageId,
+      peer_member.last_read_message_id AS peerLastReadMessageId,
 
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
@@ -421,6 +465,9 @@ export async function findMessageRequestsByUserId({
         WHEN c.user_low_id = ? THEN c.user_high_id
         ELSE c.user_low_id
       END
+    LEFT JOIN conversation_members peer_member
+      ON peer_member.conversation_id = c.id
+      AND peer_member.user_id = other_user.id
     LEFT JOIN messages last_message
       ON last_message.id = (
         SELECT latest_message.id
@@ -677,5 +724,15 @@ export async function markConversationAsRead(conversationId, currentUserId) {
     [lastMessageId, conversationId, currentUserId]
   );
 
-  return findConversationById(conversationId, currentUserId);
+  const updatedConversation = await findConversationById(
+    conversationId,
+    currentUserId
+  );
+
+  return updatedConversation
+    ? {
+        ...updatedConversation,
+        lastReadMessageId: lastMessageId,
+      }
+    : null;
 }

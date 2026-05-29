@@ -97,6 +97,13 @@ router.get("/", optionalAuth, async (req, res, next) => {
       });
     }
 
+    if (!profile.canViewProfile) {
+      return res.status(403).json({
+        message: "Bạn không có quyền xem danh sách bạn bè này.",
+        code: "PROFILE_PRIVATE",
+      });
+    }
+
     const page = normalizePositiveInt(req.query.page, 1);
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);

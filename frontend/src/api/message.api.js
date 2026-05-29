@@ -57,3 +57,12 @@ export function markConversationRead(conversationId) {
     method: "PATCH",
   });
 }
+
+export function sendTypingStatus(conversationId, isTyping) {
+  return apiFetch(`/messages/conversations/${conversationId}/typing`, {
+    method: "POST",
+    body: JSON.stringify({
+      isTyping,
+    }),
+  });
+}

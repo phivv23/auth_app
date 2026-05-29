@@ -61,6 +61,7 @@ describe("auth validation", () => {
     assert.equal(result.error.code, "VALIDATION_ERROR");
     assert.equal(result.error.fields.email, "Email không hợp lệ.");
   });
+
 });
 
 describe("profile validation", () => {
@@ -80,6 +81,7 @@ describe("profile validation", () => {
       bio: "Hello there",
       location: null,
       website: "https://example.com/about",
+      profilePrivacy: "public",
     });
   });
 
@@ -96,6 +98,20 @@ describe("profile validation", () => {
       "bio",
       "location",
     ]);
+  });
+
+  it("rejects invalid profile privacy values", () => {
+    const result = validateProfileInput({
+      name: "Linh",
+      email: "linh@example.com",
+      profilePrivacy: "everyone_except_me",
+    });
+
+    assert.equal(result.error.code, "VALIDATION_ERROR");
+    assert.equal(
+      result.error.fields.profilePrivacy,
+      "Quyền riêng tư profile không hợp lệ."
+    );
   });
 
   it("rejects invalid website URLs", () => {

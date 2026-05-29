@@ -135,6 +135,7 @@ router.patch("/me", requireAuth, async (req, res, next) => {
       bio,
       location,
       website,
+      profilePrivacy,
     } = validation.value;
 
     /**
@@ -162,6 +163,7 @@ router.patch("/me", requireAuth, async (req, res, next) => {
       bio,
       location,
       website,
+      profilePrivacy,
     });
 
     return res.json({
@@ -589,6 +591,15 @@ router.get("/:id/posts", optionalAuth, async (req, res, next) => {
       });
     }
 
+    if (!profile.canViewProfile) {
+      return sendError(
+        res,
+        403,
+        "Bạn không có quyền xem bài viết trên profile này.",
+        "PROFILE_PRIVATE"
+      );
+    }
+
     const page = normalizePositiveInt(req.query.page, 1);
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
@@ -627,6 +638,15 @@ router.get("/:id/followers", optionalAuth, async (req, res, next) => {
       return res.status(404).json({
         message: "Không tìm thấy user",
       });
+    }
+
+    if (!profile.canViewProfile) {
+      return sendError(
+        res,
+        403,
+        "Bạn không có quyền xem danh sách followers này.",
+        "PROFILE_PRIVATE"
+      );
     }
 
     const page = normalizePositiveInt(req.query.page, 1);
@@ -668,6 +688,15 @@ router.get("/:id/following", optionalAuth, async (req, res, next) => {
       return res.status(404).json({
         message: "Không tìm thấy user",
       });
+    }
+
+    if (!profile.canViewProfile) {
+      return sendError(
+        res,
+        403,
+        "Bạn không có quyền xem danh sách following này.",
+        "PROFILE_PRIVATE"
+      );
     }
 
     const page = normalizePositiveInt(req.query.page, 1);

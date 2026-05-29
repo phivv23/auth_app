@@ -11,6 +11,7 @@ import {
   togglePostLike,
 } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
+import ReportDialog from "./ReportDialog.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
@@ -120,6 +121,7 @@ export default function SocialPostCard({
   const [sharePrivacy, setSharePrivacy] = useState("public");
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -396,12 +398,29 @@ export default function SocialPostCard({
           </span>
         </div>
 
-        {isAuthor && (
+        {user && (
           <div className="social-post-menu">
-            <Link to={`/posts/${post.id}/edit`}>Sửa</Link>
-            <button type="button" onClick={handleDeletePost}>
-              Xóa
-            </button>
+            {isAuthor ? (
+              <>
+                <Link to={`/posts/${post.id}/edit`}>Sửa</Link>
+                <button type="button" onClick={handleDeletePost}>
+                  Xóa
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  setReportTarget({
+                    type: "post",
+                    id: post.id,
+                    title: "Báo cáo bài viết",
+                  })
+                }
+              >
+                Báo cáo
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -744,6 +763,21 @@ export default function SocialPostCard({
                     <span title={formatVietnamDateTime(comment.createdAt)}>
                       {formatRelativeTime(comment.createdAt)}
                     </span>
+                    {user && Number(user.id) !== Number(comment.userId) && (
+                      <button
+                        className="comment-report-button"
+                        type="button"
+                        onClick={() =>
+                          setReportTarget({
+                            type: "comment",
+                            id: comment.id,
+                            title: "Báo cáo bình luận",
+                          })
+                        }
+                      >
+                        Báo cáo
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -751,6 +785,15 @@ export default function SocialPostCard({
           )}
         </div>
       )}
+
+      <ReportDialog
+        open={Boolean(reportTarget)}
+        targetType={reportTarget?.type}
+        targetId={reportTarget?.id}
+        title={reportTarget?.title || "Báo cáo nội dung"}
+        onClose={() => setReportTarget(null)}
+        onReported={() => setNotice("Đã gửi báo cáo.")}
+      />
     </article>
   );
 }

@@ -15,6 +15,7 @@ export default function Settings() {
     bio: user.bio || "",
     location: user.location || "",
     website: user.website || "",
+    profilePrivacy: user.profilePrivacy || "public",
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -200,6 +201,20 @@ export default function Settings() {
                 placeholder="https://example.com"
                 maxLength={255}
               />
+            </label>
+
+            <label>
+              Quyen rieng tu profile
+              <select
+                name="profilePrivacy"
+                value={profileForm.profilePrivacy}
+                onChange={handleProfileChange}
+              >
+                <option value="public">Cong khai</option>
+                <option value="followers">Nguoi dang follow</option>
+                <option value="friends">Ban be</option>
+                <option value="only_me">Chi minh toi</option>
+              </select>
             </label>
 
             {profileMessage && <p className="success">{profileMessage}</p>}

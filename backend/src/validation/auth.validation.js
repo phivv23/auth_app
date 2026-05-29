@@ -1,5 +1,6 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALIDATION_ERROR_CODE = "VALIDATION_ERROR";
+const PROFILE_PRIVACY_VALUES = ["public", "followers", "friends", "only_me"];
 
 function hasInputValue(value) {
   return value !== undefined && value !== null && String(value).length > 0;
@@ -190,6 +191,7 @@ export function validateProfileInput(input = {}) {
   const bio = normalizeOptionalText(input.bio, 500, "Bio");
   const location = normalizeOptionalText(input.location, 100, "Location");
   const website = normalizeWebsite(input.website);
+  const profilePrivacy = String(input.profilePrivacy || "public").trim();
 
   if (bio.error) {
     fields.bio = bio.error;
@@ -203,6 +205,10 @@ export function validateProfileInput(input = {}) {
     fields.website = website.error;
   }
 
+  if (!PROFILE_PRIVACY_VALUES.includes(profilePrivacy)) {
+    fields.profilePrivacy = "Quyền riêng tư profile không hợp lệ.";
+  }
+
   if (Object.keys(fields).length > 0) {
     return validationFailure(fields, "Name và email là bắt buộc.");
   }
@@ -213,6 +219,7 @@ export function validateProfileInput(input = {}) {
     bio: bio.value,
     location: location.value,
     website: website.value,
+    profilePrivacy,
   });
 }
 

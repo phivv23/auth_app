@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime } from "../utils/time.js";
 import { openMessagePopup } from "../utils/messagePopup.js";
+import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
 
 function getPreview(conversation, currentUserId) {
   if (!conversation.lastMessage) {
@@ -87,16 +88,16 @@ export default function MessageDropdown() {
       return;
     }
 
-    const eventSource = new EventSource(getMessageStreamUrl(), {
-      withCredentials: true,
-    });
-
-    eventSource.addEventListener("message", () => {
-      loadMessageData();
+    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
+      listeners: {
+        message: () => {
+          loadMessageData();
+        },
+      },
     });
 
     return () => {
-      eventSource.close();
+      connection.close();
     };
   }, [user]);
 

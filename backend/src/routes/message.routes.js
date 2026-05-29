@@ -2,9 +2,13 @@ import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { addMessageClient } from "../realtime/messageEvents.js";
+import {
+  addMessageClient,
+  publishMessageEvent,
+} from "../realtime/messageEvents.js";
 import {
   createMessage,
+  findConversationById,
   findConversationsByUserId,
   findMessageRequestsByUserId,
   findMessagesByConversationId,
@@ -233,6 +237,47 @@ router.post(
   }
 );
 
+router.post(
+  "/conversations/:conversationId/typing",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const conversationId = parsePositiveInt(req.params.conversationId);
+
+      if (!conversationId) {
+        return res.status(400).json({
+          message: "Conversation id không hợp lệ.",
+        });
+      }
+
+      const conversation = await findConversationById(
+        conversationId,
+        req.user.id
+      );
+
+      if (!conversation) {
+        return res.status(404).json({
+          message: "Không tìm thấy cuộc trò chuyện.",
+        });
+      }
+
+      const isTyping = Boolean(req.body?.isTyping);
+
+      publishMessageEvent(conversation.otherUser.id, "typing", {
+        conversationId,
+        userId: req.user.id,
+        isTyping,
+      });
+
+      return res.json({
+        ok: true,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.patch(
   "/conversations/:conversationId/read",
   requireAuth,
@@ -256,6 +301,12 @@ router.patch(
           message: "Không tìm thấy cuộc trò chuyện.",
         });
       }
+
+      publishMessageEvent(conversation.otherUser.id, "read", {
+        conversationId,
+        readerId: req.user.id,
+        lastReadMessageId: conversation.lastReadMessageId,
+      });
 
       return res.json({
         conversation,

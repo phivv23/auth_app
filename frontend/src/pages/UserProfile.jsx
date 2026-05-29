@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -10,6 +10,7 @@ import {
 } from "../api/friend.api.js";
 import FollowListPanel from "../components/FollowListPanel.jsx";
 import PostComposer from "../components/PostComposer.jsx";
+import ReportDialog from "../components/ReportDialog.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 import { openMessagePopup } from "../utils/messagePopup.js";
 import {
@@ -27,6 +28,7 @@ export default function UserProfile({ profileUserId }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const id = String(profileUserId || routeUserId);
+  const moreMenuRef = useRef(null);
 
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -48,10 +50,35 @@ export default function UserProfile({ profileUserId }) {
   const [followLoading, setFollowLoading] = useState(false);
   const [friendLoading, setFriendLoading] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [error, setError] = useState("");
 
   const isMyProfile = Boolean(profile?.isMe);
   const activeSection = profileTab.userId === id ? profileTab.section : "posts";
+  const isProfileHidden = Boolean(
+    profile &&
+      !isMyProfile &&
+      (profile.isBlocked || profile.canViewProfile === false)
+  );
+
+  useEffect(() => {
+    if (!moreMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+        setMoreMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [moreMenuOpen]);
 
   useEffect(() => {
     async function loadProfile() {
@@ -78,7 +105,7 @@ export default function UserProfile({ profileUserId }) {
         setPostsLoading(true);
         setError("");
 
-        if (profile?.isBlocked) {
+        if (!profile || isProfileHidden) {
           setPosts([]);
           setTotal(0);
           setTotalPages(1);
@@ -102,7 +129,7 @@ export default function UserProfile({ profileUserId }) {
     }
 
     loadPosts();
-  }, [id, page, limit, search, profile?.isBlocked]);
+  }, [id, page, limit, search, profile, isProfileHidden]);
 
   function handleSearchSubmit(event) {
     event.preventDefault();
@@ -301,7 +328,7 @@ export default function UserProfile({ profileUserId }) {
   const coverUrl = getFileUrl(profile.coverUrl);
   const showingFollowList =
     activeSection === "followers" || activeSection === "following";
-  const shouldHideProfileContent = !isMyProfile && Boolean(profile.isBlocked);
+  const shouldHideProfileContent = isProfileHidden;
 
   return (
     <div className="profile-page">
@@ -340,61 +367,89 @@ export default function UserProfile({ profileUserId }) {
               <Link to="/settings" className="button">
                 Chỉnh sửa profile
               </Link>
-            ) : profile.blockedByMe ? (
-              <button
-                className="button secondary"
-                type="button"
-                onClick={handleToggleBlock}
-                disabled={blockLoading}
-              >
-                {blockLoading ? "Đang xử lý..." : "Bỏ block"}
-              </button>
             ) : (
               <>
-                {!profile.hasBlockedMe && (
+                {!profile.isBlocked && !profile.hasBlockedMe && (
                   <>
-                <button
-                  className={`button ${
-                    profile.friendshipStatus === "friends" ? "secondary" : ""
-                  }`}
-                  type="button"
-                  onClick={handleFriendAction}
-                  disabled={friendLoading}
-                >
-                  {getFriendActionLabel()}
-                </button>
+                    <button
+                      className={`button ${
+                        profile.friendshipStatus === "friends"
+                          ? "secondary"
+                          : ""
+                      }`}
+                      type="button"
+                      onClick={handleFriendAction}
+                      disabled={friendLoading}
+                    >
+                      {getFriendActionLabel()}
+                    </button>
 
-                <button
-                  className={`button ${profile.isFollowing ? "secondary" : ""}`}
-                  type="button"
-                  onClick={handleToggleFollow}
-                  disabled={followLoading}
-                >
-                  {followLoading
-                    ? "Đang xử lý..."
-                    : profile.isFollowing
-                      ? "Đang follow"
-                      : "Follow"}
-                </button>
+                    <button
+                      className={`button ${
+                        profile.isFollowing ? "secondary" : ""
+                      }`}
+                      type="button"
+                      onClick={handleToggleFollow}
+                      disabled={followLoading}
+                    >
+                      {followLoading
+                        ? "Đang xử lý..."
+                        : profile.isFollowing
+                          ? "Đang follow"
+                          : "Follow"}
+                    </button>
 
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={() => openMessagePopup(profile.id)}
-                >
-                  Nhắn tin
-                </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => openMessagePopup(profile.id)}
+                    >
+                      Nhắn tin
+                    </button>
                   </>
                 )}
 
-                <button
-                  className="button danger"
-                  type="button"
-                  onClick={handleToggleBlock}
-                  disabled={blockLoading}
-                >
-                  {blockLoading ? "Đang xử lý..." : "Block"}
-                </button>
+                <div className="profile-more-menu" ref={moreMenuRef}>
+                  <button
+                    className="button secondary profile-more-button"
+                    type="button"
+                    aria-label="Xem thêm"
+                    title="Xem thêm"
+                    aria-expanded={moreMenuOpen}
+                    onClick={() => setMoreMenuOpen((currentOpen) => !currentOpen)}
+                  >
+                    ...
+                  </button>
+
+                  {moreMenuOpen && (
+                    <div className="profile-more-popover">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportOpen(true);
+                          setMoreMenuOpen(false);
+                        }}
+                      >
+                        Báo cáo profile
+                      </button>
+                      <button
+                        className="danger"
+                        type="button"
+                        onClick={() => {
+                          setMoreMenuOpen(false);
+                          handleToggleBlock();
+                        }}
+                        disabled={blockLoading}
+                      >
+                        {blockLoading
+                          ? "Đang xử lý..."
+                          : profile.blockedByMe
+                            ? "Bỏ block"
+                            : "Block"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -410,6 +465,12 @@ export default function UserProfile({ profileUserId }) {
           <p className="profile-blocked-notice">
             User này đang block bạn nên bạn không thể xem nội dung hoặc tương
             tác.
+          </p>
+        )}
+        {!profile.isBlocked && profile.canViewProfile === false && (
+          <p className="profile-blocked-notice">
+            Chủ profile đã giới hạn quyền riêng tư nên bạn không thể xem nội
+            dung chi tiết.
           </p>
         )}
 
@@ -451,8 +512,9 @@ export default function UserProfile({ profileUserId }) {
         <section className="profile-panel profile-blocked-panel">
           <h2>Nội dung đã bị ẩn</h2>
           <p>
-            Khi đang block hoặc bị block, hai bên sẽ không thấy bài viết, danh
-            sách follow và không thể nhắn tin.
+            {profile.isBlocked
+              ? "Khi đang block hoặc bị block, hai bên sẽ không thấy bài viết, danh sách follow và không thể nhắn tin."
+              : "Profile này đang giới hạn quyền riêng tư cho bài viết, danh sách follow và thông tin chi tiết."}
           </p>
         </section>
       ) : showingFollowList ? (
@@ -577,6 +639,14 @@ export default function UserProfile({ profileUserId }) {
         </section>
         </div>
       )}
+
+      <ReportDialog
+        open={reportOpen}
+        targetType="user"
+        targetId={profile.id}
+        title={`Báo cáo ${profile.name}`}
+        onClose={() => setReportOpen(false)}
+      />
     </div>
   );
 }

@@ -19,6 +19,9 @@ App hien co cac nhom tinh nang chinh:
 - Follow/unfollow user, xem followers/following ngay trong profile.
 - Ket ban hai chieu: gui loi moi, chap nhan, huy/tu choi, unfriend, trang Friends.
 - Block/unblock user, an profile/list/feed/message khi hai user da block nhau.
+- Report user/post/comment/message de tao moderation queue.
+- Messenger co typing indicator, read receipt, online/offline presence va SSE reconnect/backoff.
+- Profile privacy co `public`/`followers`/`friends`/`only_me`.
 - Tim user, goi y follow user.
 - Notification cho follow, friend request/accept, like post, comment post; co bell dropdown, unread count, trang notifications.
 
@@ -91,6 +94,9 @@ auth-app/
       022_add_token_version_to_users.sql
       023_create_post_bookmarks.sql
       024_create_user_blocks.sql
+      025_create_reports.sql
+      026_add_profile_privacy_to_users.sql
+      027_add_last_seen_to_users.sql
     src/
       server.js
       config/
@@ -234,11 +240,31 @@ auth-app/
 
 ### Block
 
-- Block/unblock user tu profile hoac user card.
+- Block/unblock user tu menu `...` tren profile, khong hien truc tiep nhu action chinh.
 - Khi block, backend xoa follow va friendship giua hai user.
 - User da block nhau bi an khoi search, suggestions, followers/following, friends, feed va conversations.
 - Chan follow, friend request, accept friend request va message khi mot trong hai da block.
 - Public profile tra `blockedByMe`, `hasBlockedMe`, `isBlocked` de UI an action/content.
+
+### Reports
+
+- User co the report user, post, comment va message.
+- Bang `reports` luu reporter, target type/id, reason, details va status.
+- Route report validate target ton tai va user co quyen xem target.
+- UI co report dialog dung chung cho profile, post, comment va message.
+
+### Profile Privacy
+
+- User chon `profilePrivacy` trong Settings.
+- Gia tri ho tro: `public`, `followers`, `friends`, `only_me`.
+- Profile private van hien header co ban, nhung an post, intro, followers/following va friends khi viewer khong du dieu kien.
+
+### Messenger Presence
+
+- Messenger co typing indicator qua SSE event `typing`.
+- Mark-read phat SSE event `read` de hien read receipt.
+- SSE message stream co reconnect/backoff o frontend.
+- Presence online/offline dua tren SSE clients va `last_seen_at`.
 
 ### Notifications
 
@@ -413,6 +439,28 @@ Rang buoc:
 - Check `blocker_id <> blocked_id`.
 - Cascade delete theo user.
 
+### `reports`
+
+Luu report do user gui.
+
+Cot chinh:
+
+- `id`
+- `reporter_id`
+- `target_type`
+- `target_id`
+- `reason`
+- `details`
+- `status`
+- `created_at`
+- `reviewed_at`
+
+Rang buoc:
+
+- `target_type` la `user`, `post`, `comment` hoac `message`.
+- `status` la `pending`, `reviewing`, `resolved` hoac `dismissed`.
+- Cascade delete theo reporter.
+
 ### `notifications`
 
 Luu thong bao.
@@ -522,7 +570,15 @@ Frontend doc tu `VITE_API_URL`, mac dinh fallback la `http://localhost:5000/api`
 | POST | `/messages/conversations/:userId` | Tao hoac lay conversation voi user khac |
 | GET | `/messages/conversations/:conversationId/messages` | Lay messages trong conversation |
 | POST | `/messages/conversations/:conversationId/messages` | Gui message |
+| POST | `/messages/conversations/:conversationId/typing` | Phat trang thai typing |
 | PATCH | `/messages/conversations/:conversationId/read` | Mark conversation as read |
+
+### Reports
+
+| Method | Endpoint | Mo ta |
+| --- | --- | --- |
+| POST | `/reports` | Tao report cho user/post/comment/message |
+| GET | `/reports` | Xem report cua current user |
 
 ## 7. Cach Chay Local
 
@@ -644,10 +700,10 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 - Da co trusted Origin check cho unsafe request co auth cookie, nhung chua co CSRF token rieng.
 - Error response da co `message` va `code` o mot so middleware/route moi; cac route cu can duoc chuan hoa dan.
 - Save/bookmark post da co ban, nhung chua co collection/folder rieng.
-- Privacy post da co `public`/`followers`/`friends`/`only_me`, nhung chua co privacy matrix sau hon cho profile, comment, media.
+- Privacy post/profile da co `public`/`followers`/`friends`/`only_me`, nhung chua co privacy matrix sau hon cho comment va media.
 - Chua co albums/photos/videos/stories/reels.
 - Chua co Groups, Pages, Events, Marketplace.
-- Chua co moderation/report/admin dashboard.
+- Report da co ban, nhung chua co admin moderation dashboard va role/permission rieng.
 - Upload van la local filesystem, chua dung S3/Cloudinary/object storage.
 - Chua co test tu dong day du cho backend/frontend; backend moi co test validation auth/profile.
 - SQL migrations da co `schema_migrations` de track file da ap dung, nhung chua co rollback/down migration.
@@ -687,18 +743,18 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 - Friend request hai chieu: send, accept, reject, cancel, unfriend.
 - Song song giu follow neu muon kieu Facebook Follow.
 - Privacy per post/profile: public, friends, followers, only me.
-- Report user/post/comment.
+- Report admin dashboard va role moderator.
 - Gioi thieu chi tiet hon: work, education, relationship, birthday, social links.
 - Activity log ca nhan.
 
 ### Phase 3: Realtime
 
-- Notifications va Messenger 1-1 da co SSE realtime; tiep theo can reconnect/backoff tot hon va typing/presence.
+- Notifications va Messenger 1-1 da co SSE realtime; tiep theo can toi uu reconnect cho notification stream va luu presence lau dai hon.
 - Realtime comments/reactions tren post dang mo.
 - Group chat.
 - Typing indicator.
 - Read receipts.
-- Online/offline presence.
+- Presence theo phong/chat va device-level status.
 - Push notification ve sau neu co mobile/PWA.
 
 ### Phase 4: Media, Stories, Reels
@@ -734,7 +790,7 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 ### Phase 6: Moderation, Admin, Production
 
 - Admin dashboard.
-- Report queue cho user/post/comment/message.
+- Moderation queue day du cho report user/post/comment/message.
 - Content moderation workflow.
 - Rate limiting.
 - CSRF strategy ro rang cho cookie auth.

@@ -10,6 +10,7 @@ import {
   startConversation,
 } from "../api/message.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
 import { formatRelativeTime } from "../utils/time.js";
 
 function upsertMessage(messages, nextMessage) {
@@ -40,8 +41,13 @@ export default function MessagePopups() {
       minimized: false,
       unreadCount: 0,
     });
+    setError("");
 
-    await markConversationRead(conversation.id);
+    try {
+      await markConversationRead(conversation.id);
+    } catch {
+      // Read receipts are non-critical for the popup; keep the chat usable.
+    }
   }
 
   async function loadConversation(conversationId) {
@@ -96,54 +102,51 @@ export default function MessagePopups() {
       return;
     }
 
-    const eventSource = new EventSource(getMessageStreamUrl(), {
-      withCredentials: true,
-    });
+    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
+      listeners: {
+        message: async (event) => {
+          const nextMessage = JSON.parse(event.data);
+          const isMine = Number(nextMessage.senderId) === Number(user.id);
 
-    eventSource.addEventListener("message", async (event) => {
-      const nextMessage = JSON.parse(event.data);
-      const isMine = Number(nextMessage.senderId) === Number(user.id);
+          if (isMine || isMessagesPage) {
+            return;
+          }
 
-      if (isMine) {
-        return;
-      }
+          setPopup((currentPopup) => {
+            if (
+              currentPopup?.conversation?.id ===
+              Number(nextMessage.conversationId)
+            ) {
+              return {
+                ...currentPopup,
+                messages: upsertMessage(currentPopup.messages, nextMessage),
+                minimized: false,
+                unreadCount: currentPopup.minimized
+                  ? currentPopup.unreadCount + 1
+                  : 0,
+              };
+            }
 
-      if (isMessagesPage) {
-        return;
-      }
+            return currentPopup;
+          });
 
-      setPopup((currentPopup) => {
-        if (
-          currentPopup?.conversation?.id === Number(nextMessage.conversationId)
-        ) {
-          return {
-            ...currentPopup,
-            messages: upsertMessage(currentPopup.messages, nextMessage),
-            minimized: false,
-            unreadCount: currentPopup.minimized
-              ? currentPopup.unreadCount + 1
-              : 0,
-          };
-        }
+          if (popup?.conversation?.id === Number(nextMessage.conversationId)) {
+            await markConversationRead(nextMessage.conversationId);
+            return;
+          }
 
-        return currentPopup;
-      });
-
-      if (popup?.conversation?.id === Number(nextMessage.conversationId)) {
-        await markConversationRead(nextMessage.conversationId);
-        return;
-      }
-
-      try {
-        const data = await loadConversation(nextMessage.conversationId);
-        await openConversation(data.conversation, data.messages || []);
-      } catch {
-        // Ignore transient popup loading errors; the full messages page still works.
-      }
+          try {
+            const data = await loadConversation(nextMessage.conversationId);
+            await openConversation(data.conversation, data.messages || []);
+          } catch {
+            // Ignore transient popup loading errors; the full messages page still works.
+          }
+        },
+      },
     });
 
     return () => {
-      eventSource.close();
+      connection.close();
     };
   }, [isMessagesPage, popup?.conversation?.id, user]);
 
@@ -211,7 +214,11 @@ export default function MessagePopups() {
     );
 
     if (popup?.conversation?.id) {
-      await markConversationRead(popup.conversation.id);
+      try {
+        await markConversationRead(popup.conversation.id);
+      } catch {
+        // Read receipt sync can recover on the next successful request.
+      }
     }
   }
 

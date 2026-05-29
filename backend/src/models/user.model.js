@@ -5,6 +5,13 @@ import {
   getBlockStatusSelectSql,
 } from "./block.model.js";
 
+export const PROFILE_PRIVACY_VALUES = [
+  "public",
+  "followers",
+  "friends",
+  "only_me",
+];
+
 function getFriendshipStatusSelectSql(userAlias = "u") {
   return `
       (
@@ -67,8 +74,35 @@ function normalizePublicUser(user, currentUserId = null) {
     blockedByMe: Boolean(user.blockedByMe),
     hasBlockedMe: Boolean(user.hasBlockedMe),
     isBlocked: Boolean(user.blockedByMe || user.hasBlockedMe),
+    profilePrivacy: user.profilePrivacy || "public",
+    canViewProfile:
+      user.canViewProfile === undefined ? true : Boolean(user.canViewProfile),
     isMe: currentUserId ? Number(currentUserId) === Number(user.id) : false,
   };
+}
+
+function canViewerAccessProfile(user, currentUserId = null) {
+  if (currentUserId && Number(currentUserId) === Number(user.id)) {
+    return true;
+  }
+
+  if (Boolean(user.blockedByMe || user.hasBlockedMe)) {
+    return false;
+  }
+
+  if (user.profilePrivacy === "only_me") {
+    return false;
+  }
+
+  if (user.profilePrivacy === "friends") {
+    return user.friendshipStatus === "friends";
+  }
+
+  if (user.profilePrivacy === "followers") {
+    return Boolean(user.isFollowing) || user.friendshipStatus === "friends";
+  }
+
+  return true;
 }
 
 /**
@@ -114,6 +148,8 @@ export async function findUserById(id) {
         bio,
         location,
         website,
+        profile_privacy AS profilePrivacy,
+        last_seen_at AS lastSeenAt,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -138,6 +174,8 @@ export async function findAuthUserById(id) {
         bio,
         location,
         website,
+        profile_privacy AS profilePrivacy,
+        last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -169,6 +207,8 @@ export async function findUserByEmail(email) {
         bio,
         location,
         website,
+        profile_privacy AS profilePrivacy,
+        last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         password_hash AS passwordHash,
         created_at AS createdAt,
@@ -201,6 +241,8 @@ export async function findPublicUserByEmail(email) {
         bio,
         location,
         website,
+        profile_privacy AS profilePrivacy,
+        last_seen_at AS lastSeenAt,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -231,6 +273,8 @@ export async function findUserWithPasswordById(id) {
         bio,
         location,
         website,
+        profile_privacy AS profilePrivacy,
+        last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         password_hash AS passwordHash,
         created_at AS createdAt,
@@ -253,15 +297,27 @@ export async function findUserWithPasswordById(id) {
  */
 export async function updateUserProfile(
   userId,
-  { name, email, bio = null, location = null, website = null }
+  {
+    name,
+    email,
+    bio = null,
+    location = null,
+    website = null,
+    profilePrivacy = "public",
+  }
 ) {
   await query(
     `
       UPDATE users
-      SET name = ?, email = ?, bio = ?, location = ?, website = ?
+      SET name = ?,
+          email = ?,
+          bio = ?,
+          location = ?,
+          website = ?,
+          profile_privacy = ?
       WHERE id = ?
     `,
-    [name, email, bio, location, website, userId]
+    [name, email, bio, location, website, profilePrivacy, userId]
   );
 
   /**
@@ -341,6 +397,7 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
       u.bio,
       u.location,
       u.website,
+      u.profile_privacy AS profilePrivacy,
       u.created_at AS createdAt,
 
       (
@@ -388,7 +445,26 @@ export async function findPublicUserProfileById(userId, currentUserId = null) {
     return null;
   }
 
-  return normalizePublicUser(profile, currentUserId);
+  const canViewProfile = canViewerAccessProfile(profile, currentUserId);
+  const normalizedProfile = normalizePublicUser(
+    {
+      ...profile,
+      canViewProfile,
+    },
+    currentUserId
+  );
+
+  if (canViewProfile) {
+    return normalizedProfile;
+  }
+
+  return {
+    ...normalizedProfile,
+    bio: null,
+    location: null,
+    website: null,
+    postCount: 0,
+  };
 }
 
 export async function searchPublicUsers({
@@ -424,6 +500,7 @@ export async function searchPublicUsers({
       u.bio,
       u.location,
       u.website,
+      u.profile_privacy AS profilePrivacy,
       u.created_at AS createdAt,
 
       (

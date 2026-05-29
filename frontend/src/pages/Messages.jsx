@@ -8,9 +8,12 @@ import {
   getMessageStreamUrl,
   markConversationRead,
   sendMessage,
+  sendTypingStatus,
   startConversation,
 } from "../api/message.api.js";
+import ReportDialog from "../components/ReportDialog.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
 import { formatRelativeTime } from "../utils/time.js";
 
 function upsertMessage(messages, nextMessage) {
@@ -38,6 +41,7 @@ export default function Messages() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const bottomRef = useRef(null);
+  const typingStopTimeoutRef = useRef(null);
   const searchParamKey = searchParams.toString();
 
   const [conversations, setConversations] = useState([]);
@@ -48,6 +52,8 @@ export default function Messages() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [typingByConversation, setTypingByConversation] = useState({});
+  const [reportMessage, setReportMessage] = useState(null);
   const [error, setError] = useState("");
 
   const activeConversationId = activeConversation?.id || null;
@@ -73,6 +79,41 @@ export default function Messages() {
 
     setConversations(data.conversations || []);
     return data.conversations || [];
+  }
+
+  function updateConversationPresence(userId, isOnline) {
+    setConversations((currentConversations) =>
+      currentConversations.map((conversation) =>
+        Number(conversation.otherUser.id) === Number(userId)
+          ? {
+              ...conversation,
+              otherUser: {
+                ...conversation.otherUser,
+                isOnline,
+                lastSeenAt: isOnline
+                  ? conversation.otherUser.lastSeenAt
+                  : new Date().toISOString(),
+              },
+            }
+          : conversation
+      )
+    );
+
+    setActiveConversation((currentConversation) =>
+      currentConversation &&
+      Number(currentConversation.otherUser.id) === Number(userId)
+        ? {
+            ...currentConversation,
+            otherUser: {
+              ...currentConversation.otherUser,
+              isOnline,
+              lastSeenAt: isOnline
+                ? currentConversation.otherUser.lastSeenAt
+                : new Date().toISOString(),
+            },
+          }
+        : currentConversation
+    );
   }
 
   useEffect(() => {
@@ -177,6 +218,7 @@ export default function Messages() {
           return;
         }
 
+        setActiveConversation(data.conversation);
         setMessages(data.messages || []);
         await markConversationRead(activeConversationId);
         setConversations((currentConversations) =>
@@ -212,49 +254,94 @@ export default function Messages() {
       return;
     }
 
-    const eventSource = new EventSource(getMessageStreamUrl(), {
-      withCredentials: true,
-    });
+    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
+      listeners: {
+        message: async (event) => {
+          const nextMessage = JSON.parse(event.data);
+          const isActiveThread =
+            Number(nextMessage.conversationId) === Number(activeConversationId);
 
-    eventSource.addEventListener("message", async (event) => {
-      const nextMessage = JSON.parse(event.data);
-      const isActiveThread =
-        Number(nextMessage.conversationId) === Number(activeConversationId);
+          if (isActiveThread) {
+            setMessages((currentMessages) =>
+              upsertMessage(currentMessages, nextMessage)
+            );
 
-      if (isActiveThread) {
-        setMessages((currentMessages) =>
-          upsertMessage(currentMessages, nextMessage)
-        );
+            if (Number(nextMessage.senderId) !== Number(user.id)) {
+              await markConversationRead(nextMessage.conversationId);
+            }
+          }
 
-        if (Number(nextMessage.senderId) !== Number(user.id)) {
-          await markConversationRead(nextMessage.conversationId);
-        }
-      }
+          try {
+            const nextConversations = await loadConversations();
+            const refreshedActive = nextConversations.find(
+              (conversation) =>
+                Number(conversation.id) === Number(activeConversationId)
+            );
 
-      try {
-        const nextConversations = await loadConversations();
-        const refreshedActive = nextConversations.find(
-          (conversation) =>
-            Number(conversation.id) === Number(activeConversationId)
-        );
+            if (refreshedActive) {
+              setActiveConversation((currentConversation) =>
+                currentConversation?.id === refreshedActive.id
+                  ? {
+                      ...refreshedActive,
+                      unreadCount: isActiveThread
+                        ? 0
+                        : refreshedActive.unreadCount,
+                    }
+                  : currentConversation
+              );
+            }
+          } catch {
+            // Chat should keep receiving messages even if refreshing the list fails.
+          }
+        },
+        typing: (event) => {
+          const typingEvent = JSON.parse(event.data);
 
-        if (refreshedActive) {
+          if (Number(typingEvent.userId) === Number(user.id)) {
+            return;
+          }
+
+          setTypingByConversation((currentTyping) => ({
+            ...currentTyping,
+            [typingEvent.conversationId]: Boolean(typingEvent.isTyping),
+          }));
+        },
+        read: (event) => {
+          const readEvent = JSON.parse(event.data);
+
           setActiveConversation((currentConversation) =>
-            currentConversation?.id === refreshedActive.id
+            currentConversation &&
+            Number(currentConversation.id) === Number(readEvent.conversationId)
               ? {
-                  ...refreshedActive,
-                  unreadCount: isActiveThread ? 0 : refreshedActive.unreadCount,
+                  ...currentConversation,
+                  peerLastReadMessageId: readEvent.lastReadMessageId,
                 }
               : currentConversation
           );
-        }
-      } catch {
-        // Chat should keep receiving messages even if refreshing the list fails.
-      }
+
+          setConversations((currentConversations) =>
+            currentConversations.map((conversation) =>
+              Number(conversation.id) === Number(readEvent.conversationId)
+                ? {
+                    ...conversation,
+                    peerLastReadMessageId: readEvent.lastReadMessageId,
+                  }
+                : conversation
+            )
+          );
+        },
+        presence: (event) => {
+          const presenceEvent = JSON.parse(event.data);
+          updateConversationPresence(
+            presenceEvent.userId,
+            Boolean(presenceEvent.isOnline)
+          );
+        },
+      },
     });
 
     return () => {
-      eventSource.close();
+      connection.close();
     };
   }, [activeConversationId, user]);
 
@@ -263,6 +350,16 @@ export default function Messages() {
       block: "end",
     });
   }, [messages, loadingMessages]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(typingStopTimeoutRef.current);
+
+      if (activeConversationId) {
+        sendTypingStatus(activeConversationId, false).catch(() => {});
+      }
+    };
+  }, [activeConversationId]);
 
   function handleSelectConversation(conversation) {
     setActiveConversation(conversation);
@@ -287,6 +384,7 @@ export default function Messages() {
         upsertMessage(currentMessages, data.message)
       );
       setMessageInput("");
+      sendTypingStatus(activeConversationId, false).catch(() => {});
       await loadConversations();
     } catch (error) {
       setError(error.message);
@@ -300,6 +398,28 @@ export default function Messages() {
     submitMessage();
   }
 
+  function handleMessageInputChange(event) {
+    const nextValue = event.target.value;
+    setMessageInput(nextValue);
+
+    if (!activeConversationId) {
+      return;
+    }
+
+    window.clearTimeout(typingStopTimeoutRef.current);
+
+    if (!nextValue.trim()) {
+      sendTypingStatus(activeConversationId, false).catch(() => {});
+      return;
+    }
+
+    sendTypingStatus(activeConversationId, true).catch(() => {});
+
+    typingStopTimeoutRef.current = window.setTimeout(() => {
+      sendTypingStatus(activeConversationId, false).catch(() => {});
+    }, 1500);
+  }
+
   function handleComposerKeyDown(event) {
     if (event.key !== "Enter" || event.shiftKey) {
       return;
@@ -308,6 +428,24 @@ export default function Messages() {
     event.preventDefault();
     submitMessage();
   }
+
+  const activePeerTyping = Boolean(typingByConversation[activeConversationId]);
+  const peerLastReadMessageId = Number(
+    activeConversation?.peerLastReadMessageId || 0
+  );
+  const lastReadOwnMessageId = messages
+    .filter(
+      (message) =>
+        Number(message.senderId) === Number(user.id) &&
+        Number(message.id) <= peerLastReadMessageId
+    )
+    .map((message) => Number(message.id))
+    .at(-1);
+  const activePeerStatus = activeOtherUser?.isOnline
+    ? "Đang hoạt động"
+    : activeOtherUser?.lastSeenAt
+      ? `Hoạt động ${formatRelativeTime(activeOtherUser.lastSeenAt)}`
+      : "Offline";
 
   return (
     <div className="messages-page">
@@ -411,6 +549,17 @@ export default function Messages() {
                 )}
                 <div>
                   <h2>{activeOtherUser.name}</h2>
+                  <p className="messages-peer-presence">
+                    <span
+                      className={
+                        activeOtherUser.isOnline
+                          ? "presence-dot online"
+                          : "presence-dot"
+                      }
+                      aria-hidden="true"
+                    />
+                    {activePeerTyping ? "Đang nhập..." : activePeerStatus}
+                  </p>
                   <Link to={`/users/${activeOtherUser.id}`}>Xem hồ sơ</Link>
                 </div>
               </div>
@@ -450,9 +599,31 @@ export default function Messages() {
                         <p>{message.content}</p>
                         <span>{formatRelativeTime(message.createdAt)}</span>
                       </div>
+                      {!isMine && (
+                        <button
+                          className="message-report-button"
+                          type="button"
+                          onClick={() => setReportMessage(message)}
+                          aria-label="Báo cáo tin nhắn"
+                          title="Báo cáo tin nhắn"
+                        >
+                          ...
+                        </button>
+                      )}
+                      {isMine &&
+                        Number(message.id) === Number(lastReadOwnMessageId) && (
+                          <span className="message-read-receipt">Đã xem</span>
+                        )}
                     </div>
                   );
                 })
+              )}
+              {activePeerTyping && (
+                <div className="message-row">
+                  <div className="message-bubble typing-indicator">
+                    <span>Đang nhập...</span>
+                  </div>
+                </div>
               )}
               <div ref={bottomRef} />
             </div>
@@ -460,7 +631,7 @@ export default function Messages() {
             <form className="message-composer" onSubmit={handleSendMessage}>
               <textarea
                 value={messageInput}
-                onChange={(event) => setMessageInput(event.target.value)}
+                onChange={handleMessageInputChange}
                 onKeyDown={handleComposerKeyDown}
                 placeholder="Aa"
                 maxLength={2000}
@@ -482,6 +653,14 @@ export default function Messages() {
           </div>
         )}
       </section>
+
+      <ReportDialog
+        open={Boolean(reportMessage)}
+        targetType="message"
+        targetId={reportMessage?.id}
+        title="Báo cáo tin nhắn"
+        onClose={() => setReportMessage(null)}
+      />
     </div>
   );
 }

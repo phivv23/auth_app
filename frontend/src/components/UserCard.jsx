@@ -8,12 +8,7 @@ import {
   sendFriendRequest,
   unfriendUser,
 } from "../api/friend.api.js";
-import {
-  blockUser,
-  followUser,
-  unblockUser,
-  unfollowUser,
-} from "../api/user.api";
+import { followUser, unfollowUser } from "../api/user.api";
 import { useAuth } from "../context/useAuth";
 import { openMessagePopup } from "../utils/messagePopup.js";
 
@@ -108,41 +103,6 @@ export default function UserCard({ user, onUserUpdated }) {
     openMessagePopup(user.id);
   }
 
-  async function handleToggleBlock() {
-    if (!currentUser) {
-      navigate("/login");
-      return;
-    }
-
-    if (user.isMe) {
-      return;
-    }
-
-    if (
-      !user.blockedByMe &&
-      !window.confirm(
-        "Block user này? Bạn sẽ hủy follow/kết bạn và hai bên sẽ không thấy nội dung hay nhắn tin với nhau."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      setActionError("");
-
-      const data = user.blockedByMe
-        ? await unblockUser(user.id)
-        : await blockUser(user.id);
-
-      onUserUpdated?.(data.profile);
-    } catch (error) {
-      setActionError(error.message);
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
   const avatarUrl = getFileUrl(user.avatarUrl);
 
   return (
@@ -176,13 +136,7 @@ export default function UserCard({ user, onUserUpdated }) {
       {!user.isMe && (
         <div className="user-card-actions">
           {user.blockedByMe ? (
-            <button
-              type="button"
-              onClick={handleToggleBlock}
-              disabled={actionLoading}
-            >
-              {actionLoading ? "Đang xử lý..." : "Bỏ block"}
-            </button>
+            <span className="muted-text">Đã block</span>
           ) : (
             <>
               {!user.hasBlockedMe && (
@@ -201,14 +155,6 @@ export default function UserCard({ user, onUserUpdated }) {
                 </>
               )}
 
-              <button
-                className="danger"
-                type="button"
-                onClick={handleToggleBlock}
-                disabled={actionLoading}
-              >
-                {actionLoading ? "Đang xử lý..." : "Block"}
-              </button>
             </>
           )}
         </div>

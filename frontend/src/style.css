@@ -734,7 +734,51 @@ textarea {
 .profile-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   padding-bottom: 10px;
+}
+
+.profile-more-menu {
+  position: relative;
+}
+
+.profile-more-button {
+  min-width: 44px;
+}
+
+.profile-more-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  padding: 6px;
+}
+
+.profile-more-popover button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 10px 12px;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.profile-more-popover button:hover {
+  background: #f2f4f7;
+}
+
+.profile-more-popover button.danger {
+  color: #b42318;
 }
 
 .profile-error {
@@ -1593,6 +1637,23 @@ textarea {
   text-decoration: none;
 }
 
+.comment-report-button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  margin-left: 8px;
+  padding: 0;
+}
+
+.comment-report-button:hover {
+  color: #b42318;
+}
+
 .social-post-title {
   margin: 0;
   font-size: 18px;
@@ -2242,6 +2303,64 @@ textarea {
 .user-card-actions .danger {
   background: #dc2626;
   color: #fff;
+}
+
+.report-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 16px;
+}
+
+.report-dialog {
+  width: min(460px, 100%);
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.3);
+}
+
+.report-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.report-dialog h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.report-dialog header button {
+  border: 0;
+  border-radius: 999px;
+  background: #f2f4f7;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  width: 34px;
+  height: 34px;
+}
+
+.report-dialog form,
+.report-dialog label {
+  display: grid;
+  gap: 10px;
+}
+
+.report-dialog textarea {
+  resize: vertical;
+}
+
+.report-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .friends-page {
@@ -3112,6 +3231,26 @@ textarea {
   font-size: 17px;
 }
 
+.messages-peer-presence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #98a2b3;
+}
+
+.presence-dot.online {
+  background: #12b76a;
+}
+
 .message-thread {
   background:
     linear-gradient(#fff, #fff) padding-box,
@@ -3163,6 +3302,35 @@ textarea {
 
 .message-row.mine .message-bubble {
   background: #0084ff;
+}
+
+.message-report-button {
+  align-self: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.message-report-button:hover {
+  background: #f2f4f7;
+  color: #b42318;
+}
+
+.message-read-receipt {
+  align-self: end;
+  color: #667085;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.typing-indicator {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .message-composer {
