@@ -6,8 +6,10 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { findCommentById } from "../models/comment.model.js";
 import { findMessageByIdForUser } from "../models/message.model.js";
 import { findPostById } from "../models/post.model.js";
+import { createNotification } from "../models/notification.model.js";
 import {
   createReport,
+  findReportById,
   findReports,
   getReportStatusSummary,
   updateReportStatus,
@@ -164,13 +166,24 @@ router.patch(
         );
       }
 
+      const existingReport = await findReportById(reportId);
+
+      if (!existingReport) {
+        return sendError(res, 404, "Không tìm thấy báo cáo.", "REPORT_NOT_FOUND");
+      }
+
       const report = await updateReportStatus(reportId, validation.value.status, {
         reviewerId: req.user.id,
         resolutionNote: validation.value.resolutionNote,
       });
 
-      if (!report) {
-        return sendError(res, 404, "Không tìm thấy báo cáo.", "REPORT_NOT_FOUND");
+      if (report.status !== existingReport.status) {
+        await createNotification({
+          recipientId: report.reporterId,
+          actorId: req.user.id,
+          type: "report_status_update",
+          reportId: report.id,
+        });
       }
 
       return res.json({

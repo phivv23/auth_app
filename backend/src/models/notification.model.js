@@ -8,6 +8,7 @@ const NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES = {
   post_like: 60,
   post_comment: 10,
 };
+const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set(["report_status_update"]);
 
 function getDedupeWindowInMinutes(type) {
   return NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES[type] || 15;
@@ -24,17 +25,22 @@ export async function findNotificationById(notificationId) {
       n.post_id AS postId,
       n.comment_id AS commentId,
       n.conversation_id AS conversationId,
+      n.report_id AS reportId,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 
       actor.name AS actorName,
       actor.avatar_url AS actorAvatarUrl,
 
-      p.title AS postTitle
+      p.title AS postTitle,
+      r.status AS reportStatus,
+      r.target_type AS reportTargetType,
+      r.reason AS reportReason
 
     FROM notifications n
     LEFT JOIN users actor ON actor.id = n.actor_id
     LEFT JOIN posts p ON p.id = n.post_id
+    LEFT JOIN reports r ON r.id = n.report_id
     WHERE n.id = ?
     LIMIT 1
     `,
@@ -60,6 +66,7 @@ export async function createNotification({
   postId = null,
   commentId = null,
   conversationId = null,
+  reportId = null,
 }) {
   if (type === "message") {
     return null;
@@ -69,31 +76,35 @@ export async function createNotification({
     return null;
   }
 
-  const existingNotifications = await query(
-    `
-    SELECT id
-    FROM notifications
-    WHERE recipient_id = ?
-      AND actor_id = ?
-      AND type = ?
-      AND post_id <=> ?
-      AND conversation_id <=> ?
-      AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? MINUTE)
-    ORDER BY created_at DESC
-    LIMIT 1
-    `,
-    [
-      recipientId,
-      actorId,
-      type,
-      postId,
-      conversationId,
-      getDedupeWindowInMinutes(type),
-    ]
-  );
+  if (!NOTIFICATION_TYPES_WITHOUT_DEDUPE.has(type)) {
+    const existingNotifications = await query(
+      `
+      SELECT id
+      FROM notifications
+      WHERE recipient_id = ?
+        AND actor_id = ?
+        AND type = ?
+        AND post_id <=> ?
+        AND conversation_id <=> ?
+        AND report_id <=> ?
+        AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? MINUTE)
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [
+        recipientId,
+        actorId,
+        type,
+        postId,
+        conversationId,
+        reportId,
+        getDedupeWindowInMinutes(type),
+      ]
+    );
 
-  if (existingNotifications[0]) {
-    return findNotificationById(existingNotifications[0].id);
+    if (existingNotifications[0]) {
+      return findNotificationById(existingNotifications[0].id);
+    }
   }
 
   const result = await query(
@@ -104,11 +115,12 @@ export async function createNotification({
       type,
       post_id,
       comment_id,
-      conversation_id
+      conversation_id,
+      report_id
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    [recipientId, actorId, type, postId, commentId, conversationId]
+    [recipientId, actorId, type, postId, commentId, conversationId, reportId]
   );
 
   const notification = await findNotificationById(result.insertId);
@@ -145,17 +157,22 @@ export async function findNotificationsByUserId({
       n.post_id AS postId,
       n.comment_id AS commentId,
       n.conversation_id AS conversationId,
+      n.report_id AS reportId,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 
       actor.name AS actorName,
       actor.avatar_url AS actorAvatarUrl,
 
-      p.title AS postTitle
+      p.title AS postTitle,
+      r.status AS reportStatus,
+      r.target_type AS reportTargetType,
+      r.reason AS reportReason
 
     FROM notifications n
     LEFT JOIN users actor ON actor.id = n.actor_id
     LEFT JOIN posts p ON p.id = n.post_id
+    LEFT JOIN reports r ON r.id = n.report_id
     WHERE n.recipient_id = ?
       AND n.type <> 'message'
     ORDER BY n.created_at DESC
