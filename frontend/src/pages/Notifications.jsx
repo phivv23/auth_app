@@ -12,6 +12,13 @@ import { formatRelativeTime } from "../utils/time.js";
 
 const POLL_INTERVAL_MS = 5000;
 
+const reportStatusLabels = {
+  pending: "đang chờ xử lý",
+  reviewing: "đang được xem xét",
+  resolved: "đã được xử lý",
+  dismissed: "đã được bỏ qua",
+};
+
 function getNotificationText(notification) {
   const actorName = notification.actorName || "Một người dùng";
 
@@ -39,6 +46,12 @@ function getNotificationText(notification) {
     return `${actorName} đã nhắn tin cho bạn`;
   }
 
+  if (notification.type === "report_status_update") {
+    return `Báo cáo của bạn ${
+      reportStatusLabels[notification.reportStatus] || "đã được cập nhật"
+    }`;
+  }
+
   return "Bạn có thông báo mới";
 }
 
@@ -57,6 +70,12 @@ function getNotificationTarget(notification) {
 
   if (notification.type === "message" && notification.conversationId) {
     return `/messages?conversationId=${notification.conversationId}`;
+  }
+
+  if (notification.type === "report_status_update") {
+    return notification.reportId
+      ? `/reports?reportId=${notification.reportId}`
+      : "/reports";
   }
 
   if (notification.postId) {

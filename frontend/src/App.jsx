@@ -33,6 +33,7 @@ import Friends from "./pages/Friends.jsx";
 import Messages from "./pages/Messages.jsx";
 import SavedPosts from "./pages/SavedPosts.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
+import MyReports from "./pages/MyReports.jsx";
 
 const developingItems = [
   { icon: "✺", label: "Meta AI" },
@@ -155,6 +156,12 @@ function Navbar({ onDeveloping }) {
                     onClick={() => setProfileMenuOpen(false)}
                   >
                     My Posts
+                  </Link>
+                  <Link
+                    to="/reports"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    Reports
                   </Link>
                   <Link
                     to="/dashboard"
@@ -338,6 +345,7 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/saved" element={<SavedPosts />} />
               <Route path="/my-posts" element={<MyPosts />} />
+              <Route path="/reports" element={<MyReports />} />
               <Route path="/posts/create" element={<CreatePost />} />
               <Route path="/posts/:id/edit" element={<EditPost />} />
               <Route path="/admin/reports" element={<AdminReports />} />

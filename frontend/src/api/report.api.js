@@ -17,6 +17,19 @@ export function createReport({
   });
 }
 
+export function getMyReports({ page = 1, limit = 20, status = "" } = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  return apiFetch(`/reports?${params.toString()}`);
+}
+
 export function getAdminReports({
   page = 1,
   limit = 20,
