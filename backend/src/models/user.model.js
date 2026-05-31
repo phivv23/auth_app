@@ -127,7 +127,7 @@ export async function createUser({ name, email, passwordHash }) {
    */
   const insertedId = result.insertId;
 
-  return findUserById(insertedId);
+  return findAuthUserById(insertedId);
 }
 
 /**
@@ -177,6 +177,7 @@ export async function findAuthUserById(id) {
         profile_privacy AS profilePrivacy,
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
+        role,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -210,6 +211,7 @@ export async function findUserByEmail(email) {
         profile_privacy AS profilePrivacy,
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
+        role,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -276,6 +278,7 @@ export async function findUserWithPasswordById(id) {
         profile_privacy AS profilePrivacy,
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
+        role,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt

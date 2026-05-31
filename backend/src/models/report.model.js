@@ -20,13 +20,94 @@ function normalizeReport(row) {
     reporterName: row.reporterName || null,
     targetType: row.targetType,
     targetId: row.targetId,
+    targetPreview: row.targetPreview || "",
+    targetOwnerName: row.targetOwnerName || null,
     reason: row.reason,
     details: row.details || "",
     status: row.status,
+    reviewedBy: row.reviewedBy || null,
+    reviewerName: row.reviewerName || null,
+    resolutionNote: row.resolutionNote || "",
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     reviewedAt: row.reviewedAt || null,
   };
+}
+
+function getReportSelectSql() {
+  return `
+      r.id,
+      r.reporter_id AS reporterId,
+      reporter.name AS reporterName,
+      r.target_type AS targetType,
+      r.target_id AS targetId,
+      CASE r.target_type
+        WHEN 'user' THEN (
+          SELECT target_user.name
+          FROM users target_user
+          WHERE target_user.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'post' THEN (
+          SELECT COALESCE(NULLIF(target_post.title, ''), LEFT(target_post.content, 160))
+          FROM posts target_post
+          WHERE target_post.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'comment' THEN (
+          SELECT LEFT(target_comment.content, 160)
+          FROM comments target_comment
+          WHERE target_comment.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'message' THEN (
+          SELECT LEFT(target_message.content, 160)
+          FROM messages target_message
+          WHERE target_message.id = r.target_id
+          LIMIT 1
+        )
+        ELSE NULL
+      END AS targetPreview,
+      CASE r.target_type
+        WHEN 'user' THEN (
+          SELECT target_user.name
+          FROM users target_user
+          WHERE target_user.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'post' THEN (
+          SELECT post_author.name
+          FROM posts target_post
+          JOIN users post_author ON post_author.id = target_post.user_id
+          WHERE target_post.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'comment' THEN (
+          SELECT comment_author.name
+          FROM comments target_comment
+          JOIN users comment_author ON comment_author.id = target_comment.user_id
+          WHERE target_comment.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'message' THEN (
+          SELECT message_author.name
+          FROM messages target_message
+          JOIN users message_author ON message_author.id = target_message.sender_id
+          WHERE target_message.id = r.target_id
+          LIMIT 1
+        )
+        ELSE NULL
+      END AS targetOwnerName,
+      r.reason,
+      r.details,
+      r.status,
+      r.reviewed_by AS reviewedBy,
+      reviewer.name AS reviewerName,
+      r.resolution_note AS resolutionNote,
+      r.created_at AS createdAt,
+      r.updated_at AS updatedAt,
+      r.reviewed_at AS reviewedAt
+  `;
 }
 
 export function validateReportInput(input = {}) {
@@ -74,6 +155,39 @@ export function validateReportInput(input = {}) {
   };
 }
 
+export function validateReportStatusInput(input = {}) {
+  const status = String(input.status || "").trim();
+  const resolutionNote = String(input.resolutionNote || "").trim();
+  const fields = {};
+
+  if (!REPORT_STATUSES.includes(status)) {
+    fields.status = "Trạng thái báo cáo không hợp lệ.";
+  }
+
+  if (resolutionNote.length > 2000) {
+    fields.resolutionNote = "Ghi chú xử lý không được vượt quá 2000 ký tự.";
+  }
+
+  if (Object.keys(fields).length > 0) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: Object.values(fields)[0],
+        fields,
+      },
+    };
+  }
+
+  return {
+    value: {
+      status,
+      resolutionNote: resolutionNote || null,
+    },
+    error: null,
+  };
+}
+
 export async function createReport({
   reporterId,
   targetType,
@@ -102,19 +216,10 @@ export async function findReportById(reportId) {
   const rows = await query(
     `
     SELECT
-      r.id,
-      r.reporter_id AS reporterId,
-      reporter.name AS reporterName,
-      r.target_type AS targetType,
-      r.target_id AS targetId,
-      r.reason,
-      r.details,
-      r.status,
-      r.created_at AS createdAt,
-      r.updated_at AS updatedAt,
-      r.reviewed_at AS reviewedAt
+      ${getReportSelectSql()}
     FROM reports r
     JOIN users reporter ON reporter.id = r.reporter_id
+    LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
     WHERE r.id = ?
     LIMIT 1
     `,
@@ -127,6 +232,7 @@ export async function findReportById(reportId) {
 export async function findReports({
   reporterId = null,
   status = null,
+  targetType = null,
   page = 1,
   limit = 20,
 } = {}) {
@@ -149,25 +255,21 @@ export async function findReports({
     params.push(status);
   }
 
+  if (targetType && REPORT_TARGET_TYPES.includes(targetType)) {
+    whereParts.push("r.target_type = ?");
+    params.push(targetType);
+  }
+
   const whereSql =
     whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
   const rows = await query(
     `
     SELECT
-      r.id,
-      r.reporter_id AS reporterId,
-      reporter.name AS reporterName,
-      r.target_type AS targetType,
-      r.target_id AS targetId,
-      r.reason,
-      r.details,
-      r.status,
-      r.created_at AS createdAt,
-      r.updated_at AS updatedAt,
-      r.reviewed_at AS reviewedAt
+      ${getReportSelectSql()}
     FROM reports r
     JOIN users reporter ON reporter.id = r.reporter_id
+    LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
     ${whereSql}
     ORDER BY r.created_at DESC, r.id DESC
     LIMIT ${safeLimit} OFFSET ${offset}
@@ -195,7 +297,33 @@ export async function findReports({
   };
 }
 
-export async function updateReportStatus(reportId, status) {
+export async function getReportStatusSummary() {
+  const rows = await query(
+    `
+    SELECT status, COUNT(*) AS total
+    FROM reports
+    GROUP BY status
+    `
+  );
+
+  const summary = Object.fromEntries(
+    REPORT_STATUSES.map((status) => [status, 0])
+  );
+
+  for (const row of rows) {
+    if (REPORT_STATUSES.includes(row.status)) {
+      summary[row.status] = Number(row.total || 0);
+    }
+  }
+
+  return summary;
+}
+
+export async function updateReportStatus(
+  reportId,
+  status,
+  { reviewerId = null, resolutionNote = null } = {}
+) {
   if (!REPORT_STATUSES.includes(status)) {
     return null;
   }
@@ -204,13 +332,29 @@ export async function updateReportStatus(reportId, status) {
     `
     UPDATE reports
     SET status = ?,
+        reviewed_by = CASE
+          WHEN ? = 'pending' THEN NULL
+          ELSE ?
+        END,
+        resolution_note = CASE
+          WHEN ? = 'pending' THEN NULL
+          ELSE ?
+        END,
         reviewed_at = CASE
           WHEN ? IN ('resolved', 'dismissed') THEN CURRENT_TIMESTAMP
-          ELSE reviewed_at
+          ELSE NULL
         END
     WHERE id = ?
     `,
-    [status, status, reportId]
+    [
+      status,
+      status,
+      reviewerId,
+      status,
+      resolutionNote,
+      status,
+      reportId,
+    ]
   );
 
   return findReportById(reportId);

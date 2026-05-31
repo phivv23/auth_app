@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireAdmin } from "../middleware/requireAdmin.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { findCommentById } from "../models/comment.model.js";
 import { findMessageByIdForUser } from "../models/message.model.js";
@@ -8,7 +9,10 @@ import { findPostById } from "../models/post.model.js";
 import {
   createReport,
   findReports,
+  getReportStatusSummary,
+  updateReportStatus,
   validateReportInput,
+  validateReportStatusInput,
 } from "../models/report.model.js";
 import { findUserById } from "../models/user.model.js";
 import { sendError } from "../utils/http.js";
@@ -21,6 +25,16 @@ const reportRateLimit = rateLimit({
   keyGenerator: (req) => req.user?.id || req.ip,
   message: "Bạn gửi báo cáo quá nhanh. Vui lòng thử lại sau.",
 });
+
+function normalizePositiveInt(value, fallback) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return fallback;
+  }
+
+  return number;
+}
 
 async function assertReportTargetExists({ targetType, targetId, currentUserId }) {
   if (targetType === "user") {
@@ -97,10 +111,83 @@ router.post("/", requireAuth, reportRateLimit, async (req, res, next) => {
   }
 });
 
+router.get("/admin", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 20);
+    const limit = Math.min(requestedLimit, 50);
+    const status = req.query.status ? String(req.query.status) : null;
+    const targetType = req.query.targetType
+      ? String(req.query.targetType)
+      : null;
+
+    const [result, summary] = await Promise.all([
+      findReports({
+        status,
+        targetType,
+        page,
+        limit,
+      }),
+      getReportStatusSummary(),
+    ]);
+
+    return res.json({
+      ...result,
+      summary,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch(
+  "/admin/:id/status",
+  requireAuth,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const reportId = normalizePositiveInt(req.params.id, null);
+
+      if (!reportId) {
+        return sendError(res, 400, "Report id không hợp lệ.", "INVALID_REPORT_ID");
+      }
+
+      const validation = validateReportStatusInput(req.body);
+
+      if (validation.error) {
+        return sendError(
+          res,
+          400,
+          validation.error.message,
+          validation.error.code,
+          validation.error.fields
+        );
+      }
+
+      const report = await updateReportStatus(reportId, validation.value.status, {
+        reviewerId: req.user.id,
+        resolutionNote: validation.value.resolutionNote,
+      });
+
+      if (!report) {
+        return sendError(res, 404, "Không tìm thấy báo cáo.", "REPORT_NOT_FOUND");
+      }
+
+      return res.json({
+        message: "Đã cập nhật trạng thái báo cáo.",
+        report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.get("/", requireAuth, async (req, res, next) => {
   try {
-    const page = Number(req.query.page || 1);
-    const limit = Number(req.query.limit || 20);
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 20);
+    const limit = Math.min(requestedLimit, 50);
     const status = req.query.status ? String(req.query.status) : null;
 
     const result = await findReports({

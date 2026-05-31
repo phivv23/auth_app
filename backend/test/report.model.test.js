@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { validateReportInput } from "../src/models/report.model.js";
+import {
+  validateReportInput,
+  validateReportStatusInput,
+} from "../src/models/report.model.js";
 
 describe("report validation", () => {
   it("normalizes valid report input", () => {
@@ -33,6 +36,32 @@ describe("report validation", () => {
       "reason",
       "targetId",
       "targetType",
+    ]);
+  });
+
+  it("normalizes valid status updates", () => {
+    const result = validateReportStatusInput({
+      status: "resolved",
+      resolutionNote: "  handled by moderator  ",
+    });
+
+    assert.equal(result.error, null);
+    assert.deepEqual(result.value, {
+      status: "resolved",
+      resolutionNote: "handled by moderator",
+    });
+  });
+
+  it("rejects invalid status updates", () => {
+    const result = validateReportStatusInput({
+      status: "closed",
+      resolutionNote: "x".repeat(2001),
+    });
+
+    assert.equal(result.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(Object.keys(result.error.fields).sort(), [
+      "resolutionNote",
+      "status",
     ]);
   });
 });

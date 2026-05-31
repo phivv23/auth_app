@@ -44,6 +44,7 @@ function toPublicUser(user) {
     bio: user.bio,
     location: user.location,
     website: user.website,
+    role: user.role || "user",
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
