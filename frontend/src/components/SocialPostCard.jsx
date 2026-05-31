@@ -3,12 +3,14 @@ import { Link, useNavigate } from "react-router";
 
 import {
   createComment,
+  deleteComment,
   deletePost,
   getPostComments,
   getPostReactions,
   sharePost,
   togglePostBookmark,
   togglePostLike,
+  updateComment,
 } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
 import ReportDialog from "./ReportDialog.jsx";
@@ -107,6 +109,11 @@ export default function SocialPostCard({
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentInput, setCommentInput] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [commentEditInput, setCommentEditInput] = useState("");
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState(null);
+  const [commentActionError, setCommentActionError] = useState("");
   const [reacting, setReacting] = useState(false);
   const [reactionPanelOpen, setReactionPanelOpen] = useState(false);
   const [reactionUsers, setReactionUsers] = useState([]);
@@ -142,6 +149,9 @@ export default function SocialPostCard({
   const sharedPost = post.sharedPost;
   const sharedMedia = getPostMedia(sharedPost);
   const { isEdited, displayTime } = getEditedState(post);
+  const shareAuthorAvatarUrl = getFileUrl(user?.avatarUrl);
+  const shareContentLength = shareContent.length;
+  const canSubmitShare = !shareSubmitting && shareContentLength <= 5000;
 
   useEffect(() => {
     if (defaultCommentsOpen) {
@@ -261,6 +271,7 @@ export default function SocialPostCard({
     try {
       setCommentSubmitting(true);
       setError("");
+      setCommentActionError("");
       setNotice("");
 
       const data = await createComment(post.id, content);
@@ -278,6 +289,115 @@ export default function SocialPostCard({
       setError(error.message);
     } finally {
       setCommentSubmitting(false);
+    }
+  }
+
+  function handleStartEditComment(comment) {
+    setEditingCommentId(comment.id);
+    setCommentEditInput(comment.content || "");
+    setCommentActionError("");
+    setError("");
+    setNotice("");
+  }
+
+  function handleCancelEditComment() {
+    if (commentSaving) {
+      return;
+    }
+
+    setEditingCommentId(null);
+    setCommentEditInput("");
+    setCommentActionError("");
+  }
+
+  async function handleUpdateComment(event, comment) {
+    event.preventDefault();
+
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const nextContent = commentEditInput.trim();
+    const currentContent = String(comment.content || "").trim();
+
+    if (!nextContent || nextContent === currentContent || commentSaving) {
+      return;
+    }
+
+    try {
+      setCommentSaving(true);
+      setError("");
+      setCommentActionError("");
+      setNotice("");
+
+      const data = await updateComment(comment.id, nextContent);
+      const updatedComment = data.comment || {
+        ...comment,
+        content: nextContent,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setComments((currentComments) =>
+        currentComments.map((currentComment) =>
+          currentComment.id === comment.id ? updatedComment : currentComment
+        )
+      );
+      setEditingCommentId(null);
+      setCommentEditInput("");
+      setNotice("Đã cập nhật bình luận.");
+    } catch (error) {
+      setCommentActionError(error.message);
+    } finally {
+      setCommentSaving(false);
+    }
+  }
+
+  async function handleDeleteComment(comment) {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (deletingCommentId) {
+      return;
+    }
+
+    const confirmed = window.confirm("Bạn chắc chắn muốn xóa bình luận này?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingCommentId(comment.id);
+      setError("");
+      setCommentActionError("");
+      setNotice("");
+
+      await deleteComment(comment.id);
+
+      setComments((currentComments) =>
+        currentComments.filter((currentComment) => currentComment.id !== comment.id)
+      );
+
+      if (editingCommentId === comment.id) {
+        setEditingCommentId(null);
+        setCommentEditInput("");
+      }
+
+      onPostUpdated?.({
+        ...post,
+        commentCount: Math.max(
+          0,
+          Number(post.commentCount || comments.length || 0) - 1
+        ),
+      });
+      setNotice("Đã xóa bình luận.");
+    } catch (error) {
+      setCommentActionError(error.message);
+    } finally {
+      setDeletingCommentId(null);
     }
   }
 
@@ -308,11 +428,24 @@ export default function SocialPostCard({
     setNotice("");
   }
 
+  function handleCloseSharePanel() {
+    if (shareSubmitting) {
+      return;
+    }
+
+    setSharePanelOpen(false);
+    setError("");
+  }
+
   async function handleShareSubmit(event) {
     event.preventDefault();
 
     if (!user) {
       navigate("/login");
+      return;
+    }
+
+    if (!canSubmitShare) {
       return;
     }
 
@@ -667,34 +800,83 @@ export default function SocialPostCard({
 
       {sharePanelOpen && (
         <form className="share-panel" onSubmit={handleShareSubmit}>
+          <div className="share-panel-header">
+            {shareAuthorAvatarUrl ? (
+              <img
+                className="share-panel-avatar"
+                src={shareAuthorAvatarUrl}
+                alt={user?.name}
+              />
+            ) : (
+              <div className="share-panel-avatar-placeholder">
+                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+            )}
+
+            <div className="share-panel-author">
+              <strong>{user?.name || "Tài khoản của bạn"}</strong>
+              <select
+                value={sharePrivacy}
+                onChange={(event) => setSharePrivacy(event.target.value)}
+                aria-label="Quyền xem bài chia sẻ"
+              >
+                <option value="public">Công khai</option>
+                <option value="followers">Người theo dõi</option>
+                <option value="friends">Bạn bè</option>
+                <option value="only_me">Chỉ mình tôi</option>
+              </select>
+            </div>
+          </div>
+
           <textarea
             value={shareContent}
             onChange={(event) => setShareContent(event.target.value)}
-            placeholder="Viết gì đó khi chia sẻ..."
+            placeholder="Viết gì đó về bài viết này..."
             maxLength={5000}
           />
 
-          <div className="share-panel-footer">
-            <select
-              value={sharePrivacy}
-              onChange={(event) => setSharePrivacy(event.target.value)}
-            >
-              <option value="public">Công khai</option>
-              <option value="followers">Người theo dõi</option>
-              <option value="friends">Bạn bè</option>
-              <option value="only_me">Chỉ mình tôi</option>
-            </select>
+          <div className="share-target-preview" aria-label="Bài viết được chia sẻ">
+            <div className="share-target-author">
+              {authorAvatarUrl ? (
+                <img src={authorAvatarUrl} alt={post.authorName} />
+              ) : (
+                <span>{post.authorName?.charAt(0)?.toUpperCase() || "U"}</span>
+              )}
 
+              <div>
+                <strong>{post.authorName}</strong>
+                <small title={formatVietnamDateTime(post.createdAt)}>
+                  {formatRelativeTime(post.createdAt)}
+                </small>
+              </div>
+            </div>
+
+            {post.title && <h3>{post.title}</h3>}
+            {post.content && <p>{post.content}</p>}
+
+            {media[0] && (
+              <img
+                className="share-target-image"
+                src={getFileUrl(media[0].url)}
+                alt={post.title || "Ảnh bài viết được chia sẻ"}
+              />
+            )}
+          </div>
+
+          <div className="share-panel-footer">
+            <span className="share-character-count">
+              {shareContentLength}/5000
+            </span>
             <button
               className="button secondary"
               type="button"
-              onClick={() => setSharePanelOpen(false)}
+              onClick={handleCloseSharePanel}
               disabled={shareSubmitting}
             >
               Hủy
             </button>
 
-            <button className="button" type="submit" disabled={shareSubmitting}>
+            <button className="button" type="submit" disabled={!canSubmitShare}>
               {shareSubmitting ? "Đang chia sẻ..." : "Chia sẻ ngay"}
             </button>
           </div>
@@ -735,6 +917,8 @@ export default function SocialPostCard({
 
       {commentsOpen && (
         <div className="feed-comments">
+          {commentActionError && <p className="error">{commentActionError}</p>}
+
           {commentsLoading ? (
             <p className="muted">Đang tải bình luận...</p>
           ) : comments.length === 0 ? (
@@ -742,6 +926,17 @@ export default function SocialPostCard({
           ) : (
             comments.map((comment) => {
               const commentAvatarUrl = getFileUrl(comment.authorAvatarUrl);
+              const { isEdited: isCommentEdited } = getEditedState(comment);
+              const isOwnComment =
+                user && Number(user.id) === Number(comment.userId);
+              const isEditingComment = editingCommentId === comment.id;
+              const isDeletingComment = deletingCommentId === comment.id;
+              const trimmedEditInput = commentEditInput.trim();
+              const originalCommentContent = String(comment.content || "").trim();
+              const canSaveComment =
+                !commentSaving &&
+                trimmedEditInput.length > 0 &&
+                trimmedEditInput !== originalCommentContent;
 
               return (
                 <div key={comment.id} className="feed-comment">
@@ -759,25 +954,95 @@ export default function SocialPostCard({
 
                   <div className="feed-comment-body">
                     <strong>{comment.authorName}</strong>
-                    <p>{comment.content}</p>
-                    <span title={formatVietnamDateTime(comment.createdAt)}>
-                      {formatRelativeTime(comment.createdAt)}
-                    </span>
-                    {user && Number(user.id) !== Number(comment.userId) && (
-                      <button
-                        className="comment-report-button"
-                        type="button"
-                        onClick={() =>
-                          setReportTarget({
-                            type: "comment",
-                            id: comment.id,
-                            title: "Báo cáo bình luận",
-                          })
-                        }
+
+                    {isEditingComment ? (
+                      <form
+                        className="comment-edit-form"
+                        onSubmit={(event) => handleUpdateComment(event, comment)}
                       >
-                        Báo cáo
-                      </button>
+                        <textarea
+                          value={commentEditInput}
+                          onChange={(event) =>
+                            setCommentEditInput(event.target.value)
+                          }
+                          maxLength={1000}
+                          rows={3}
+                          disabled={commentSaving}
+                          autoFocus
+                        />
+
+                        <div className="comment-edit-actions">
+                          <button
+                            className="comment-edit-save"
+                            type="submit"
+                            disabled={!canSaveComment}
+                          >
+                            {commentSaving ? "Đang lưu..." : "Lưu"}
+                          </button>
+
+                          <button
+                            className="comment-edit-cancel"
+                            type="button"
+                            onClick={handleCancelEditComment}
+                            disabled={commentSaving}
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <p>{comment.content}</p>
                     )}
+
+                    <div className="comment-meta-row">
+                      <span title={formatVietnamDateTime(comment.createdAt)}>
+                        {formatRelativeTime(comment.createdAt)}
+                        {isCommentEdited && (
+                          <strong className="comment-edited-badge">
+                            Đã chỉnh sửa
+                          </strong>
+                        )}
+                      </span>
+
+                      {isOwnComment && !isEditingComment ? (
+                        <div className="comment-action-row">
+                          <button
+                            className="comment-action-button"
+                            type="button"
+                            onClick={() => handleStartEditComment(comment)}
+                            disabled={commentSaving || isDeletingComment}
+                          >
+                            Sửa
+                          </button>
+
+                          <button
+                            className="comment-action-button danger"
+                            type="button"
+                            onClick={() => handleDeleteComment(comment)}
+                            disabled={commentSaving || isDeletingComment}
+                          >
+                            {isDeletingComment ? "Đang xóa..." : "Xóa"}
+                          </button>
+                        </div>
+                      ) : (
+                        user &&
+                        !isOwnComment && (
+                          <button
+                            className="comment-report-button"
+                            type="button"
+                            onClick={() =>
+                              setReportTarget({
+                                type: "comment",
+                                id: comment.id,
+                                title: "Báo cáo bình luận",
+                              })
+                            }
+                          >
+                            Báo cáo
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
               );
