@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
+import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { createNotification } from "../models/notification.model.js";
 import { isBlockedBetween } from "../models/block.model.js";
 import { acceptMessageConversationBetween } from "../models/message.model.js";
@@ -123,7 +124,7 @@ router.get("/", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/requests/:userId", requireAuth, async (req, res, next) => {
+router.post("/requests/:userId", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.userId);
 
@@ -199,7 +200,7 @@ router.post("/requests/:userId", requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch("/requests/:userId/accept", requireAuth, async (req, res, next) => {
+router.patch("/requests/:userId/accept", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const requesterId = parsePositiveInt(req.params.userId);
 
@@ -243,7 +244,7 @@ router.patch("/requests/:userId/accept", requireAuth, async (req, res, next) => 
   }
 });
 
-router.delete("/requests/:userId", requireAuth, async (req, res, next) => {
+router.delete("/requests/:userId", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const otherUserId = parsePositiveInt(req.params.userId);
 
@@ -275,7 +276,7 @@ router.delete("/requests/:userId", requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete("/:userId", requireAuth, async (req, res, next) => {
+router.delete("/:userId", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const otherUserId = parsePositiveInt(req.params.userId);
 

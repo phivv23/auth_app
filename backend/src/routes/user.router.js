@@ -5,6 +5,7 @@ import {
   getAuthCookieOptions,
 } from "../config/cookie.js";
 import { requireAuth, optionalAuth } from "../middleware/requireAuth.js";
+import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import {
   findUserById,
   findPublicUserByEmail,
@@ -377,7 +378,7 @@ router.get("/suggestions", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:id/block", requireAuth, async (req, res, next) => {
+router.post("/:id/block", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.id);
 
@@ -423,7 +424,7 @@ router.post("/:id/block", requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete("/:id/block", requireAuth, async (req, res, next) => {
+router.delete("/:id/block", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.id);
 
@@ -469,7 +470,7 @@ router.delete("/:id/block", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:id/follow", requireAuth, async (req, res, next) => {
+router.post("/:id/follow", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.id);
 
@@ -527,7 +528,7 @@ router.post("/:id/follow", requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete("/:id/follow", requireAuth, async (req, res, next) => {
+router.delete("/:id/follow", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const targetUserId = parsePositiveInt(req.params.id);
 

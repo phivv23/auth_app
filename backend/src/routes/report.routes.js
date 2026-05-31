@@ -1,8 +1,10 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { logAdminAction } from "../models/audit.model.js";
 import { deleteComment, findCommentById } from "../models/comment.model.js";
 import { findMessageByIdForUser } from "../models/message.model.js";
 import {
@@ -13,6 +15,7 @@ import {
 import { createNotification } from "../models/notification.model.js";
 import {
   createReport,
+  findExistingReportForTarget,
   findReportById,
   findReports,
   getReportStatusSummary,
@@ -50,6 +53,12 @@ async function notifyReporterAboutModeration(report, moderatorId) {
     actorId: moderatorId,
     type: "report_status_update",
     reportId: report.id,
+    metadata: {
+      status: report.status,
+      targetType: report.targetType,
+      reason: report.reason,
+      resolutionNote: report.resolutionNote,
+    },
   });
 }
 
@@ -126,7 +135,7 @@ async function assertReportTargetExists({ targetType, targetId, currentUserId })
   return false;
 }
 
-router.post("/", requireAuth, reportRateLimit, async (req, res, next) => {
+router.post("/", requireAuth, requireActiveAccount, reportRateLimit, async (req, res, next) => {
   try {
     const validation = validateReportInput(req.body);
 
@@ -153,6 +162,25 @@ router.post("/", requireAuth, reportRateLimit, async (req, res, next) => {
         404,
         "Không tìm thấy nội dung cần báo cáo hoặc bạn không có quyền xem.",
         "REPORT_TARGET_NOT_FOUND"
+      );
+    }
+
+    const existingReport = await findExistingReportForTarget({
+      reporterId: req.user.id,
+      targetType,
+      targetId,
+    });
+
+    if (existingReport) {
+      return sendError(
+        res,
+        409,
+        "Bạn đã báo cáo nội dung này. Vui lòng theo dõi kết quả xử lý trong trang báo cáo.",
+        "REPORT_ALREADY_EXISTS",
+        {
+          reportId: existingReport.id,
+          status: existingReport.status,
+        }
       );
     }
 
@@ -241,6 +269,21 @@ router.patch(
         await notifyReporterAboutModeration(report, req.user.id);
       }
 
+      await logAdminAction({
+        actorId: req.user.id,
+        targetUserId: report.reporterId,
+        action: "report.status.update",
+        targetType: "report",
+        targetId: report.id,
+        metadata: {
+          previousStatus: existingReport.status,
+          nextStatus: report.status,
+          targetType: report.targetType,
+          reportedTargetId: report.targetId,
+          resolutionNote: report.resolutionNote,
+        },
+      });
+
       return res.json({
         message: "Đã cập nhật trạng thái báo cáo.",
         report,
@@ -312,6 +355,24 @@ router.post(
       });
 
       await notifyReporterAboutModeration(report, req.user.id);
+
+      await logAdminAction({
+        actorId: req.user.id,
+        targetUserId: report.reporterId,
+        action:
+          action === "remove" ? "report.content.remove" : "report.content.keep",
+        targetType: "report",
+        targetId: report.id,
+        metadata: {
+          action,
+          removed,
+          previousStatus: existingReport.status,
+          nextStatus: report.status,
+          reportTargetType: report.targetType,
+          reportedTargetId: report.targetId,
+          resolutionNote: report.resolutionNote,
+        },
+      });
 
       return res.json({
         message:

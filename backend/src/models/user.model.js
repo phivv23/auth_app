@@ -150,6 +150,7 @@ export async function findUserById(id) {
         website,
         profile_privacy AS profilePrivacy,
         last_seen_at AS lastSeenAt,
+        account_status AS accountStatus,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -178,6 +179,7 @@ export async function findAuthUserById(id) {
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         role,
+        account_status AS accountStatus,
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM users
@@ -212,6 +214,7 @@ export async function findUserByEmail(email) {
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         role,
+        account_status AS accountStatus,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -279,6 +282,7 @@ export async function findUserWithPasswordById(id) {
         last_seen_at AS lastSeenAt,
         token_version AS tokenVersion,
         role,
+        account_status AS accountStatus,
         password_hash AS passwordHash,
         created_at AS createdAt,
         updated_at AS updatedAt

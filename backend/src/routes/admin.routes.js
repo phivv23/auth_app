@@ -2,16 +2,23 @@ import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
+import { findAdminAuditLogs, logAdminAction } from "../models/audit.model.js";
 import {
   countAdmins,
   deleteUserById,
   findAdminComments,
   findAdminPosts,
   findAdminUserById,
+  findAdminUserRecentComments,
+  findAdminUserRecentPosts,
+  findAdminUserRecentReports,
   findAdminUsers,
   findUserDeletionAssets,
   getAdminOverview,
+  updateUserAccountStatus,
   updateUserRole,
+  validateAdminAccountStatusInput,
+  validateAdminContentActionInput,
   validateAdminRoleInput,
 } from "../models/admin.model.js";
 import { deleteComment, findCommentById } from "../models/comment.model.js";
@@ -82,9 +89,43 @@ router.get("/users", async (req, res, next) => {
       limit: req.query.limit,
       search: req.query.search,
       role: req.query.role,
+      accountStatus: req.query.accountStatus,
     });
 
     return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/users/:id", async (req, res, next) => {
+  try {
+    const userId = normalizePositiveInt(req.params.id);
+
+    if (!userId) {
+      return sendError(res, 400, "User id không hợp lệ.", "INVALID_USER_ID");
+    }
+
+    const user = await findAdminUserById(userId);
+
+    if (!user) {
+      return sendError(res, 404, "Không tìm thấy người dùng.", "USER_NOT_FOUND");
+    }
+
+    const [posts, comments, reports, auditLogs] = await Promise.all([
+      findAdminUserRecentPosts(userId),
+      findAdminUserRecentComments(userId),
+      findAdminUserRecentReports(userId),
+      findAdminAuditLogs({ targetUserId: userId, limit: 10 }),
+    ]);
+
+    return res.json({
+      user,
+      posts,
+      comments,
+      reports,
+      auditLogs: auditLogs.logs,
+    });
   } catch (error) {
     next(error);
   }
@@ -143,8 +184,105 @@ router.patch("/users/:id/role", async (req, res, next) => {
 
     const updatedUser = await updateUserRole(userId, validation.value.role);
 
+    await logAdminAction({
+      actorId: req.user.id,
+      targetUserId: userId,
+      action: "user.role.update",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        previousRole: user.role,
+        nextRole: validation.value.role,
+      },
+    });
+
     return res.json({
       message: "Đã cập nhật quyền người dùng.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/users/:id/status", async (req, res, next) => {
+  try {
+    const userId = normalizePositiveInt(req.params.id);
+
+    if (!userId) {
+      return sendError(res, 400, "User id không hợp lệ.", "INVALID_USER_ID");
+    }
+
+    if (Number(userId) === Number(req.user.id)) {
+      return sendError(
+        res,
+        400,
+        "Admin không thể tự đổi trạng thái tài khoản của chính mình.",
+        "ADMIN_SELF_STATUS_NOT_ALLOWED"
+      );
+    }
+
+    const validation = validateAdminAccountStatusInput(req.body);
+
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
+    }
+
+    const user = await findAdminUserById(userId);
+
+    if (!user) {
+      return sendError(res, 404, "Không tìm thấy người dùng.", "USER_NOT_FOUND");
+    }
+
+    if (user.role === "admin" && validation.value.accountStatus !== "active") {
+      const adminCount = await countAdmins();
+
+      if (adminCount <= 1) {
+        return sendError(
+          res,
+          400,
+          "Không thể giới hạn admin cuối cùng.",
+          "LAST_ADMIN_REQUIRED"
+        );
+      }
+    }
+
+    const updatedUser = await updateUserAccountStatus(
+      userId,
+      validation.value.accountStatus
+    );
+
+    await logAdminAction({
+      actorId: req.user.id,
+      targetUserId: userId,
+      action: "user.status.update",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        previousAccountStatus: user.accountStatus || "active",
+        nextAccountStatus: validation.value.accountStatus,
+        reason: validation.value.reason,
+      },
+    });
+
+    await createNotification({
+      recipientId: userId,
+      actorId: req.user.id,
+      type: "admin_account_status_update",
+      metadata: {
+        accountStatus: validation.value.accountStatus,
+        reason: validation.value.reason,
+      },
+    });
+
+    return res.json({
+      message: "Đã cập nhật trạng thái tài khoản.",
       user: updatedUser,
     });
   } catch (error) {
@@ -192,6 +330,20 @@ router.delete("/users/:id", async (req, res, next) => {
     await deleteUserById(userId);
     await deleteLocalUploads(uploadUrls);
 
+    await logAdminAction({
+      actorId: req.user.id,
+      targetUserId: null,
+      action: "user.delete",
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        deletedUserName: user.name,
+        deletedUserEmail: user.email,
+        deletedUserRole: user.role,
+        deletedAccountStatus: user.accountStatus || "active",
+      },
+    });
+
     return res.json({
       message: "Đã xóa người dùng và dữ liệu liên quan.",
       deleted: true,
@@ -208,6 +360,12 @@ router.get("/posts", async (req, res, next) => {
       page: req.query.page,
       limit: req.query.limit,
       search: req.query.search,
+      authorId: req.query.authorId,
+      privacy: req.query.privacy,
+      reportedOnly: req.query.reportedOnly === "1",
+      minReports: req.query.minReports,
+      fromDate: req.query.fromDate,
+      toDate: req.query.toDate,
     });
 
     return res.json(result);
@@ -224,6 +382,18 @@ router.delete("/posts/:id", async (req, res, next) => {
       return sendError(res, 400, "Post id không hợp lệ.", "INVALID_POST_ID");
     }
 
+    const validation = validateAdminContentActionInput(req.body);
+
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
+    }
+
     const post = await deletePostWithUploads(postId, req.user.id);
 
     if (!post) {
@@ -234,6 +404,24 @@ router.delete("/posts/:id", async (req, res, next) => {
       recipientId: post.userId,
       actorId: req.user.id,
       type: "admin_content_removed",
+      metadata: {
+        contentType: "post",
+        reason: validation.value.reason,
+        resolutionNote: validation.value.resolutionNote,
+      },
+    });
+
+    await logAdminAction({
+      actorId: req.user.id,
+      targetUserId: post.userId,
+      action: "content.post.remove",
+      targetType: "post",
+      targetId: postId,
+      metadata: {
+        reason: validation.value.reason,
+        resolutionNote: validation.value.resolutionNote,
+        title: post.title,
+      },
     });
 
     return res.json({
@@ -252,6 +440,11 @@ router.get("/comments", async (req, res, next) => {
       page: req.query.page,
       limit: req.query.limit,
       search: req.query.search,
+      authorId: req.query.authorId,
+      reportedOnly: req.query.reportedOnly === "1",
+      minReports: req.query.minReports,
+      fromDate: req.query.fromDate,
+      toDate: req.query.toDate,
     });
 
     return res.json(result);
@@ -273,6 +466,18 @@ router.delete("/comments/:id", async (req, res, next) => {
       );
     }
 
+    const validation = validateAdminContentActionInput(req.body);
+
+    if (validation.error) {
+      return sendError(
+        res,
+        400,
+        validation.error.message,
+        validation.error.code,
+        validation.error.fields
+      );
+    }
+
     const comment = await findCommentById(commentId);
 
     if (!comment) {
@@ -289,6 +494,24 @@ router.delete("/comments/:id", async (req, res, next) => {
       recipientId: comment.userId,
       actorId: req.user.id,
       type: "admin_content_removed",
+      metadata: {
+        contentType: "comment",
+        reason: validation.value.reason,
+        resolutionNote: validation.value.resolutionNote,
+      },
+    });
+
+    await logAdminAction({
+      actorId: req.user.id,
+      targetUserId: comment.userId,
+      action: "content.comment.remove",
+      targetType: "comment",
+      targetId: commentId,
+      metadata: {
+        reason: validation.value.reason,
+        resolutionNote: validation.value.resolutionNote,
+        postId: comment.postId,
+      },
     });
 
     return res.json({
@@ -296,6 +519,23 @@ router.delete("/comments/:id", async (req, res, next) => {
       deleted: true,
       commentId,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/audit-logs", async (req, res, next) => {
+  try {
+    const result = await findAdminAuditLogs({
+      page: req.query.page,
+      limit: req.query.limit,
+      actorId: req.query.actorId,
+      targetUserId: req.query.targetUserId,
+      action: req.query.action,
+      targetType: req.query.targetType,
+    });
+
+    return res.json(result);
   } catch (error) {
     next(error);
   }

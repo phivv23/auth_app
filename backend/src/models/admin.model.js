@@ -1,6 +1,7 @@
 import { query } from "../db/pool.js";
 
 export const ADMIN_ROLE_VALUES = ["user", "admin"];
+export const ADMIN_ACCOUNT_STATUS_VALUES = ["active", "suspended", "banned"];
 
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
@@ -46,12 +47,93 @@ export function validateAdminRoleInput(input = {}) {
   };
 }
 
+export function validateAdminAccountStatusInput(input = {}) {
+  const accountStatus = String(input.accountStatus || "").trim();
+  const reason = String(input.reason || "").trim();
+
+  if (!ADMIN_ACCOUNT_STATUS_VALUES.includes(accountStatus)) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Trạng thái tài khoản không hợp lệ.",
+        fields: {
+          accountStatus: "Trạng thái phải là active, suspended hoặc banned.",
+        },
+      },
+    };
+  }
+
+  if (reason.length > 1000) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Lý do xử lý không được vượt quá 1000 ký tự.",
+        fields: {
+          reason: "Lý do xử lý không được vượt quá 1000 ký tự.",
+        },
+      },
+    };
+  }
+
+  return {
+    value: {
+      accountStatus,
+      reason: reason || null,
+    },
+    error: null,
+  };
+}
+
+export function validateAdminContentActionInput(input = {}) {
+  const reason = String(input.reason || "").trim();
+  const resolutionNote = String(input.resolutionNote || "").trim();
+
+  if (reason.length > 1000) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Lý do xử lý không được vượt quá 1000 ký tự.",
+        fields: {
+          reason: "Lý do xử lý không được vượt quá 1000 ký tự.",
+        },
+      },
+    };
+  }
+
+  if (resolutionNote.length > 2000) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Ghi chú xử lý không được vượt quá 2000 ký tự.",
+        fields: {
+          resolutionNote: "Ghi chú xử lý không được vượt quá 2000 ký tự.",
+        },
+      },
+    };
+  }
+
+  return {
+    value: {
+      reason: reason || "Vi phạm quy định cộng đồng.",
+      resolutionNote: resolutionNote || null,
+    },
+    error: null,
+  };
+}
+
 export async function getAdminOverview() {
   const rows = await query(
     `
     SELECT
       (SELECT COUNT(*) FROM users) AS userCount,
       (SELECT COUNT(*) FROM users WHERE role = 'admin') AS adminCount,
+      (SELECT COUNT(*) FROM users WHERE account_status = 'active') AS activeUserCount,
+      (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspendedUserCount,
+      (SELECT COUNT(*) FROM users WHERE account_status = 'banned') AS bannedUserCount,
       (SELECT COUNT(*) FROM posts) AS postCount,
       (SELECT COUNT(*) FROM comments) AS commentCount,
       (SELECT COUNT(*) FROM reports) AS reportCount,
@@ -69,6 +151,9 @@ export async function getAdminOverview() {
   return {
     userCount: Number(overview.userCount || 0),
     adminCount: Number(overview.adminCount || 0),
+    activeUserCount: Number(overview.activeUserCount || 0),
+    suspendedUserCount: Number(overview.suspendedUserCount || 0),
+    bannedUserCount: Number(overview.bannedUserCount || 0),
     postCount: Number(overview.postCount || 0),
     commentCount: Number(overview.commentCount || 0),
     reportCount: Number(overview.reportCount || 0),
@@ -103,6 +188,7 @@ export async function findAdminUserById(userId) {
       avatar_url AS avatarUrl,
       cover_url AS coverUrl,
       role,
+      account_status AS accountStatus,
       profile_privacy AS profilePrivacy,
       last_seen_at AS lastSeenAt,
       created_at AS createdAt,
@@ -148,6 +234,7 @@ export async function findAdminUsers({
   limit = 20,
   search = "",
   role = "",
+  accountStatus = "",
 } = {}) {
   const safePage = normalizePositiveInt(page, 1);
   const safeLimit = normalizeLimit(limit);
@@ -166,6 +253,11 @@ export async function findAdminUsers({
     params.push(role);
   }
 
+  if (ADMIN_ACCOUNT_STATUS_VALUES.includes(accountStatus)) {
+    whereParts.push("account_status = ?");
+    params.push(accountStatus);
+  }
+
   const whereSql =
     whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
@@ -178,6 +270,7 @@ export async function findAdminUsers({
       avatar_url AS avatarUrl,
       cover_url AS coverUrl,
       role,
+      account_status AS accountStatus,
       profile_privacy AS profilePrivacy,
       last_seen_at AS lastSeenAt,
       created_at AS createdAt,
@@ -244,6 +337,19 @@ export async function updateUserRole(userId, role) {
   return findAdminUserById(userId);
 }
 
+export async function updateUserAccountStatus(userId, accountStatus) {
+  await query(
+    `
+    UPDATE users
+    SET account_status = ?
+    WHERE id = ?
+    `,
+    [accountStatus, userId]
+  );
+
+  return findAdminUserById(userId);
+}
+
 export async function findUserDeletionAssets(userId) {
   const users = await query(
     `
@@ -298,6 +404,12 @@ export async function findAdminPosts({
   page = 1,
   limit = 20,
   search = "",
+  authorId = null,
+  privacy = "",
+  reportedOnly = false,
+  minReports = null,
+  fromDate = "",
+  toDate = "",
 } = {}) {
   const safePage = normalizePositiveInt(page, 1);
   const safeLimit = normalizeLimit(limit);
@@ -309,6 +421,39 @@ export async function findAdminPosts({
   if (keyword) {
     whereParts.push("(p.title LIKE ? OR p.content LIKE ? OR author.name LIKE ?)");
     params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  }
+
+  if (normalizePositiveInt(authorId, null)) {
+    whereParts.push("p.user_id = ?");
+    params.push(Number(authorId));
+  }
+
+  if (privacy) {
+    whereParts.push("p.privacy = ?");
+    params.push(String(privacy));
+  }
+
+  if (reportedOnly) {
+    whereParts.push(
+      "EXISTS (SELECT 1 FROM reports reported WHERE reported.target_type = 'post' AND reported.target_id = p.id)"
+    );
+  }
+
+  if (normalizePositiveInt(minReports, null)) {
+    whereParts.push(
+      "(SELECT COUNT(*) FROM reports min_report WHERE min_report.target_type = 'post' AND min_report.target_id = p.id) >= ?"
+    );
+    params.push(Number(minReports));
+  }
+
+  if (String(fromDate || "").trim()) {
+    whereParts.push("p.created_at >= ?");
+    params.push(String(fromDate).trim());
+  }
+
+  if (String(toDate || "").trim()) {
+    whereParts.push("p.created_at <= ?");
+    params.push(String(toDate).trim());
   }
 
   const whereSql =
@@ -388,6 +533,11 @@ export async function findAdminComments({
   page = 1,
   limit = 20,
   search = "",
+  authorId = null,
+  reportedOnly = false,
+  minReports = null,
+  fromDate = "",
+  toDate = "",
 } = {}) {
   const safePage = normalizePositiveInt(page, 1);
   const safeLimit = normalizeLimit(limit);
@@ -399,6 +549,34 @@ export async function findAdminComments({
   if (keyword) {
     whereParts.push("(c.content LIKE ? OR author.name LIKE ? OR p.title LIKE ?)");
     params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  }
+
+  if (normalizePositiveInt(authorId, null)) {
+    whereParts.push("c.user_id = ?");
+    params.push(Number(authorId));
+  }
+
+  if (reportedOnly) {
+    whereParts.push(
+      "EXISTS (SELECT 1 FROM reports reported WHERE reported.target_type = 'comment' AND reported.target_id = c.id)"
+    );
+  }
+
+  if (normalizePositiveInt(minReports, null)) {
+    whereParts.push(
+      "(SELECT COUNT(*) FROM reports min_report WHERE min_report.target_type = 'comment' AND min_report.target_id = c.id) >= ?"
+    );
+    params.push(Number(minReports));
+  }
+
+  if (String(fromDate || "").trim()) {
+    whereParts.push("c.created_at >= ?");
+    params.push(String(fromDate).trim());
+  }
+
+  if (String(toDate || "").trim()) {
+    whereParts.push("c.created_at <= ?");
+    params.push(String(toDate).trim());
   }
 
   const whereSql =
@@ -456,4 +634,50 @@ export async function findAdminComments({
     total,
     "comments"
   );
+}
+
+export async function findAdminUserRecentPosts(userId, limit = 10) {
+  const safeLimit = normalizeLimit(limit, 10, 20);
+  const result = await findAdminPosts({
+    authorId: userId,
+    page: 1,
+    limit: safeLimit,
+  });
+
+  return result.posts;
+}
+
+export async function findAdminUserRecentComments(userId, limit = 10) {
+  const safeLimit = normalizeLimit(limit, 10, 20);
+  const result = await findAdminComments({
+    authorId: userId,
+    page: 1,
+    limit: safeLimit,
+  });
+
+  return result.comments;
+}
+
+export async function findAdminUserRecentReports(userId, limit = 10) {
+  const safeLimit = normalizeLimit(limit, 10, 20);
+
+  const reports = await query(
+    `
+    SELECT
+      r.id,
+      r.target_type AS targetType,
+      r.target_id AS targetId,
+      r.reason,
+      r.status,
+      r.created_at AS createdAt,
+      r.reviewed_at AS reviewedAt
+    FROM reports r
+    WHERE r.reporter_id = ?
+    ORDER BY r.created_at DESC, r.id DESC
+    LIMIT ${safeLimit}
+    `,
+    [userId]
+  );
+
+  return reports;
 }

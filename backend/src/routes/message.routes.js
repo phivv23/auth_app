@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
   addMessageClient,
@@ -130,6 +131,7 @@ router.get("/requests", requireAuth, async (req, res, next) => {
 router.post(
   "/conversations/:userId",
   requireAuth,
+  requireActiveAccount,
   startConversationRateLimit,
   async (req, res, next) => {
     try {
@@ -197,6 +199,7 @@ router.get(
 router.post(
   "/conversations/:conversationId/messages",
   requireAuth,
+  requireActiveAccount,
   sendMessageRateLimit,
   async (req, res, next) => {
     try {
@@ -240,6 +243,7 @@ router.post(
 router.post(
   "/conversations/:conversationId/typing",
   requireAuth,
+  requireActiveAccount,
   async (req, res, next) => {
     try {
       const conversationId = parsePositiveInt(req.params.conversationId);

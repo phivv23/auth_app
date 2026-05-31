@@ -17,6 +17,26 @@ function getDedupeWindowInMinutes(type) {
   return NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES[type] || 15;
 }
 
+function parseMetadata(value) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function normalizeNotification(notification) {
+  return {
+    ...notification,
+    metadata: parseMetadata(notification.metadataJson),
+    isRead: Boolean(notification.isRead),
+  };
+}
+
 export async function findNotificationById(notificationId) {
   const notifications = await query(
     `
@@ -29,6 +49,7 @@ export async function findNotificationById(notificationId) {
       n.comment_id AS commentId,
       n.conversation_id AS conversationId,
       n.report_id AS reportId,
+      n.metadata_json AS metadataJson,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 
@@ -56,10 +77,7 @@ export async function findNotificationById(notificationId) {
     return null;
   }
 
-  return {
-    ...notification,
-    isRead: Boolean(notification.isRead),
-  };
+  return normalizeNotification(notification);
 }
 
 export async function createNotification({
@@ -70,6 +88,7 @@ export async function createNotification({
   commentId = null,
   conversationId = null,
   reportId = null,
+  metadata = {},
 }) {
   if (type === "message") {
     return null;
@@ -119,11 +138,21 @@ export async function createNotification({
       post_id,
       comment_id,
       conversation_id,
-      report_id
+      report_id,
+      metadata_json
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    [recipientId, actorId, type, postId, commentId, conversationId, reportId]
+    [
+      recipientId,
+      actorId,
+      type,
+      postId,
+      commentId,
+      conversationId,
+      reportId,
+      JSON.stringify(metadata && typeof metadata === "object" ? metadata : {}),
+    ]
   );
 
   const notification = await findNotificationById(result.insertId);
@@ -161,6 +190,7 @@ export async function findNotificationsByUserId({
       n.comment_id AS commentId,
       n.conversation_id AS conversationId,
       n.report_id AS reportId,
+      n.metadata_json AS metadataJson,
       n.is_read AS isRead,
       n.created_at AS createdAt,
 
@@ -197,10 +227,7 @@ export async function findNotificationsByUserId({
   const total = Number(countRows[0]?.total || 0);
 
   return {
-    notifications: notifications.map((notification) => ({
-      ...notification,
-      isRead: Boolean(notification.isRead),
-    })),
+    notifications: notifications.map(normalizeNotification),
     page: safePage,
     limit: safeLimit,
     total,

@@ -256,6 +256,27 @@ export async function createReport({
   return findReportById(result.insertId);
 }
 
+export async function findExistingReportForTarget({
+  reporterId,
+  targetType,
+  targetId,
+}) {
+  const rows = await query(
+    `
+    SELECT id
+    FROM reports
+    WHERE reporter_id = ?
+      AND target_type = ?
+      AND target_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+    `,
+    [reporterId, targetType, targetId]
+  );
+
+  return rows[0] ? findReportById(rows[0].id) : null;
+}
+
 export async function findReportById(reportId) {
   const rows = await query(
     `

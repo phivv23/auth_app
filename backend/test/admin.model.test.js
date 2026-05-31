@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { validateAdminRoleInput } from "../src/models/admin.model.js";
+import {
+  validateAdminAccountStatusInput,
+  validateAdminContentActionInput,
+  validateAdminRoleInput,
+} from "../src/models/admin.model.js";
 
 describe("admin model validation", () => {
   it("accepts supported admin role values", () => {
@@ -26,5 +30,46 @@ describe("admin model validation", () => {
     assert.equal(result.value, null);
     assert.equal(result.error.code, "VALIDATION_ERROR");
     assert.deepEqual(Object.keys(result.error.fields), ["role"]);
+  });
+
+  it("validates account status updates", () => {
+    assert.deepEqual(
+      validateAdminAccountStatusInput({
+        accountStatus: "suspended",
+        reason: "spam reports",
+      }),
+      {
+        value: {
+          accountStatus: "suspended",
+          reason: "spam reports",
+        },
+        error: null,
+      }
+    );
+
+    const result = validateAdminAccountStatusInput({
+      accountStatus: "locked",
+    });
+
+    assert.equal(result.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(Object.keys(result.error.fields), ["accountStatus"]);
+  });
+
+  it("validates admin content action notes", () => {
+    const result = validateAdminContentActionInput({
+      reason: "  spam  ",
+      resolutionNote: "  removed by admin  ",
+    });
+
+    assert.equal(result.error, null);
+    assert.deepEqual(result.value, {
+      reason: "spam",
+      resolutionNote: "removed by admin",
+    });
+
+    const emptyResult = validateAdminContentActionInput({});
+
+    assert.equal(emptyResult.error, null);
+    assert.equal(emptyResult.value.reason, "Vi phạm quy định cộng đồng.");
   });
 });

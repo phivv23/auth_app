@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
+import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
   createPost,
@@ -307,6 +308,7 @@ router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
 router.post(
   "/:postId/bookmark",
   requireAuth,
+  requireActiveAccount,
   bookmarkRateLimit,
   async (req, res, next) => {
     try {
@@ -367,7 +369,7 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/", requireAuth, createPostRateLimit, handlePostImageUpload, async (req, res, next) => {
+router.post("/", requireAuth, requireActiveAccount, createPostRateLimit, handlePostImageUpload, async (req, res, next) => {
   const uploadedMedia = getUploadedPostMedia(req);
 
   try {
@@ -405,7 +407,7 @@ router.post("/", requireAuth, createPostRateLimit, handlePostImageUpload, async 
   }
 });
 
-router.post("/:postId/share", requireAuth, createPostRateLimit, async (req, res, next) => {
+router.post("/:postId/share", requireAuth, requireActiveAccount, createPostRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 
@@ -454,6 +456,7 @@ router.post("/:postId/share", requireAuth, createPostRateLimit, async (req, res,
 router.patch(
   "/:id",
   requireAuth,
+  requireActiveAccount,
   handlePostImageUpload,
   async (req, res, next) => {
     const uploadedMedia = getUploadedPostMedia(req);
@@ -543,7 +546,7 @@ router.patch(
   }
 );
 
-router.delete("/:id", requireAuth, async (req, res, next) => {
+router.delete("/:id", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.id);
 
@@ -613,7 +616,7 @@ router.get("/:postId/comments", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:postId/comments", requireAuth, commentRateLimit, async (req, res, next) => {
+router.post("/:postId/comments", requireAuth, requireActiveAccount, commentRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 
@@ -658,7 +661,7 @@ router.post("/:postId/comments", requireAuth, commentRateLimit, async (req, res,
   }
 });
 
-router.patch("/comments/:commentId", requireAuth, commentRateLimit, async (req, res, next) => {
+router.patch("/comments/:commentId", requireAuth, requireActiveAccount, commentRateLimit, async (req, res, next) => {
   try {
     const commentId = parsePositiveInt(req.params.commentId);
 
@@ -701,7 +704,7 @@ router.patch("/comments/:commentId", requireAuth, commentRateLimit, async (req, 
   }
 });
 
-router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
+router.delete("/comments/:commentId", requireAuth, requireActiveAccount, async (req, res, next) => {
   try {
     const commentId = parsePositiveInt(req.params.commentId);
 
@@ -735,7 +738,7 @@ router.delete("/comments/:commentId", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/:postId/like", requireAuth, reactionRateLimit, async (req, res, next) => {
+router.post("/:postId/like", requireAuth, requireActiveAccount, reactionRateLimit, async (req, res, next) => {
   try {
     const postId = parsePositiveInt(req.params.postId);
 

@@ -45,6 +45,7 @@ function toPublicUser(user) {
     location: user.location,
     website: user.website,
     role: user.role || "user",
+    accountStatus: user.accountStatus || "active",
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -185,6 +186,15 @@ router.post("/login", authRateLimit, async (req, res, next) => {
         401,
         "Email hoặc password không đúng.",
         "INVALID_CREDENTIALS"
+      );
+    }
+
+    if (user.accountStatus === "banned") {
+      return sendError(
+        res,
+        403,
+        "Tài khoản này đã bị cấm đăng nhập.",
+        "ACCOUNT_BANNED"
       );
     }
 
