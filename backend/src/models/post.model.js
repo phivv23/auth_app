@@ -487,11 +487,17 @@ export async function findPosts({
   };
 }
 
-export async function findPostById(postId, currentUserId = null) {
+export async function findPostById(
+  postId,
+  currentUserId = null,
+  { bypassVisibility = false } = {}
+) {
   const visibility = buildVisibilitySql({
     currentUserId,
     postAlias: "p",
   });
+  const visibilitySql = bypassVisibility ? "1 = 1" : visibility.sql;
+  const visibilityParams = bypassVisibility ? [] : visibility.params;
 
   const rows = await query(
     `
@@ -560,10 +566,10 @@ export async function findPostById(postId, currentUserId = null) {
     FROM posts p
     JOIN users u ON u.id = p.user_id
     WHERE p.id = ?
-      AND ${visibility.sql}
+      AND ${visibilitySql}
     LIMIT 1
     `,
-    [currentUserId, currentUserId, currentUserId, postId, ...visibility.params]
+    [currentUserId, currentUserId, currentUserId, postId, ...visibilityParams]
   );
 
   const posts = await attachPostExtras(rows, currentUserId);

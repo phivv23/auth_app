@@ -9,7 +9,7 @@ const statuses = [
   { value: "pending", label: "Chờ xử lý" },
   { value: "reviewing", label: "Đang xem xét" },
   { value: "resolved", label: "Đã xử lý" },
-  { value: "dismissed", label: "Bỏ qua" },
+  { value: "dismissed", label: "Giữ lại" },
 ];
 
 const statusLabels = Object.fromEntries(
@@ -41,6 +41,10 @@ function getTargetUrl(report) {
 
   if (report.targetType === "post") {
     return `/posts/${report.targetId}`;
+  }
+
+  if (report.targetType === "comment" && report.targetPostId) {
+    return `/posts/${report.targetPostId}?commentId=${report.targetId}`;
   }
 
   return "";
@@ -201,8 +205,10 @@ export default function MyReports() {
 
                   {targetUrl && (
                     <Link to={targetUrl}>
-                      Mở nội dung
-                    </Link>
+                    {report.targetType === "comment"
+                      ? "Mở thẳng bình luận"
+                      : "Mở nội dung"}
+                  </Link>
                   )}
                 </footer>
               </article>

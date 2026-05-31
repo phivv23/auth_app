@@ -17,7 +17,7 @@ const reportStatusLabels = {
   pending: "đang chờ xử lý",
   reviewing: "đang được xem xét",
   resolved: "đã được xử lý",
-  dismissed: "đã được bỏ qua",
+  dismissed: "đã được giữ lại",
 };
 
 function getNotificationText(notification) {

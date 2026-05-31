@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { getPostById } from "../api/post.api.js";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 
 export default function PostDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const postId = Number(id);
+  const highlightedCommentId = Number(searchParams.get("commentId") || 0);
 
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +71,7 @@ export default function PostDetail() {
     <SocialPostCard
       post={post}
       defaultCommentsOpen
+      highlightCommentId={highlightedCommentId}
       onPostUpdated={setPost}
       onPostDeleted={() => navigate("/posts")}
     />

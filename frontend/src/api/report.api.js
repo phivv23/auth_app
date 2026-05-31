@@ -64,3 +64,16 @@ export function updateAdminReportStatus(
     }),
   });
 }
+
+export function applyAdminReportAction(
+  reportId,
+  { action, resolutionNote = "" }
+) {
+  return apiFetch(`/reports/admin/${reportId}/action`, {
+    method: "POST",
+    body: JSON.stringify({
+      action,
+      resolutionNote,
+    }),
+  });
+}

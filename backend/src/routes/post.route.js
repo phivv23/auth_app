@@ -277,7 +277,9 @@ router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
       });
     }
 
-    const post = await findPostById(postId, req.user?.id || null);
+    const post = await findPostById(postId, req.user?.id || null, {
+      bypassVisibility: req.user?.role === "admin",
+    });
 
     if (!post) {
       return res.status(404).json({

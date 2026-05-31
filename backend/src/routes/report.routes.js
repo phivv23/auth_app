@@ -3,9 +3,13 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { findCommentById } from "../models/comment.model.js";
+import { deleteComment, findCommentById } from "../models/comment.model.js";
 import { findMessageByIdForUser } from "../models/message.model.js";
-import { findPostById } from "../models/post.model.js";
+import {
+  deletePost,
+  findPostById,
+  findPostMediaByPostId,
+} from "../models/post.model.js";
 import { createNotification } from "../models/notification.model.js";
 import {
   createReport,
@@ -13,10 +17,12 @@ import {
   findReports,
   getReportStatusSummary,
   updateReportStatus,
+  validateReportModerationActionInput,
   validateReportInput,
   validateReportStatusInput,
 } from "../models/report.model.js";
 import { findUserById } from "../models/user.model.js";
+import { deleteLocalUpload } from "../utils/file.js";
 import { sendError } from "../utils/http.js";
 
 const router = Router();
@@ -36,6 +42,60 @@ function normalizePositiveInt(value, fallback) {
   }
 
   return number;
+}
+
+async function notifyReporterAboutModeration(report, moderatorId) {
+  await createNotification({
+    recipientId: report.reporterId,
+    actorId: moderatorId,
+    type: "report_status_update",
+    reportId: report.id,
+  });
+}
+
+async function deleteReportedPost(postId, currentUserId) {
+  const existingPost = await findPostById(postId, currentUserId, {
+    bypassVisibility: true,
+  });
+
+  if (!existingPost) {
+    return false;
+  }
+
+  const media = await findPostMediaByPostId(postId);
+  await deletePost(postId);
+
+  for (const item of media || []) {
+    await deleteLocalUpload(item.url);
+  }
+
+  if (
+    existingPost.imageUrl &&
+    !(media || []).some((item) => item.url === existingPost.imageUrl)
+  ) {
+    await deleteLocalUpload(existingPost.imageUrl);
+  }
+
+  return true;
+}
+
+async function removeReportedTarget(report, currentUserId) {
+  if (report.targetType === "post") {
+    return deleteReportedPost(report.targetId, currentUserId);
+  }
+
+  if (report.targetType === "comment") {
+    const comment = await findCommentById(report.targetId);
+
+    if (!comment) {
+      return false;
+    }
+
+    await deleteComment(report.targetId);
+    return true;
+  }
+
+  return false;
 }
 
 async function assertReportTargetExists({ targetType, targetId, currentUserId }) {
@@ -178,17 +238,91 @@ router.patch(
       });
 
       if (report.status !== existingReport.status) {
-        await createNotification({
-          recipientId: report.reporterId,
-          actorId: req.user.id,
-          type: "report_status_update",
-          reportId: report.id,
-        });
+        await notifyReporterAboutModeration(report, req.user.id);
       }
 
       return res.json({
         message: "Đã cập nhật trạng thái báo cáo.",
         report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  "/admin/:id/action",
+  requireAuth,
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const reportId = normalizePositiveInt(req.params.id, null);
+
+      if (!reportId) {
+        return sendError(res, 400, "Report id không hợp lệ.", "INVALID_REPORT_ID");
+      }
+
+      const validation = validateReportModerationActionInput(req.body);
+
+      if (validation.error) {
+        return sendError(
+          res,
+          400,
+          validation.error.message,
+          validation.error.code,
+          validation.error.fields
+        );
+      }
+
+      const existingReport = await findReportById(reportId);
+
+      if (!existingReport) {
+        return sendError(res, 404, "Không tìm thấy báo cáo.", "REPORT_NOT_FOUND");
+      }
+
+      const { action, resolutionNote } = validation.value;
+      let nextStatus = "dismissed";
+      let nextNote =
+        resolutionNote || "Đội ngũ đã xem xét và quyết định giữ lại nội dung.";
+      let removed = false;
+
+      if (action === "remove") {
+        if (!["post", "comment"].includes(existingReport.targetType)) {
+          return sendError(
+            res,
+            400,
+            "Chỉ có thể gỡ bài viết hoặc bình luận từ hàng đợi báo cáo.",
+            "REPORT_TARGET_NOT_REMOVABLE"
+          );
+        }
+
+        removed = await removeReportedTarget(existingReport, req.user.id);
+        nextStatus = "resolved";
+        nextNote =
+          resolutionNote ||
+          (removed
+            ? "Đội ngũ đã xem xét và gỡ bỏ nội dung vi phạm."
+            : "Nội dung đã không còn khả dụng khi đội ngũ xử lý.");
+      }
+
+      const report = await updateReportStatus(reportId, nextStatus, {
+        reviewerId: req.user.id,
+        resolutionNote: nextNote,
+      });
+
+      await notifyReporterAboutModeration(report, req.user.id);
+
+      return res.json({
+        message:
+          action === "remove"
+            ? removed
+              ? "Đã gỡ bỏ nội dung và thông báo người báo cáo."
+              : "Nội dung không còn khả dụng; đã cập nhật báo cáo."
+            : "Đã giữ lại nội dung và thông báo người báo cáo.",
+        report,
+        action,
+        removed,
       });
     } catch (error) {
       next(error);

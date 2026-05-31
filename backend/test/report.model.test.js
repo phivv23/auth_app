@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   validateReportInput,
+  validateReportModerationActionInput,
   validateReportStatusInput,
 } from "../src/models/report.model.js";
 
@@ -62,6 +63,32 @@ describe("report validation", () => {
     assert.deepEqual(Object.keys(result.error.fields).sort(), [
       "resolutionNote",
       "status",
+    ]);
+  });
+
+  it("normalizes moderation actions", () => {
+    const result = validateReportModerationActionInput({
+      action: "remove",
+      resolutionNote: "  removed as violating content  ",
+    });
+
+    assert.equal(result.error, null);
+    assert.deepEqual(result.value, {
+      action: "remove",
+      resolutionNote: "removed as violating content",
+    });
+  });
+
+  it("rejects invalid moderation actions", () => {
+    const result = validateReportModerationActionInput({
+      action: "ban",
+      resolutionNote: "x".repeat(2001),
+    });
+
+    assert.equal(result.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(Object.keys(result.error.fields).sort(), [
+      "action",
+      "resolutionNote",
     ]);
   });
 });

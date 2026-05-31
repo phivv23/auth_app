@@ -20,6 +20,7 @@ function normalizeReport(row) {
     reporterName: row.reporterName || null,
     targetType: row.targetType,
     targetId: row.targetId,
+    targetPostId: row.targetPostId || null,
     targetPreview: row.targetPreview || "",
     targetOwnerName: row.targetOwnerName || null,
     reason: row.reason,
@@ -41,6 +42,16 @@ function getReportSelectSql() {
       reporter.name AS reporterName,
       r.target_type AS targetType,
       r.target_id AS targetId,
+      CASE r.target_type
+        WHEN 'post' THEN r.target_id
+        WHEN 'comment' THEN (
+          SELECT target_comment.post_id
+          FROM comments target_comment
+          WHERE target_comment.id = r.target_id
+          LIMIT 1
+        )
+        ELSE NULL
+      END AS targetPostId,
       CASE r.target_type
         WHEN 'user' THEN (
           SELECT target_user.name
@@ -182,6 +193,39 @@ export function validateReportStatusInput(input = {}) {
   return {
     value: {
       status,
+      resolutionNote: resolutionNote || null,
+    },
+    error: null,
+  };
+}
+
+export function validateReportModerationActionInput(input = {}) {
+  const action = String(input.action || "").trim();
+  const resolutionNote = String(input.resolutionNote || "").trim();
+  const fields = {};
+
+  if (!["keep", "remove"].includes(action)) {
+    fields.action = "Thao tác xử lý báo cáo không hợp lệ.";
+  }
+
+  if (resolutionNote.length > 2000) {
+    fields.resolutionNote = "Ghi chú xử lý không được vượt quá 2000 ký tự.";
+  }
+
+  if (Object.keys(fields).length > 0) {
+    return {
+      value: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: Object.values(fields)[0],
+        fields,
+      },
+    };
+  }
+
+  return {
+    value: {
+      action,
       resolutionNote: resolutionNote || null,
     },
     error: null,

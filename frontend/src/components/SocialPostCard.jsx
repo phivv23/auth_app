@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import {
@@ -99,9 +99,11 @@ export default function SocialPostCard({
   onPostDeleted,
   onPostShared,
   defaultCommentsOpen = false,
+  highlightCommentId = null,
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const highlightedCommentRef = useRef(null);
 
   const [commentsOpen, setCommentsOpen] = useState(defaultCommentsOpen);
   const [comments, setComments] = useState([]);
@@ -160,6 +162,17 @@ export default function SocialPostCard({
     // loadComments reads local loading flags; post id is the important reset key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultCommentsOpen, post.id]);
+
+  useEffect(() => {
+    if (!highlightCommentId || !commentsLoaded || commentsLoading) {
+      return;
+    }
+
+    highlightedCommentRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [commentsLoaded, commentsLoading, highlightCommentId]);
 
   async function loadComments() {
     if (commentsLoaded || commentsLoading) {
@@ -939,7 +952,19 @@ export default function SocialPostCard({
                 trimmedEditInput !== originalCommentContent;
 
               return (
-                <div key={comment.id} className="feed-comment">
+                <div
+                  key={comment.id}
+                  ref={
+                    Number(comment.id) === Number(highlightCommentId)
+                      ? highlightedCommentRef
+                      : null
+                  }
+                  className={
+                    Number(comment.id) === Number(highlightCommentId)
+                      ? "feed-comment highlighted"
+                      : "feed-comment"
+                  }
+                >
                   {commentAvatarUrl ? (
                     <img
                       className="feed-comment-avatar"

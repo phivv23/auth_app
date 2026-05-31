@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router";
 
 import {
+  applyAdminReportAction,
   getAdminReports,
   updateAdminReportStatus,
 } from "../api/report.api.js";
@@ -13,7 +14,7 @@ const statuses = [
   { value: "pending", label: "Chờ xử lý" },
   { value: "reviewing", label: "Đang xử lý" },
   { value: "resolved", label: "Đã xử lý" },
-  { value: "dismissed", label: "Bỏ qua" },
+  { value: "dismissed", label: "Giữ lại" },
 ];
 
 const targetTypes = [
@@ -51,7 +52,15 @@ function getTargetUrl(report) {
     return `/posts/${report.targetId}`;
   }
 
+  if (report.targetType === "comment" && report.targetPostId) {
+    return `/posts/${report.targetPostId}?commentId=${report.targetId}`;
+  }
+
   return "";
+}
+
+function isRemovableReport(report) {
+  return ["post", "comment"].includes(report.targetType);
 }
 
 function updateSummary(summary, fromStatus, toStatus) {
@@ -196,6 +205,47 @@ export default function AdminReports() {
     }
   }
 
+  async function handleModerationAction(report, action) {
+    if (action === "remove") {
+      const confirmed = window.confirm(
+        "Bạn chắc chắn muốn gỡ bỏ nội dung bị báo cáo? Thao tác này không thể hoàn tác."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setUpdatingReportId(report.id);
+      setError("");
+      setNotice("");
+
+      const data = await applyAdminReportAction(report.id, {
+        action,
+        resolutionNote: notes[report.id] || report.resolutionNote || "",
+      });
+
+      setReports((currentReports) =>
+        currentReports.map((currentReport) =>
+          currentReport.id === report.id ? data.report : currentReport
+        )
+      );
+      setSummary((currentSummary) =>
+        updateSummary(currentSummary, report.status, data.report.status)
+      );
+      setNotes((currentNotes) => ({
+        ...currentNotes,
+        [report.id]: data.report.resolutionNote || "",
+      }));
+      setNotice(data.message || "Đã xử lý báo cáo và thông báo người dùng.");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setUpdatingReportId(null);
+    }
+  }
+
   return (
     <div className="admin-reports-page">
       <section className="admin-reports-header">
@@ -279,6 +329,7 @@ export default function AdminReports() {
           {reports.map((report) => {
             const targetUrl = getTargetUrl(report);
             const isUpdating = updatingReportId === report.id;
+            const canRemove = isRemovableReport(report);
 
             return (
               <article key={report.id} className="admin-report-card">
@@ -325,7 +376,9 @@ export default function AdminReports() {
 
                 {targetUrl && (
                   <Link className="admin-report-target-link" to={targetUrl}>
-                    Mở nội dung
+                    {report.targetType === "comment"
+                      ? "Mở thẳng bình luận"
+                      : "Mở nội dung"}
                   </Link>
                 )}
 
@@ -365,21 +418,28 @@ export default function AdminReports() {
                       disabled={isUpdating || report.status === "reviewing"}
                       onClick={() => handleUpdateStatus(report, "reviewing")}
                     >
-                      Nhận xử lý
+                      Đang xem xét
                     </button>
                     <button
                       type="button"
-                      disabled={isUpdating || report.status === "resolved"}
-                      onClick={() => handleUpdateStatus(report, "resolved")}
-                    >
-                      Đã xử lý
-                    </button>
-                    <button
-                      type="button"
+                      className="keep"
                       disabled={isUpdating || report.status === "dismissed"}
-                      onClick={() => handleUpdateStatus(report, "dismissed")}
+                      onClick={() => handleModerationAction(report, "keep")}
                     >
-                      Bỏ qua
+                      Giữ lại
+                    </button>
+                    <button
+                      type="button"
+                      className="remove"
+                      disabled={isUpdating || !canRemove || report.status === "resolved"}
+                      title={
+                        canRemove
+                          ? "Gỡ bỏ nội dung vi phạm"
+                          : "Chỉ hỗ trợ gỡ bài viết hoặc bình luận"
+                      }
+                      onClick={() => handleModerationAction(report, "remove")}
+                    >
+                      Gỡ bỏ
                     </button>
                     <button
                       type="button"

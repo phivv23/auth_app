@@ -2287,6 +2287,13 @@ textarea {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 8px;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.feed-comment.highlighted {
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.2);
 }
 
 .feed-comment-body {
@@ -3307,6 +3314,18 @@ textarea {
 
 .admin-report-actions button:hover {
   border-color: #1f2937;
+}
+
+.admin-report-actions button.keep {
+  border-color: #a7f3d0;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.admin-report-actions button.remove {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
 }
 
 .admin-report-actions button:disabled {
