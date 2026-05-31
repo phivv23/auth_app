@@ -4,6 +4,7 @@ import { Link, Navigate } from "react-router";
 import {
   deleteAdminUser,
   getAdminUsers,
+  updateAdminUserStatus,
   updateAdminUserRole,
 } from "../api/admin.api.js";
 import { getFileUrl } from "../api/client.js";
@@ -14,6 +15,13 @@ const roleOptions = [
   { value: "", label: "Tất cả quyền" },
   { value: "admin", label: "Admin" },
   { value: "user", label: "User" },
+];
+
+const statusOptions = [
+  { value: "", label: "Tất cả trạng thái" },
+  { value: "active", label: "Đang hoạt động" },
+  { value: "suspended", label: "Tạm khóa" },
+  { value: "banned", label: "Cấm đăng nhập" },
 ];
 
 export default function AdminUsers() {
@@ -27,6 +35,7 @@ export default function AdminUsers() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mutatingUserId, setMutatingUserId] = useState(null);
@@ -51,6 +60,7 @@ export default function AdminUsers() {
           limit,
           search,
           role,
+          accountStatus,
         });
 
         if (!isActive) {
@@ -79,7 +89,7 @@ export default function AdminUsers() {
     return () => {
       isActive = false;
     };
-  }, [user?.role, page, limit, search, role]);
+  }, [user?.role, page, limit, search, role, accountStatus]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -102,6 +112,12 @@ export default function AdminUsers() {
 
   function handleRoleFilterChange(nextRole) {
     setRole(nextRole);
+    setPage(1);
+    setNotice("");
+  }
+
+  function handleStatusFilterChange(nextStatus) {
+    setAccountStatus(nextStatus);
     setPage(1);
     setNotice("");
   }
@@ -167,6 +183,43 @@ export default function AdminUsers() {
     }
   }
 
+  async function handleStatusChange(targetUser, nextStatus) {
+    if (!nextStatus || nextStatus === targetUser.accountStatus) {
+      return;
+    }
+
+    const reason = window.prompt(
+      `Lý do đổi trạng thái ${targetUser.name} sang ${nextStatus}:`,
+      ""
+    );
+
+    if (reason === null) {
+      return;
+    }
+
+    try {
+      setMutatingUserId(targetUser.id);
+      setError("");
+      setNotice("");
+
+      const data = await updateAdminUserStatus(targetUser.id, {
+        accountStatus: nextStatus,
+        reason,
+      });
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === targetUser.id ? data.user : currentUser
+        )
+      );
+      setNotice(`Đã cập nhật trạng thái cho ${data.user.name}.`);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setMutatingUserId(null);
+    }
+  }
+
   return (
     <div className="admin-page">
       <section className="admin-page-header">
@@ -187,6 +240,7 @@ export default function AdminUsers() {
         <Link to="/admin">Tổng quan</Link>
         <Link to="/admin/content">Nội dung</Link>
         <Link to="/admin/reports">Báo cáo</Link>
+        <Link to="/admin/audit-logs">Audit Log</Link>
       </nav>
 
       <section className="admin-toolbar">
@@ -208,6 +262,22 @@ export default function AdminUsers() {
             onChange={(event) => handleRoleFilterChange(event.target.value)}
           >
             {roleOptions.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Trạng thái
+          <select
+            value={accountStatus}
+            onChange={(event) =>
+              handleStatusFilterChange(event.target.value)
+            }
+          >
+            {statusOptions.map((option) => (
               <option key={option.value || "all"} value={option.value}>
                 {option.label}
               </option>
@@ -257,6 +327,17 @@ export default function AdminUsers() {
                     <span className={`admin-role-badge ${targetUser.role}`}>
                       {targetUser.role}
                     </span>
+                    <span
+                      className={`admin-status-badge ${
+                        targetUser.accountStatus || "active"
+                      }`}
+                    >
+                      {
+                        statusOptions.find(
+                          (item) => item.value === targetUser.accountStatus
+                        )?.label || "Đang hoạt động"
+                      }
+                    </span>
                   </div>
                   <p>{targetUser.email}</p>
                   <div className="admin-row-meta">
@@ -284,6 +365,27 @@ export default function AdminUsers() {
                     </select>
                   </label>
 
+                  <label>
+                    Trạng thái
+                    <select
+                      value={targetUser.accountStatus || "active"}
+                      disabled={isMutating || isSelf}
+                      onChange={(event) =>
+                        handleStatusChange(targetUser, event.target.value)
+                      }
+                    >
+                      <option value="active">Đang hoạt động</option>
+                      <option value="suspended">Tạm khóa</option>
+                      <option value="banned">Cấm đăng nhập</option>
+                    </select>
+                  </label>
+
+                  <Link
+                    className="button secondary"
+                    to={`/admin/users/${targetUser.id}`}
+                  >
+                    Chi tiết
+                  </Link>
                   <button
                     className="button danger"
                     type="button"

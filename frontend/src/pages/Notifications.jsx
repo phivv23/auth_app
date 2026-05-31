@@ -19,6 +19,12 @@ const reportStatusLabels = {
   dismissed: "đã được giữ lại",
 };
 
+const accountStatusLabels = {
+  active: "đã được mở lại",
+  suspended: "đã bị tạm khóa",
+  banned: "đã bị cấm đăng nhập",
+};
+
 function getNotificationText(notification) {
   const actorName = notification.actorName || "Một người dùng";
 
@@ -53,7 +59,22 @@ function getNotificationText(notification) {
   }
 
   if (notification.type === "admin_content_removed") {
-    return `${actorName} đã gỡ nội dung của bạn do vi phạm quy định`;
+    const contentType =
+      notification.metadata?.contentType === "comment" ? "bình luận" : "bài viết";
+    const reason = notification.metadata?.reason || "vi phạm quy định";
+
+    return `${actorName} đã gỡ ${contentType} của bạn: ${reason}`;
+  }
+
+  if (notification.type === "admin_account_status_update") {
+    const statusText =
+      accountStatusLabels[notification.metadata?.accountStatus] ||
+      "đã được cập nhật";
+    const reason = notification.metadata?.reason;
+
+    return reason
+      ? `Tài khoản của bạn ${statusText}: ${reason}`
+      : `Tài khoản của bạn ${statusText}`;
   }
 
   return "Bạn có thông báo mới";

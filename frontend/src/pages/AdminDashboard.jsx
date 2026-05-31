@@ -7,6 +7,9 @@ import { useAuth } from "../context/useAuth.js";
 const overviewItems = [
   { key: "userCount", label: "Người dùng" },
   { key: "adminCount", label: "Admin" },
+  { key: "activeUserCount", label: "Đang hoạt động" },
+  { key: "suspendedUserCount", label: "Tạm khóa" },
+  { key: "bannedUserCount", label: "Bị cấm" },
   { key: "postCount", label: "Bài viết" },
   { key: "commentCount", label: "Bình luận" },
   { key: "reportCount", label: "Báo cáo" },
@@ -81,6 +84,7 @@ export default function AdminDashboard() {
         <Link to="/admin/users">Người dùng</Link>
         <Link to="/admin/content">Nội dung</Link>
         <Link to="/admin/reports">Báo cáo</Link>
+        <Link to="/admin/audit-logs">Audit Log</Link>
       </nav>
 
       {error && <p className="error">{error}</p>}
@@ -112,6 +116,10 @@ export default function AdminDashboard() {
         <Link to="/admin/reports">
           <strong>Duyệt báo cáo</strong>
           <span>Giữ lại hoặc gỡ nội dung từ hàng đợi báo cáo.</span>
+        </Link>
+        <Link to="/admin/audit-logs">
+          <strong>Audit log</strong>
+          <span>Theo dõi mọi thao tác admin để truy vết khi cần.</span>
         </Link>
       </section>
     </div>

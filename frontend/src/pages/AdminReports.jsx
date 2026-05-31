@@ -271,6 +271,7 @@ export default function AdminReports() {
         <Link to="/admin">Tổng quan</Link>
         <Link to="/admin/users">Người dùng</Link>
         <Link to="/admin/content">Nội dung</Link>
+        <Link to="/admin/audit-logs">Audit Log</Link>
       </nav>
 
       <section className="admin-report-summary" aria-label="Tổng quan báo cáo">

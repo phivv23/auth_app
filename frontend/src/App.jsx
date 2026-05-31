@@ -34,7 +34,9 @@ import Messages from "./pages/Messages.jsx";
 import SavedPosts from "./pages/SavedPosts.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminUserDetail from "./pages/AdminUserDetail.jsx";
 import AdminContent from "./pages/AdminContent.jsx";
+import AdminAuditLogs from "./pages/AdminAuditLogs.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
 
@@ -353,7 +355,9 @@ export default function App() {
               <Route path="/posts/:id/edit" element={<EditPost />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/users/:id" element={<AdminUserDetail />} />
               <Route path="/admin/content" element={<AdminContent />} />
+              <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
               <Route path="/admin/reports" element={<AdminReports />} />
             </Route>
 

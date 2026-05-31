@@ -36,6 +36,12 @@ export default function AdminContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [authorId, setAuthorId] = useState("");
+  const [privacy, setPrivacy] = useState("");
+  const [reportedOnly, setReportedOnly] = useState(false);
+  const [minReports, setMinReports] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -60,6 +66,12 @@ export default function AdminContent() {
           page,
           limit,
           search,
+          authorId,
+          privacy: tab === "posts" ? privacy : "",
+          reportedOnly,
+          minReports,
+          fromDate,
+          toDate,
         });
 
         if (!isActive) {
@@ -88,7 +100,19 @@ export default function AdminContent() {
     return () => {
       isActive = false;
     };
-  }, [user?.role, tab, page, limit, search]);
+  }, [
+    user?.role,
+    tab,
+    page,
+    limit,
+    search,
+    authorId,
+    privacy,
+    reportedOnly,
+    minReports,
+    fromDate,
+    toDate,
+  ]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -117,6 +141,15 @@ export default function AdminContent() {
   }
 
   async function handleDeletePost(post) {
+    const reason = window.prompt(
+      `Lý do gỡ bài viết #${post.id}:`,
+      "Vi phạm quy định cộng đồng."
+    );
+
+    if (reason === null) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `Gỡ bài viết #${post.id} của ${post.authorName}? Tác giả sẽ nhận thông báo.`
     );
@@ -130,7 +163,9 @@ export default function AdminContent() {
       setError("");
       setNotice("");
 
-      await deleteAdminPost(post.id);
+      await deleteAdminPost(post.id, {
+        reason,
+      });
 
       setItems((currentItems) =>
         currentItems.filter((currentItem) => currentItem.id !== post.id)
@@ -145,6 +180,15 @@ export default function AdminContent() {
   }
 
   async function handleDeleteComment(comment) {
+    const reason = window.prompt(
+      `Lý do gỡ bình luận #${comment.id}:`,
+      "Vi phạm quy định cộng đồng."
+    );
+
+    if (reason === null) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `Gỡ bình luận #${comment.id} của ${comment.authorName}? Tác giả sẽ nhận thông báo.`
     );
@@ -158,7 +202,9 @@ export default function AdminContent() {
       setError("");
       setNotice("");
 
-      await deleteAdminComment(comment.id);
+      await deleteAdminComment(comment.id, {
+        reason,
+      });
 
       setItems((currentItems) =>
         currentItems.filter((currentItem) => currentItem.id !== comment.id)
@@ -192,6 +238,7 @@ export default function AdminContent() {
         <Link to="/admin">Tổng quan</Link>
         <Link to="/admin/users">Người dùng</Link>
         <Link to="/admin/reports">Báo cáo</Link>
+        <Link to="/admin/audit-logs">Audit Log</Link>
       </nav>
 
       <section className="admin-toolbar">
@@ -222,6 +269,88 @@ export default function AdminContent() {
             Tìm
           </button>
         </form>
+      </section>
+
+      <section className="admin-toolbar admin-filter-grid">
+        <label>
+          User ID
+          <input
+            value={authorId}
+            onChange={(event) => {
+              setAuthorId(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Lọc theo tác giả"
+          />
+        </label>
+
+        {tab === "posts" && (
+          <label>
+            Privacy
+            <select
+              value={privacy}
+              onChange={(event) => {
+                setPrivacy(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Tất cả</option>
+              <option value="public">Public</option>
+              <option value="followers">Followers</option>
+              <option value="friends">Friends</option>
+              <option value="only_me">Only me</option>
+            </select>
+          </label>
+        )}
+
+        <label>
+          Số report tối thiểu
+          <input
+            type="number"
+            min="1"
+            value={minReports}
+            onChange={(event) => {
+              setMinReports(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+
+        <label>
+          Từ ngày
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(event) => {
+              setFromDate(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+
+        <label>
+          Đến ngày
+          <input
+            type="date"
+            value={toDate}
+            onChange={(event) => {
+              setToDate(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+
+        <label className="admin-checkbox-filter">
+          <input
+            type="checkbox"
+            checked={reportedOnly}
+            onChange={(event) => {
+              setReportedOnly(event.target.checked);
+              setPage(1);
+            }}
+          />
+          Chỉ nội dung bị report
+        </label>
       </section>
 
       {error && <p className="error">{error}</p>}
