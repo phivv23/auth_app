@@ -12,6 +12,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 import friendRoutes from "./routes/friend.routes.js";
 import messageRoutes from "./routes/message.routes.js";
 import reportRoutes from "./routes/report.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { sendError } from "./utils/http.js";
 
@@ -56,6 +57,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/protected", protectedRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/admin", adminRoutes);
 
 /**
  * 404 handler.

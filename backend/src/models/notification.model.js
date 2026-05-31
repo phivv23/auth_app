@@ -8,7 +8,10 @@ const NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES = {
   post_like: 60,
   post_comment: 10,
 };
-const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set(["report_status_update"]);
+const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set([
+  "admin_content_removed",
+  "report_status_update",
+]);
 
 function getDedupeWindowInMinutes(type) {
   return NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES[type] || 15;
