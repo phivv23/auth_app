@@ -267,6 +267,12 @@ export default function AdminReports() {
         </button>
       </section>
 
+      <nav className="admin-nav" aria-label="Admin navigation">
+        <Link to="/admin">Tổng quan</Link>
+        <Link to="/admin/users">Người dùng</Link>
+        <Link to="/admin/content">Nội dung</Link>
+      </nav>
+
       <section className="admin-report-summary" aria-label="Tổng quan báo cáo">
         {statuses
           .filter((item) => item.value)

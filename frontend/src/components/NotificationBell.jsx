@@ -53,6 +53,10 @@ function getNotificationText(notification) {
     }`;
   }
 
+  if (notification.type === "admin_content_removed") {
+    return `${actorName} đã gỡ nội dung của bạn do vi phạm quy định`;
+  }
+
   return "Bạn có thông báo mới";
 }
 

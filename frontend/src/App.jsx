@@ -32,6 +32,9 @@ import UserSearch from "./pages/UserSearch.jsx";
 import Friends from "./pages/Friends.jsx";
 import Messages from "./pages/Messages.jsx";
 import SavedPosts from "./pages/SavedPosts.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminContent from "./pages/AdminContent.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
 
@@ -171,10 +174,10 @@ function Navbar({ onDeveloping }) {
                   </Link>
                   {user.role === "admin" && (
                     <Link
-                      to="/admin/reports"
+                      to="/admin"
                       onClick={() => setProfileMenuOpen(false)}
                     >
-                      Moderation
+                      Admin Center
                     </Link>
                   )}
                   <button type="button" onClick={handleLogout}>
@@ -348,6 +351,9 @@ export default function App() {
               <Route path="/reports" element={<MyReports />} />
               <Route path="/posts/create" element={<CreatePost />} />
               <Route path="/posts/:id/edit" element={<EditPost />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/content" element={<AdminContent />} />
               <Route path="/admin/reports" element={<AdminReports />} />
             </Route>
 
