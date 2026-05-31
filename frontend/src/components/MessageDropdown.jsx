@@ -5,12 +5,12 @@ import { getFileUrl } from "../api/client.js";
 import {
   getConversations,
   getMessageRequests,
-  getMessageStreamUrl,
 } from "../api/message.api.js";
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime } from "../utils/time.js";
 import { openMessagePopup } from "../utils/messagePopup.js";
-import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
+
+const POLL_INTERVAL_MS = 30000;
 
 function getPreview(conversation, currentUserId) {
   if (!conversation.lastMessage) {
@@ -81,23 +81,13 @@ export default function MessageDropdown() {
     }
 
     loadMessageData({ showLoading: true });
-  }, [user]);
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
-      listeners: {
-        message: () => {
-          loadMessageData();
-        },
-      },
-    });
+    const intervalId = window.setInterval(() => {
+      loadMessageData();
+    }, POLL_INTERVAL_MS);
 
     return () => {
-      connection.close();
+      window.clearInterval(intervalId);
     };
   }, [user]);
 

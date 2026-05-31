@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
@@ -89,6 +89,7 @@ function getNotificationTarget(notification) {
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const wrapperRef = useRef(null);
 
   const [unreadCount, setUnreadCount] = useState(0);
@@ -140,7 +141,7 @@ export default function NotificationBell() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || location.pathname === "/notifications") {
       return;
     }
 
@@ -167,7 +168,7 @@ export default function NotificationBell() {
     return () => {
       eventSource.close();
     };
-  }, [user]);
+  }, [location.pathname, user]);
 
   useEffect(() => {
     if (!open) {

@@ -98,7 +98,7 @@ export default function MessagePopups() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || isMessagesPage) {
       return;
     }
 
