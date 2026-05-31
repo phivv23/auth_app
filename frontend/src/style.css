@@ -3093,6 +3093,243 @@ textarea {
   color: #344054;
 }
 
+.admin-reports-page {
+  display: grid;
+  gap: 16px;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.admin-reports-header,
+.admin-report-filters,
+.admin-report-card {
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.admin-reports-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+
+.admin-reports-header h1 {
+  margin: 0;
+  color: #101828;
+  font-size: 24px;
+}
+
+.admin-reports-header p {
+  margin: 4px 0 0;
+  color: #667085;
+}
+
+.admin-report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-report-summary button {
+  display: grid;
+  gap: 3px;
+  min-height: 76px;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  text-align: left;
+  padding: 12px;
+}
+
+.admin-report-summary button.active,
+.admin-report-summary button:hover {
+  border-color: #1f2937;
+}
+
+.admin-report-summary strong {
+  color: #101828;
+  font-size: 24px;
+}
+
+.admin-report-summary span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.admin-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+}
+
+.admin-report-filters label,
+.admin-report-note {
+  display: grid;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-report-filters select {
+  min-width: 180px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #101828;
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.admin-report-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-report-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.admin-report-card header,
+.admin-report-card footer,
+.admin-report-meta,
+.admin-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-report-card header,
+.admin-report-card footer {
+  justify-content: space-between;
+}
+
+.admin-report-card h2 {
+  margin: 6px 0 0;
+  color: #101828;
+  font-size: 18px;
+}
+
+.admin-report-card header > span,
+.admin-report-reviewer,
+.admin-report-meta {
+  color: #667085;
+  font-size: 13px;
+}
+
+.admin-report-status {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
+.admin-report-status.pending {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.admin-report-status.reviewing {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-report-status.resolved {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.admin-report-status.dismissed {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.admin-report-card blockquote {
+  margin: 0;
+  border-left: 3px solid #d0d5dd;
+  color: #344054;
+  line-height: 1.5;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+}
+
+.admin-report-details {
+  margin: 0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #344054;
+  line-height: 1.5;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.admin-report-target-link {
+  width: fit-content;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.admin-report-note textarea {
+  width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 10px;
+  resize: vertical;
+}
+
+.admin-report-actions button {
+  min-height: 34px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
+.admin-report-actions button:hover {
+  border-color: #1f2937;
+}
+
+.admin-report-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .admin-reports-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-report-filters label,
+  .admin-report-filters select,
+  .admin-report-actions button {
+    width: 100%;
+  }
+}
 
 .suggested-users-header {
   display: flex;

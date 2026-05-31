@@ -16,3 +16,38 @@ export function createReport({
     }),
   });
 }
+
+export function getAdminReports({
+  page = 1,
+  limit = 20,
+  status = "",
+  targetType = "",
+} = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  if (targetType) {
+    params.set("targetType", targetType);
+  }
+
+  return apiFetch(`/reports/admin?${params.toString()}`);
+}
+
+export function updateAdminReportStatus(
+  reportId,
+  { status, resolutionNote = "" }
+) {
+  return apiFetch(`/reports/admin/${reportId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status,
+      resolutionNote,
+    }),
+  });
+}

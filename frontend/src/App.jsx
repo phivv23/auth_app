@@ -32,6 +32,7 @@ import UserSearch from "./pages/UserSearch.jsx";
 import Friends from "./pages/Friends.jsx";
 import Messages from "./pages/Messages.jsx";
 import SavedPosts from "./pages/SavedPosts.jsx";
+import AdminReports from "./pages/AdminReports.jsx";
 
 const developingItems = [
   { icon: "✺", label: "Meta AI" },
@@ -161,6 +162,14 @@ function Navbar({ onDeveloping }) {
                   >
                     Dashboard
                   </Link>
+                  {user.role === "admin" && (
+                    <Link
+                      to="/admin/reports"
+                      onClick={() => setProfileMenuOpen(false)}
+                    >
+                      Moderation
+                    </Link>
+                  )}
                   <button type="button" onClick={handleLogout}>
                     Logout
                   </button>
@@ -331,6 +340,7 @@ export default function App() {
               <Route path="/my-posts" element={<MyPosts />} />
               <Route path="/posts/create" element={<CreatePost />} />
               <Route path="/posts/:id/edit" element={<EditPost />} />
+              <Route path="/admin/reports" element={<AdminReports />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

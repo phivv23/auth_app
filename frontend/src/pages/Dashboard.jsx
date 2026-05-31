@@ -52,6 +52,10 @@ export default function Dashboard() {
         <p>
           <strong>Email:</strong> {user.email}
         </p>
+
+        <p>
+          <strong>Role:</strong> {user.role || "user"}
+        </p>
       </div>
 
       {secretMessage && <p className="success">{secretMessage}</p>}
