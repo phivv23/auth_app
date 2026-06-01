@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { getBookmarkedPosts } from "../api/post.api.js";
+import { PostListSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 
 export default function SavedPosts() {
@@ -14,6 +15,7 @@ export default function SavedPosts() {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
 
     async function loadSavedPosts() {
       try {
@@ -23,6 +25,7 @@ export default function SavedPosts() {
         const data = await getBookmarkedPosts({
           page,
           limit,
+          signal: controller.signal,
         });
 
         if (!isActive) {
@@ -47,6 +50,7 @@ export default function SavedPosts() {
 
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [page, limit]);
 
@@ -91,7 +95,7 @@ export default function SavedPosts() {
       {error ? (
         <p className="error">{error}</p>
       ) : loading ? (
-        <p>Đang tải bài viết đã lưu...</p>
+        <PostListSkeleton count={3} />
       ) : posts.length === 0 ? (
         <section className="card">
           <p>Bạn chưa lưu bài viết nào.</p>

@@ -1,12 +1,12 @@
 import { apiFetch } from "./client";
 
-export function getPublicUserProfile(userId) {
-  return apiFetch(`/users/${userId}`);
+export function getPublicUserProfile(userId, { signal } = {}) {
+  return apiFetch(`/users/${userId}`, { signal });
 }
 
 export function getPublicUserPosts(
   userId,
-  { page = 1, limit = 10, search = "" } = {}
+  { page = 1, limit = 10, search = "", signal } = {}
 ) {
   const params = new URLSearchParams();
 
@@ -17,7 +17,7 @@ export function getPublicUserPosts(
     params.set("search", search);
   }
 
-  return apiFetch(`/users/${userId}/posts?${params.toString()}`);
+  return apiFetch(`/users/${userId}/posts?${params.toString()}`, { signal });
 }
 
 export function followUser(userId) {
@@ -75,10 +75,10 @@ export function searchUsers(
   return apiFetch(`/users/search?${params.toString()}`);
 }
 
-export function getSuggestedUsers({ limit = 5 } = {}) {
+export function getSuggestedUsers({ limit = 5, signal } = {}) {
   const params = new URLSearchParams();
 
   params.set("limit", limit);
 
-  return apiFetch(`/users/suggestions?${params.toString()}`);
+  return apiFetch(`/users/suggestions?${params.toString()}`, { signal });
 }

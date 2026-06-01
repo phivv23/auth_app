@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -8,6 +8,7 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../api/notification.api.js";
+import { NotificationListSkeleton } from "../components/Skeleton.jsx";
 import { formatRelativeTime } from "../utils/time.js";
 
 const POLL_INTERVAL_MS = 5000;
@@ -120,6 +121,10 @@ function getNotificationTarget(notification) {
 
 export default function Notifications() {
   const navigate = useNavigate();
+  const requestRef = useRef({
+    controller: null,
+    id: 0,
+  });
 
   const [notifications, setNotifications] = useState([]);
   const [page, setPage] = useState(1);
@@ -134,6 +139,14 @@ export default function Notifications() {
     let isActive = true;
 
     async function loadNotifications({ silent = false } = {}) {
+      requestRef.current.controller?.abort();
+      const controller = new AbortController();
+      const requestId = requestRef.current.id + 1;
+      requestRef.current = {
+        controller,
+        id: requestId,
+      };
+
       try {
         if (silent) {
           setRefreshing(true);
@@ -146,9 +159,10 @@ export default function Notifications() {
         const data = await getNotifications({
           page,
           limit,
+          signal: controller.signal,
         });
 
-        if (!isActive) {
+        if (!isActive || requestRef.current.id !== requestId) {
           return;
         }
 
@@ -156,13 +170,14 @@ export default function Notifications() {
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
       } catch (error) {
-        if (isActive) {
+        if (isActive && error.name !== "AbortError" && !silent) {
           setError(error.message);
         }
       } finally {
-        if (isActive) {
+        if (isActive && requestRef.current.id === requestId) {
           setLoading(false);
           setRefreshing(false);
+          requestRef.current.controller = null;
         }
       }
     }
@@ -179,6 +194,7 @@ export default function Notifications() {
 
     return () => {
       isActive = false;
+      requestRef.current.controller?.abort();
 
       if (intervalId) {
         clearInterval(intervalId);
@@ -276,7 +292,7 @@ export default function Notifications() {
         {error && <p className="error">{error}</p>}
 
         {loading ? (
-          <p className="notification-empty-state">Đang tải thông báo...</p>
+          <NotificationListSkeleton count={6} />
         ) : notifications.length === 0 ? (
           <p className="notification-empty-state">
             Chưa có thông báo nào.

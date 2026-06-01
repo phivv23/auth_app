@@ -11,6 +11,7 @@ import {
 import FollowListPanel from "../components/FollowListPanel.jsx";
 import PostComposer from "../components/PostComposer.jsx";
 import ReportDialog from "../components/ReportDialog.jsx";
+import { PostListSkeleton, ProfileSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 import { openMessagePopup } from "../utils/messagePopup.js";
 import {
@@ -81,34 +82,56 @@ export default function UserProfile({ profileUserId }) {
   }, [moreMenuOpen]);
 
   useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
     async function loadProfile() {
       try {
         setLoading(true);
         setError("");
+        setProfile(null);
 
-        const data = await getPublicUserProfile(id);
+        const data = await getPublicUserProfile(id, {
+          signal: controller.signal,
+        });
 
-        setProfile(data.profile);
+        if (isActive) {
+          setProfile(data.profile);
+        }
       } catch (error) {
-        setError(error.message);
+        if (isActive && error.name !== "AbortError") {
+          setError(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     }
 
     loadProfile();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
   }, [id]);
 
   useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
     async function loadPosts() {
       try {
         setPostsLoading(true);
         setError("");
 
         if (!profile || isProfileHidden) {
-          setPosts([]);
-          setTotal(0);
-          setTotalPages(1);
+          if (isActive) {
+            setPosts([]);
+            setTotal(0);
+            setTotalPages(1);
+          }
           return;
         }
 
@@ -116,19 +139,31 @@ export default function UserProfile({ profileUserId }) {
           page,
           limit,
           search,
+          signal: controller.signal,
         });
 
-        setPosts(data.posts || []);
-        setTotal(data.pagination?.total || 0);
-        setTotalPages(data.pagination?.totalPages || 1);
+        if (isActive) {
+          setPosts(data.posts || []);
+          setTotal(data.pagination?.total || 0);
+          setTotalPages(data.pagination?.totalPages || 1);
+        }
       } catch (error) {
-        setError(error.message);
+        if (isActive && error.name !== "AbortError") {
+          setError(error.message);
+        }
       } finally {
-        setPostsLoading(false);
+        if (isActive) {
+          setPostsLoading(false);
+        }
       }
     }
 
     loadPosts();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
   }, [id, page, limit, search, profile, isProfileHidden]);
 
   function handleSearchSubmit(event) {
@@ -300,11 +335,7 @@ export default function UserProfile({ profileUserId }) {
   }
 
   if (loading) {
-    return (
-      <div className="container">
-        <p>Đang tải profile...</p>
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (error && !profile) {
@@ -594,9 +625,7 @@ export default function UserProfile({ profileUserId }) {
           </div>
 
           {postsLoading ? (
-            <section className="profile-panel">
-              <p>Đang tải bài viết...</p>
-            </section>
+            <PostListSkeleton count={2} className="post-list profile-post-list" />
           ) : posts.length === 0 ? (
             <section className="profile-panel">
               <p>Chưa có bài viết nào.</p>

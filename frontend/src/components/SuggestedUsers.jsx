@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { getSuggestedUsers } from "../api/user.api";
+import { UserListSkeleton } from "./Skeleton.jsx";
 import UserCard from "./UserCard";
 import { useAuth } from "../context/useAuth.js";
 
@@ -14,6 +15,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
 
     async function loadSuggestions() {
       if (!currentUser) {
@@ -28,6 +30,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
 
         const data = await getSuggestedUsers({
           limit,
+          signal: controller.signal,
         });
 
         if (!isActive) {
@@ -50,6 +53,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
 
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [currentUser, limit]);
 
@@ -98,7 +102,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
       {error && <p className="error">{error}</p>}
 
       {loading ? (
-        <p>Đang tải gợi ý...</p>
+        <UserListSkeleton count={limit} />
       ) : users.length === 0 ? (
         <p>Chưa có gợi ý phù hợp.</p>
       ) : (

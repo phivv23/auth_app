@@ -1,6 +1,6 @@
 import { apiFetch } from "./client.js";
 
-export function getPosts({ page = 1, limit = 10, search = "" } = {}) {
+export function getPosts({ page = 1, limit = 10, search = "", signal } = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
@@ -10,14 +10,14 @@ export function getPosts({ page = 1, limit = 10, search = "" } = {}) {
     params.set("search", search.trim());
   }
 
-  return apiFetch(`/posts?${params.toString()}`);
+  return apiFetch(`/posts?${params.toString()}`, { signal });
 }
 
-export function getPostById(postId) {
-  return apiFetch(`/posts/${postId}`);
+export function getPostById(postId, { signal } = {}) {
+  return apiFetch(`/posts/${postId}`, { signal });
 }
 
-export function getMyPosts({ page = 1, limit = 10, search = "" } = {}) {
+export function getMyPosts({ page = 1, limit = 10, search = "", signal } = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
@@ -27,7 +27,7 @@ export function getMyPosts({ page = 1, limit = 10, search = "" } = {}) {
     params.set("search", search.trim());
   }
 
-  return apiFetch(`/posts/me?${params.toString()}`);
+  return apiFetch(`/posts/me?${params.toString()}`, { signal });
 }
 
 export function createPost(formData) {
@@ -50,13 +50,13 @@ export function deletePost(postId) {
   });
 }
 
-export function getPostComments(postId) {
-  return apiFetch(`/posts/${postId}/comments`);
+export function getPostComments(postId, { signal } = {}) {
+  return apiFetch(`/posts/${postId}/comments`, { signal });
 }
 
 export function getPostReactions(
   postId,
-  { page = 1, limit = 50, reactionType = "" } = {}
+  { page = 1, limit = 50, reactionType = "", signal } = {}
 ) {
   const params = new URLSearchParams();
 
@@ -67,7 +67,7 @@ export function getPostReactions(
     params.set("reactionType", reactionType);
   }
 
-  return apiFetch(`/posts/${postId}/reactions?${params.toString()}`);
+  return apiFetch(`/posts/${postId}/reactions?${params.toString()}`, { signal });
 }
 
 export function createComment(postId, content, { parentCommentId = null } = {}) {
@@ -119,20 +119,20 @@ export function togglePostBookmark(postId) {
   });
 }
 
-export function getFeedPosts({ page = 1, limit = 10 } = {}) {
+export function getFeedPosts({ page = 1, limit = 10, signal } = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/posts/feed?${params.toString()}`);
+  return apiFetch(`/posts/feed?${params.toString()}`, { signal });
 }
 
-export function getBookmarkedPosts({ page = 1, limit = 10 } = {}) {
+export function getBookmarkedPosts({ page = 1, limit = 10, signal } = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/posts/bookmarks?${params.toString()}`);
+  return apiFetch(`/posts/bookmarks?${params.toString()}`, { signal });
 }

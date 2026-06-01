@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { deletePost, getMyPosts } from "../api/post.api.js";
 import PostCard from "../components/PostCard.jsx";
+import { PostListSkeleton } from "../components/Skeleton.jsx";
 
 export default function MyPosts() {
   const [posts, setPosts] = useState([]);
@@ -17,11 +18,13 @@ export default function MyPosts() {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
 
     getMyPosts({
       page,
       limit: 10,
       search,
+      signal: controller.signal,
     })
       .then((data) => {
         if (isActive) {
@@ -30,7 +33,7 @@ export default function MyPosts() {
         }
       })
       .catch((error) => {
-        if (isActive) {
+        if (isActive && error.name !== "AbortError") {
           setError(error.message);
         }
       })
@@ -42,6 +45,7 @@ export default function MyPosts() {
 
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [page, search]);
 
@@ -129,7 +133,7 @@ export default function MyPosts() {
       )}
 
       {loading ? (
-        <p>Đang tải bài viết...</p>
+        <PostListSkeleton count={3} compact className="post-list" />
       ) : (
         <>
           {error && <p className="error">{error}</p>}

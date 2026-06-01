@@ -15,6 +15,7 @@ import {
 } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
 import ReportDialog from "./ReportDialog.jsx";
+import { CommentListSkeleton } from "./Skeleton.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
@@ -224,6 +225,8 @@ export default function SocialPostCard({
   const navigate = useNavigate();
   const { user } = useAuth();
   const highlightedCommentRef = useRef(null);
+  const commentsRequestRef = useRef(null);
+  const reactionsRequestRef = useRef(null);
 
   const [commentsOpen, setCommentsOpen] = useState(defaultCommentsOpen);
   const [comments, setComments] = useState([]);
@@ -289,6 +292,15 @@ export default function SocialPostCard({
   }, [defaultCommentsOpen, post.id]);
 
   useEffect(() => {
+    return () => {
+      commentsRequestRef.current?.abort();
+      reactionsRequestRef.current?.abort();
+      commentsRequestRef.current = null;
+      reactionsRequestRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!highlightCommentId || !commentsLoaded || commentsLoading) {
       return;
     }
@@ -319,21 +331,36 @@ export default function SocialPostCard({
       return;
     }
 
+    commentsRequestRef.current?.abort();
+    const controller = new AbortController();
+    commentsRequestRef.current = controller;
+
     try {
       setCommentsLoading(true);
       setError("");
 
-      const data = await getPostComments(post.id);
+      const data = await getPostComments(post.id, {
+        signal: controller.signal,
+      });
       setComments(data.comments || []);
       setCommentsLoaded(true);
     } catch (error) {
-      setError(error.message);
+      if (error.name !== "AbortError") {
+        setError(error.message);
+      }
     } finally {
-      setCommentsLoading(false);
+      if (commentsRequestRef.current === controller) {
+        setCommentsLoading(false);
+        commentsRequestRef.current = null;
+      }
     }
   }
 
   async function loadReactions(nextFilter = reactionFilter) {
+    reactionsRequestRef.current?.abort();
+    const controller = new AbortController();
+    reactionsRequestRef.current = controller;
+
     try {
       setReactionsLoading(true);
       setReactionsError("");
@@ -341,14 +368,20 @@ export default function SocialPostCard({
       const data = await getPostReactions(post.id, {
         limit: 50,
         reactionType: nextFilter,
+        signal: controller.signal,
       });
 
       setReactionUsers(data.users || []);
       setReactionSummary(data.summary || {});
     } catch (error) {
-      setReactionsError(error.message);
+      if (error.name !== "AbortError") {
+        setReactionsError(error.message);
+      }
     } finally {
-      setReactionsLoading(false);
+      if (reactionsRequestRef.current === controller) {
+        setReactionsLoading(false);
+        reactionsRequestRef.current = null;
+      }
     }
   }
 
@@ -1502,7 +1535,7 @@ export default function SocialPostCard({
           {commentActionError && <p className="error">{commentActionError}</p>}
 
           {commentsLoading ? (
-            <p className="muted">Đang tải bình luận...</p>
+            <CommentListSkeleton count={3} />
           ) : comments.length === 0 ? (
             <p className="muted">Chưa có bình luận nào.</p>
           ) : (

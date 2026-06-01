@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import PostComposer from "../components/PostComposer.jsx";
+import { PostListSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 import SuggestedUsers from "../components/SuggestedUsers.jsx";
 import { getFeedPosts } from "../api/post.api.js";
@@ -28,6 +29,7 @@ export default function Feed({ onDeveloping }) {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
 
     async function loadFeed() {
       const isFirstPage = page === 1;
@@ -45,6 +47,7 @@ export default function Feed({ onDeveloping }) {
         const data = await getFeedPosts({
           page,
           limit,
+          signal: controller.signal,
         });
 
         if (!isActive) {
@@ -89,6 +92,7 @@ export default function Feed({ onDeveloping }) {
 
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [page, limit, loadAttempt]);
 
@@ -243,7 +247,7 @@ export default function Feed({ onDeveloping }) {
       {error ? (
         <p className="error">{error}</p>
       ) : loading ? (
-        <p>Đang tải feed...</p>
+        <PostListSkeleton count={3} />
       ) : posts.length === 0 ? (
         <section className="card">
           <p>Feed đang trống.</p>
@@ -266,7 +270,7 @@ export default function Feed({ onDeveloping }) {
       {!error && !loading && posts.length > 0 && (
         <div ref={loadMoreRef} className="infinite-scroll-status">
           {loadingMore ? (
-            <span>Đang tải thêm bài viết...</span>
+            <PostListSkeleton count={1} compact />
           ) : loadMoreError ? (
             <>
               <p className="error">{loadMoreError}</p>

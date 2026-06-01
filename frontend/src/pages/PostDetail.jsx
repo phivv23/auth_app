@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { getPostById } from "../api/post.api.js";
+import { PostListSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 
 export default function PostDetail() {
@@ -18,13 +19,17 @@ export default function PostDetail() {
 
   useEffect(() => {
     let isActive = true;
+    const controller = new AbortController();
 
     async function loadPost() {
       try {
         setLoading(true);
         setError("");
+        setPost(null);
 
-        const data = await getPostById(postId);
+        const data = await getPostById(postId, {
+          signal: controller.signal,
+        });
 
         if (isActive) {
           setPost(data.post);
@@ -44,11 +49,12 @@ export default function PostDetail() {
 
     return () => {
       isActive = false;
+      controller.abort();
     };
   }, [postId]);
 
   if (loading) {
-    return <p>Đang tải bài viết...</p>;
+    return <PostListSkeleton count={1} />;
   }
 
   if (error) {
