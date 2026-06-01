@@ -51,7 +51,7 @@ function handleStoryUpload(req, res, next) {
       return sendError(
         res,
         400,
-        "Ảnh story tối đa 5MB.",
+        "Media story tối đa 50MB.",
         "STORY_MEDIA_TOO_LARGE"
       );
     }
@@ -59,10 +59,14 @@ function handleStoryUpload(req, res, next) {
     return sendError(
       res,
       400,
-      error.message || "Upload ảnh story thất bại.",
+      error.message || "Upload media story thất bại.",
       "STORY_MEDIA_UPLOAD_FAILED"
     );
   });
+}
+
+function getStoryMediaType(file) {
+  return file.mimetype?.startsWith("video/") ? "video" : "image";
 }
 
 function getUploadedStoryMedia(req) {
@@ -72,7 +76,7 @@ function getUploadedStoryMedia(req) {
 
   return {
     url: `/uploads/stories/${req.file.filename}`,
-    type: "image",
+    type: getStoryMediaType(req.file),
   };
 }
 
@@ -105,7 +109,7 @@ router.post(
         return sendError(
           res,
           400,
-          "Story cần có ảnh.",
+          "Story cần có ảnh hoặc video.",
           "STORY_MEDIA_REQUIRED"
         );
       }

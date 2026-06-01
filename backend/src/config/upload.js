@@ -17,10 +17,26 @@ fs.mkdirSync(postUploadDir, { recursive: true });
 fs.mkdirSync(storyUploadDir, { recursive: true });
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+const allowedStoryMimeTypes = [
+  ...allowedMimeTypes,
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+];
 
 function imageFileFilter(req, file, cb) {
   if (!allowedMimeTypes.includes(file.mimetype)) {
     return cb(new Error("Chỉ cho phép upload ảnh JPG, PNG hoặc WEBP"));
+  }
+
+  cb(null, true);
+}
+
+function storyMediaFileFilter(req, file, cb) {
+  if (!allowedStoryMimeTypes.includes(file.mimetype)) {
+    return cb(
+      new Error("Chỉ cho phép upload story JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
+    );
   }
 
   cb(null, true);
@@ -80,8 +96,8 @@ export const uploadStoryMedia = multer({
     uploadDir: storyUploadDir,
     prefix: "story",
   }),
-  fileFilter: imageFileFilter,
+  fileFilter: storyMediaFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 50 * 1024 * 1024,
   },
 });

@@ -5950,7 +5950,8 @@ textarea {
   font-weight: 800;
 }
 
-.story-upload-zone img {
+.story-upload-zone img,
+.story-upload-zone video {
   width: 100%;
   height: 100%;
   max-height: 420px;
@@ -6032,7 +6033,8 @@ textarea {
   background: #000;
 }
 
-.story-viewer-media img {
+.story-viewer-media img,
+.story-viewer-media video {
   width: 100%;
   max-height: min(68vh, 760px);
   object-fit: contain;

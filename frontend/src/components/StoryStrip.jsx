@@ -10,7 +10,17 @@ import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
-const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+const allowedStoryMediaTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+];
+
+const STORY_IMAGE_MAX_SIZE = 5 * 1024 * 1024;
+const STORY_VIDEO_MAX_SIZE = 50 * 1024 * 1024;
 
 const privacyOptions = [
   { value: "public", label: "Công khai" },
@@ -47,6 +57,14 @@ function updateStoryInList(stories, updatedStory) {
   );
 }
 
+function getMediaTypeFromFile(file) {
+  return file?.type?.startsWith("video/") ? "video" : "image";
+}
+
+function isStoryVideo(story) {
+  return story?.mediaType === "video";
+}
+
 export default function StoryStrip({ onNotice }) {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
@@ -60,6 +78,7 @@ export default function StoryStrip({ onNotice }) {
   const [privacy, setPrivacy] = useState("friends");
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewMediaType, setPreviewMediaType] = useState("image");
   const [composerError, setComposerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -145,6 +164,7 @@ export default function StoryStrip({ onNotice }) {
 
     setFile(null);
     setPreviewUrl("");
+    setPreviewMediaType("image");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -169,10 +189,14 @@ export default function StoryStrip({ onNotice }) {
     }
 
     if (
-      !allowedImageTypes.includes(selectedFile.type) ||
-      selectedFile.size > 5 * 1024 * 1024
+      !allowedStoryMediaTypes.includes(selectedFile.type) ||
+      (selectedFile.type.startsWith("video/")
+        ? selectedFile.size > STORY_VIDEO_MAX_SIZE
+        : selectedFile.size > STORY_IMAGE_MAX_SIZE)
     ) {
-      setComposerError("Ảnh story phải là JPG, PNG hoặc WEBP và tối đa 5MB.");
+      setComposerError(
+        "Story hỗ trợ JPG, PNG, WEBP tối đa 5MB hoặc MP4, WEBM, MOV tối đa 50MB."
+      );
       clearFile();
       return;
     }
@@ -180,6 +204,7 @@ export default function StoryStrip({ onNotice }) {
     clearFile();
     setFile(selectedFile);
     setPreviewUrl(URL.createObjectURL(selectedFile));
+    setPreviewMediaType(getMediaTypeFromFile(selectedFile));
   }
 
   async function handleCreateStory(event) {
@@ -299,7 +324,17 @@ export default function StoryStrip({ onNotice }) {
                   type="button"
                   onClick={() => handleOpenStory(story)}
                 >
-                  <img className="story-card-media" src={storyMediaUrl} alt="" />
+                  {isStoryVideo(story) ? (
+                    <video
+                      className="story-card-media"
+                      src={storyMediaUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img className="story-card-media" src={storyMediaUrl} alt="" />
+                  )}
                   {storyAvatarUrl ? (
                     <img
                       className="story-card-avatar"
@@ -352,14 +387,18 @@ export default function StoryStrip({ onNotice }) {
 
             <label className="story-upload-zone">
               {previewUrl ? (
-                <img src={previewUrl} alt="Xem trước story" />
+                previewMediaType === "video" ? (
+                  <video src={previewUrl} controls playsInline />
+                ) : (
+                  <img src={previewUrl} alt="Xem trước story" />
+                )
               ) : (
-                <span>Chọn ảnh story</span>
+                <span>Chọn ảnh hoặc video story</span>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                 onChange={handleFileChange}
               />
             </label>
@@ -446,7 +485,16 @@ export default function StoryStrip({ onNotice }) {
             </header>
 
             <div className="story-viewer-media">
-              <img src={getFileUrl(activeStory.mediaUrl)} alt="" />
+              {isStoryVideo(activeStory) ? (
+                <video
+                  src={getFileUrl(activeStory.mediaUrl)}
+                  controls
+                  autoPlay
+                  playsInline
+                />
+              ) : (
+                <img src={getFileUrl(activeStory.mediaUrl)} alt="" />
+              )}
             </div>
 
             {activeStory.caption && <p>{activeStory.caption}</p>}

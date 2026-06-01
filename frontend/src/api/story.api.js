@@ -12,6 +12,7 @@ export function createStory(formData) {
   return apiFetch("/stories", {
     method: "POST",
     body: formData,
+    timeoutMs: 120000,
   });
 }
 

@@ -25,6 +25,7 @@ function normalizePositiveInt(value, fallback = 20, max = 50) {
 function normalizeStory(row, currentUserId = null) {
   return {
     ...row,
+    mediaType: row.mediaType || "image",
     caption: row.caption || "",
     viewedByMe: Boolean(row.viewedByMe),
     isMine: currentUserId
