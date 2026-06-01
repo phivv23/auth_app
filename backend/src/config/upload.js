@@ -9,10 +9,12 @@ const __dirname = path.dirname(__filename);
 const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
 const coverUploadDir = path.resolve(__dirname, "../../uploads/covers");
 const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
+const storyUploadDir = path.resolve(__dirname, "../../uploads/stories");
 
 fs.mkdirSync(avatarUploadDir, { recursive: true });
 fs.mkdirSync(coverUploadDir, { recursive: true });
 fs.mkdirSync(postUploadDir, { recursive: true });
+fs.mkdirSync(storyUploadDir, { recursive: true });
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
@@ -66,6 +68,17 @@ export const uploadPostImage = multer({
   storage: createImageStorage({
     uploadDir: postUploadDir,
     prefix: "post",
+  }),
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+});
+
+export const uploadStoryMedia = multer({
+  storage: createImageStorage({
+    uploadDir: storyUploadDir,
+    prefix: "story",
   }),
   fileFilter: imageFileFilter,
   limits: {

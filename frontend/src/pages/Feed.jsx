@@ -4,10 +4,11 @@ import PostComposer from "../components/PostComposer.jsx";
 import { PostListSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
 import SuggestedUsers from "../components/SuggestedUsers.jsx";
+import StoryStrip from "../components/StoryStrip.jsx";
 import { getFeedPosts } from "../api/post.api.js";
 import { getPublicUserPosts } from "../api/user.api.js";
 
-export default function Feed({ onDeveloping }) {
+export default function Feed() {
   const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
@@ -223,15 +224,7 @@ export default function Feed({ onDeveloping }) {
 
       <PostComposer onCreated={handlePostCreated} />
 
-      <section className="story-strip" aria-label="Stories">
-        <button type="button" onClick={() => onDeveloping?.("Tin")}>
-          <span>+</span>
-          <strong>Tạo tin</strong>
-        </button>
-        <div className="story-empty">
-          Tin của bạn bè sẽ hiển thị tại đây.
-        </div>
-      </section>
+      <StoryStrip onNotice={setFeedNotice} />
 
       <div className="feed-toolbar">
         <span>Bài viết mới nhất</span>
