@@ -164,7 +164,9 @@ export default function PostComposer({
           }}
         >
           <form
-            className="post-composer-modal"
+            className={`post-composer-modal ${
+              previews.length > 0 ? "has-media" : ""
+            }`.trim()}
             onSubmit={handleSubmit}
             role="dialog"
             aria-modal="true"
