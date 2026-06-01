@@ -8,6 +8,13 @@ import {
 } from "../api/admin.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
+import {
+  canManageAdminArea,
+  canManageRoles,
+  canMutateTargetUser,
+  getRoleLabel,
+  roleOptions,
+} from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const statusLabels = {
@@ -57,14 +64,14 @@ export default function AdminUserDetail() {
       }
     }
 
-    if (currentUser?.role === "admin") {
+    if (canManageAdminArea(currentUser)) {
       loadUserDetail();
     }
 
     return () => {
       isActive = false;
     };
-  }, [currentUser?.role, id]);
+  }, [currentUser, id]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -74,7 +81,7 @@ export default function AdminUserDetail() {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.role !== "admin") {
+  if (!canManageAdminArea(currentUser)) {
     return <Navigate to="/feed" replace />;
   }
 
@@ -151,6 +158,7 @@ export default function AdminUserDetail() {
   const targetUser = detail.user;
   const avatarUrl = getFileUrl(targetUser.avatarUrl);
   const isSelf = Number(targetUser.id) === Number(currentUser.id);
+  const canMutateUser = canMutateTargetUser(currentUser, targetUser);
 
   return (
     <div className="admin-page">
@@ -184,6 +192,7 @@ export default function AdminUserDetail() {
           )}
 
           <strong>{targetUser.name}</strong>
+          <span>{getRoleLabel(targetUser.role)}</span>
           <span>{statusLabels[targetUser.accountStatus] || "Đang hoạt động"}</span>
           <p>
             {targetUser.postCount || 0} bài viết · {targetUser.commentCount || 0}{" "}
@@ -201,17 +210,25 @@ export default function AdminUserDetail() {
             Quyền
             <select
               value={role}
-              disabled={saving || isSelf}
+              disabled={saving || !canManageRoles(currentUser) || isSelf}
               onChange={(event) => setRole(event.target.value)}
             >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
           <button
             className="button"
             type="button"
-            disabled={saving || isSelf || role === targetUser.role}
+            disabled={
+              saving ||
+              !canManageRoles(currentUser) ||
+              isSelf ||
+              role === targetUser.role
+            }
             onClick={handleSaveRole}
           >
             Lưu quyền
@@ -221,7 +238,7 @@ export default function AdminUserDetail() {
             Trạng thái
             <select
               value={accountStatus}
-              disabled={saving || isSelf}
+              disabled={saving || !canMutateUser}
               onChange={(event) => setAccountStatus(event.target.value)}
             >
               <option value="active">Đang hoạt động</option>
@@ -236,14 +253,14 @@ export default function AdminUserDetail() {
               onChange={(event) => setReason(event.target.value)}
               rows={3}
               maxLength={1000}
-              disabled={saving || isSelf}
+              disabled={saving || !canMutateUser}
             />
           </label>
           <button
             className="button danger"
             type="button"
             disabled={
-              saving || isSelf || accountStatus === targetUser.accountStatus
+              saving || !canMutateUser || accountStatus === targetUser.accountStatus
             }
             onClick={handleSaveStatus}
           >

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { optionalAuth, requireAuth } from "../middleware/requireAuth.js";
+import { isModeratorUser } from "../middleware/requireAdmin.js";
 import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
@@ -281,7 +282,7 @@ router.get("/:postId/reactions", optionalAuth, async (req, res, next) => {
     }
 
     const post = await findPostById(postId, req.user?.id || null, {
-      bypassVisibility: req.user?.role === "admin",
+      bypassVisibility: isModeratorUser(req.user),
     });
 
     if (!post) {
@@ -355,7 +356,9 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
       });
     }
 
-    const post = await findPostById(postId, req.user?.id || null);
+    const post = await findPostById(postId, req.user?.id || null, {
+      bypassVisibility: isModeratorUser(req.user),
+    });
 
     if (!post) {
       return res.status(404).json({
@@ -600,7 +603,9 @@ router.get("/:postId/comments", optionalAuth, async (req, res, next) => {
       });
     }
 
-    const post = await findPostById(postId, req.user?.id || null);
+    const post = await findPostById(postId, req.user?.id || null, {
+      bypassVisibility: isModeratorUser(req.user),
+    });
 
     if (!post) {
       return res.status(404).json({

@@ -1,10 +1,15 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
-import { requireAdmin } from "../middleware/requireAdmin.js";
+import {
+  isSuperAdminUser,
+  requireAdmin,
+  requireSuperAdmin,
+} from "../middleware/requireAdmin.js";
 import { findAdminAuditLogs, logAdminAction } from "../models/audit.model.js";
 import {
   countAdmins,
+  countSuperAdmins,
   deleteUserById,
   findAdminComments,
   findAdminPosts,
@@ -15,6 +20,7 @@ import {
   findAdminUsers,
   findUserDeletionAssets,
   getAdminOverview,
+  PRIVILEGED_ADMIN_ROLE_VALUES,
   updateUserAccountStatus,
   updateUserRole,
   validateAdminAccountStatusInput,
@@ -66,6 +72,25 @@ async function deletePostWithUploads(postId, currentUserId) {
   await deleteLocalUploads(uploadUrls);
 
   return post;
+}
+
+function isPrivilegedAdminRole(role) {
+  return PRIVILEGED_ADMIN_ROLE_VALUES.includes(role);
+}
+
+function requireSuperAdminForPrivilegedTarget(req, res, targetUser) {
+  if (!isPrivilegedAdminRole(targetUser.role) || isSuperAdminUser(req.user)) {
+    return false;
+  }
+
+  sendError(
+    res,
+    403,
+    "Chỉ super admin mới được thao tác với admin khác.",
+    "SUPER_ADMIN_REQUIRED_FOR_ADMIN_TARGET"
+  );
+
+  return true;
 }
 
 router.use(requireAuth, requireAdmin);
@@ -131,7 +156,7 @@ router.get("/users/:id", async (req, res, next) => {
   }
 });
 
-router.patch("/users/:id/role", async (req, res, next) => {
+router.patch("/users/:id/role", requireSuperAdmin, async (req, res, next) => {
   try {
     const userId = normalizePositiveInt(req.params.id);
 
@@ -157,27 +182,40 @@ router.patch("/users/:id/role", async (req, res, next) => {
       return sendError(res, 404, "Không tìm thấy người dùng.", "USER_NOT_FOUND");
     }
 
-    if (
-      Number(userId) === Number(req.user.id) &&
-      validation.value.role !== "admin"
-    ) {
+    if (Number(userId) === Number(req.user.id)) {
       return sendError(
         res,
         400,
-        "Admin không thể tự hạ quyền của chính mình.",
-        "ADMIN_SELF_DEMOTION_NOT_ALLOWED"
+        "Super admin không thể tự đổi quyền của chính mình.",
+        "SUPER_ADMIN_SELF_ROLE_CHANGE_NOT_ALLOWED"
       );
     }
 
-    if (user.role === "admin" && validation.value.role !== "admin") {
+    if (
+      isPrivilegedAdminRole(user.role) &&
+      !isPrivilegedAdminRole(validation.value.role)
+    ) {
       const adminCount = await countAdmins();
 
       if (adminCount <= 1) {
         return sendError(
           res,
           400,
-          "Không thể hạ quyền admin cuối cùng.",
-          "LAST_ADMIN_REQUIRED"
+          "Không thể hạ quyền admin/super admin cuối cùng.",
+          "LAST_PRIVILEGED_ADMIN_REQUIRED"
+        );
+      }
+    }
+
+    if (user.role === "super_admin" && validation.value.role !== "super_admin") {
+      const superAdminCount = await countSuperAdmins();
+
+      if (superAdminCount <= 1) {
+        return sendError(
+          res,
+          400,
+          "Không thể hạ quyền super admin cuối cùng.",
+          "LAST_SUPER_ADMIN_REQUIRED"
         );
       }
     }
@@ -240,7 +278,14 @@ router.patch("/users/:id/status", async (req, res, next) => {
       return sendError(res, 404, "Không tìm thấy người dùng.", "USER_NOT_FOUND");
     }
 
-    if (user.role === "admin" && validation.value.accountStatus !== "active") {
+    if (requireSuperAdminForPrivilegedTarget(req, res, user)) {
+      return null;
+    }
+
+    if (
+      isPrivilegedAdminRole(user.role) &&
+      validation.value.accountStatus !== "active"
+    ) {
       const adminCount = await countAdmins();
 
       if (adminCount <= 1) {
@@ -248,7 +293,23 @@ router.patch("/users/:id/status", async (req, res, next) => {
           res,
           400,
           "Không thể giới hạn admin cuối cùng.",
-          "LAST_ADMIN_REQUIRED"
+          "LAST_PRIVILEGED_ADMIN_REQUIRED"
+        );
+      }
+    }
+
+    if (
+      user.role === "super_admin" &&
+      validation.value.accountStatus !== "active"
+    ) {
+      const superAdminCount = await countSuperAdmins();
+
+      if (superAdminCount <= 1) {
+        return sendError(
+          res,
+          400,
+          "Không thể giới hạn super admin cuối cùng.",
+          "LAST_SUPER_ADMIN_REQUIRED"
         );
       }
     }
@@ -313,7 +374,11 @@ router.delete("/users/:id", async (req, res, next) => {
       return sendError(res, 404, "Không tìm thấy người dùng.", "USER_NOT_FOUND");
     }
 
-    if (user.role === "admin") {
+    if (requireSuperAdminForPrivilegedTarget(req, res, user)) {
+      return null;
+    }
+
+    if (isPrivilegedAdminRole(user.role)) {
       const adminCount = await countAdmins();
 
       if (adminCount <= 1) {
@@ -321,7 +386,20 @@ router.delete("/users/:id", async (req, res, next) => {
           res,
           400,
           "Không thể xóa admin cuối cùng.",
-          "LAST_ADMIN_REQUIRED"
+          "LAST_PRIVILEGED_ADMIN_REQUIRED"
+        );
+      }
+    }
+
+    if (user.role === "super_admin") {
+      const superAdminCount = await countSuperAdmins();
+
+      if (superAdminCount <= 1) {
+        return sendError(
+          res,
+          400,
+          "Không thể xóa super admin cuối cùng.",
+          "LAST_SUPER_ADMIN_REQUIRED"
         );
       }
     }

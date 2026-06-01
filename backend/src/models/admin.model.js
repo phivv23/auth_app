@@ -1,6 +1,7 @@
 import { query } from "../db/pool.js";
 
-export const ADMIN_ROLE_VALUES = ["user", "admin"];
+export const ADMIN_ROLE_VALUES = ["user", "moderator", "admin", "super_admin"];
+export const PRIVILEGED_ADMIN_ROLE_VALUES = ["admin", "super_admin"];
 export const ADMIN_ACCOUNT_STATUS_VALUES = ["active", "suspended", "banned"];
 
 function normalizePositiveInt(value, fallback) {
@@ -33,7 +34,7 @@ export function validateAdminRoleInput(input = {}) {
         code: "VALIDATION_ERROR",
         message: "Quyền người dùng không hợp lệ.",
         fields: {
-          role: "Role phải là user hoặc admin.",
+          role: "Role phải là user, moderator, admin hoặc super_admin.",
         },
       },
     };
@@ -130,7 +131,9 @@ export async function getAdminOverview() {
     `
     SELECT
       (SELECT COUNT(*) FROM users) AS userCount,
+      (SELECT COUNT(*) FROM users WHERE role = 'moderator') AS moderatorCount,
       (SELECT COUNT(*) FROM users WHERE role = 'admin') AS adminCount,
+      (SELECT COUNT(*) FROM users WHERE role = 'super_admin') AS superAdminCount,
       (SELECT COUNT(*) FROM users WHERE account_status = 'active') AS activeUserCount,
       (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspendedUserCount,
       (SELECT COUNT(*) FROM users WHERE account_status = 'banned') AS bannedUserCount,
@@ -150,7 +153,9 @@ export async function getAdminOverview() {
 
   return {
     userCount: Number(overview.userCount || 0),
+    moderatorCount: Number(overview.moderatorCount || 0),
     adminCount: Number(overview.adminCount || 0),
+    superAdminCount: Number(overview.superAdminCount || 0),
     activeUserCount: Number(overview.activeUserCount || 0),
     suspendedUserCount: Number(overview.suspendedUserCount || 0),
     bannedUserCount: Number(overview.bannedUserCount || 0),
@@ -171,7 +176,19 @@ export async function countAdmins() {
     `
     SELECT COUNT(*) AS total
     FROM users
-    WHERE role = 'admin'
+    WHERE role IN ('admin', 'super_admin')
+    `
+  );
+
+  return Number(rows[0]?.total || 0);
+}
+
+export async function countSuperAdmins() {
+  const rows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM users
+    WHERE role = 'super_admin'
     `
   );
 

@@ -39,6 +39,7 @@ import AdminContent from "./pages/AdminContent.jsx";
 import AdminAuditLogs from "./pages/AdminAuditLogs.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
+import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
 
 const developingItems = [
   { icon: "✺", label: "Meta AI" },
@@ -174,9 +175,9 @@ function Navbar({ onDeveloping }) {
                   >
                     Dashboard
                   </Link>
-                  {user.role === "admin" && (
+                  {canAccessReports(user) && (
                     <Link
-                      to="/admin"
+                      to={canManageAdminArea(user) ? "/admin" : "/admin/reports"}
                       onClick={() => setProfileMenuOpen(false)}
                     >
                       Admin Center

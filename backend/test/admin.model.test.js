@@ -16,6 +16,20 @@ describe("admin model validation", () => {
       error: null,
     });
 
+    assert.deepEqual(validateAdminRoleInput({ role: "moderator" }), {
+      value: {
+        role: "moderator",
+      },
+      error: null,
+    });
+
+    assert.deepEqual(validateAdminRoleInput({ role: "super_admin" }), {
+      value: {
+        role: "super_admin",
+      },
+      error: null,
+    });
+
     assert.deepEqual(validateAdminRoleInput({ role: "user" }), {
       value: {
         role: "user",

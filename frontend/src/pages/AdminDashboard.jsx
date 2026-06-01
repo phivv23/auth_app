@@ -3,10 +3,13 @@ import { Link, Navigate } from "react-router";
 
 import { getAdminOverview } from "../api/admin.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { canAccessReports, canManageAdminArea } from "../utils/adminPermissions.js";
 
 const overviewItems = [
   { key: "userCount", label: "Người dùng" },
+  { key: "moderatorCount", label: "Moderator" },
   { key: "adminCount", label: "Admin" },
+  { key: "superAdminCount", label: "Super admin" },
   { key: "activeUserCount", label: "Đang hoạt động" },
   { key: "suspendedUserCount", label: "Tạm khóa" },
   { key: "bannedUserCount", label: "Bị cấm" },
@@ -50,14 +53,14 @@ export default function AdminDashboard() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (canManageAdminArea(user)) {
       loadOverview();
     }
 
     return () => {
       isActive = false;
     };
-  }, [user?.role]);
+  }, [user]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -67,7 +70,11 @@ export default function AdminDashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== "admin") {
+  if (canAccessReports(user) && !canManageAdminArea(user)) {
+    return <Navigate to="/admin/reports" replace />;
+  }
+
+  if (!canManageAdminArea(user)) {
     return <Navigate to="/feed" replace />;
   }
 

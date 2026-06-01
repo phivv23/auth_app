@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router";
 
 import { getAdminAuditLogs } from "../api/admin.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { canManageAdminArea } from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const actionOptions = [
@@ -86,14 +87,14 @@ export default function AdminAuditLogs() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (canManageAdminArea(user)) {
       loadLogs({ silent: Boolean(action || targetType || page > 1) });
     }
 
     return () => {
       isActive = false;
     };
-  }, [user?.role, page, limit, action, targetType]);
+  }, [user, page, limit, action, targetType]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -103,7 +104,7 @@ export default function AdminAuditLogs() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== "admin") {
+  if (!canManageAdminArea(user)) {
     return <Navigate to="/feed" replace />;
   }
 

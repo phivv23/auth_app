@@ -3753,6 +3753,16 @@ textarea {
   color: #1d4ed8;
 }
 
+.admin-role-badge.moderator {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.admin-role-badge.super_admin {
+  background: #fdf2f8;
+  color: #be185d;
+}
+
 .admin-role-badge.user {
   background: #f2f4f7;
   color: #475467;

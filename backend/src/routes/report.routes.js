@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
-import { requireAdmin } from "../middleware/requireAdmin.js";
+import { requireModerator } from "../middleware/requireAdmin.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { logAdminAction } from "../models/audit.model.js";
 import { deleteComment, findCommentById } from "../models/comment.model.js";
@@ -201,7 +201,7 @@ router.post("/", requireAuth, requireActiveAccount, reportRateLimit, async (req,
   }
 });
 
-router.get("/admin", requireAuth, requireAdmin, async (req, res, next) => {
+router.get("/admin", requireAuth, requireModerator, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
     const requestedLimit = normalizePositiveInt(req.query.limit, 20);
@@ -233,7 +233,7 @@ router.get("/admin", requireAuth, requireAdmin, async (req, res, next) => {
 router.patch(
   "/admin/:id/status",
   requireAuth,
-  requireAdmin,
+  requireModerator,
   async (req, res, next) => {
     try {
       const reportId = normalizePositiveInt(req.params.id, null);
@@ -297,7 +297,7 @@ router.patch(
 router.post(
   "/admin/:id/action",
   requireAuth,
-  requireAdmin,
+  requireModerator,
   async (req, res, next) => {
     try {
       const reportId = normalizePositiveInt(req.params.id, null);

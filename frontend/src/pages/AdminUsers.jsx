@@ -9,13 +9,15 @@ import {
 } from "../api/admin.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
+import {
+  canManageAdminArea,
+  canManageRoles,
+  canMutateTargetUser,
+  getRoleLabel,
+  roleFilterOptions,
+  roleOptions,
+} from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
-
-const roleOptions = [
-  { value: "", label: "Tất cả quyền" },
-  { value: "admin", label: "Admin" },
-  { value: "user", label: "User" },
-];
 
 const statusOptions = [
   { value: "", label: "Tất cả trạng thái" },
@@ -82,14 +84,14 @@ export default function AdminUsers() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (canManageAdminArea(user)) {
       loadUsers({ silent: Boolean(search || role || page > 1) });
     }
 
     return () => {
       isActive = false;
     };
-  }, [user?.role, page, limit, search, role, accountStatus]);
+  }, [user, page, limit, search, role, accountStatus]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -99,7 +101,7 @@ export default function AdminUsers() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== "admin") {
+  if (!canManageAdminArea(user)) {
     return <Navigate to="/feed" replace />;
   }
 
@@ -123,6 +125,10 @@ export default function AdminUsers() {
   }
 
   async function handleRoleChange(targetUser, nextRole) {
+    if (!canManageRoles(user)) {
+      return;
+    }
+
     if (!nextRole || nextRole === targetUser.role) {
       return;
     }
@@ -261,7 +267,7 @@ export default function AdminUsers() {
             value={role}
             onChange={(event) => handleRoleFilterChange(event.target.value)}
           >
-            {roleOptions.map((option) => (
+            {roleFilterOptions.map((option) => (
               <option key={option.value || "all"} value={option.value}>
                 {option.label}
               </option>
@@ -302,6 +308,7 @@ export default function AdminUsers() {
           {users.map((targetUser) => {
             const isSelf = Number(targetUser.id) === Number(user.id);
             const isMutating = mutatingUserId === targetUser.id;
+            const canMutateUser = canMutateTargetUser(user, targetUser);
             const avatarUrl = getFileUrl(targetUser.avatarUrl);
 
             return (
@@ -325,7 +332,7 @@ export default function AdminUsers() {
                     </Link>
                     {isSelf && <span>Bạn</span>}
                     <span className={`admin-role-badge ${targetUser.role}`}>
-                      {targetUser.role}
+                      {getRoleLabel(targetUser.role)}
                     </span>
                     <span
                       className={`admin-status-badge ${
@@ -355,13 +362,16 @@ export default function AdminUsers() {
                     Quyền
                     <select
                       value={targetUser.role || "user"}
-                      disabled={isMutating || isSelf}
+                      disabled={isMutating || !canManageRoles(user) || isSelf}
                       onChange={(event) =>
                         handleRoleChange(targetUser, event.target.value)
                       }
                     >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
+                      {roleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
 
@@ -369,7 +379,7 @@ export default function AdminUsers() {
                     Trạng thái
                     <select
                       value={targetUser.accountStatus || "active"}
-                      disabled={isMutating || isSelf}
+                      disabled={isMutating || !canMutateUser}
                       onChange={(event) =>
                         handleStatusChange(targetUser, event.target.value)
                       }
@@ -389,7 +399,7 @@ export default function AdminUsers() {
                   <button
                     className="button danger"
                     type="button"
-                    disabled={isMutating || isSelf}
+                    disabled={isMutating || !canMutateUser}
                     onClick={() => handleDeleteUser(targetUser)}
                   >
                     Xóa

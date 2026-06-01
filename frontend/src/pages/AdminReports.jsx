@@ -7,6 +7,10 @@ import {
   updateAdminReportStatus,
 } from "../api/report.api.js";
 import { useAuth } from "../context/useAuth.js";
+import {
+  canAccessReports,
+  canManageAdminArea,
+} from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const statuses = [
@@ -134,14 +138,14 @@ export default function AdminReports() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (canAccessReports(user)) {
       loadReports({ silent: refreshKey > 0 });
     }
 
     return () => {
       isActive = false;
     };
-  }, [user?.role, page, limit, status, targetType, refreshKey]);
+  }, [user, page, limit, status, targetType, refreshKey]);
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
@@ -151,7 +155,7 @@ export default function AdminReports() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== "admin") {
+  if (!canAccessReports(user)) {
     return <Navigate to="/feed" replace />;
   }
 
@@ -268,10 +272,15 @@ export default function AdminReports() {
       </section>
 
       <nav className="admin-nav" aria-label="Admin navigation">
-        <Link to="/admin">Tổng quan</Link>
-        <Link to="/admin/users">Người dùng</Link>
-        <Link to="/admin/content">Nội dung</Link>
-        <Link to="/admin/audit-logs">Audit Log</Link>
+        {canManageAdminArea(user) && (
+          <>
+            <Link to="/admin">Tổng quan</Link>
+            <Link to="/admin/users">Người dùng</Link>
+            <Link to="/admin/content">Nội dung</Link>
+            <Link to="/admin/audit-logs">Audit Log</Link>
+          </>
+        )}
+        <Link to="/admin/reports">Báo cáo</Link>
       </nav>
 
       <section className="admin-report-summary" aria-label="Tổng quan báo cáo">

@@ -8,6 +8,7 @@ import {
   getAdminPosts,
 } from "../api/admin.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { canManageAdminArea } from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const contentTabs = [
@@ -93,7 +94,7 @@ export default function AdminContent() {
       }
     }
 
-    if (user?.role === "admin") {
+    if (canManageAdminArea(user)) {
       loadContent({ silent: Boolean(search || page > 1) });
     }
 
@@ -101,7 +102,7 @@ export default function AdminContent() {
       isActive = false;
     };
   }, [
-    user?.role,
+    user,
     tab,
     page,
     limit,
@@ -122,7 +123,7 @@ export default function AdminContent() {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== "admin") {
+  if (!canManageAdminArea(user)) {
     return <Navigate to="/feed" replace />;
   }
 
