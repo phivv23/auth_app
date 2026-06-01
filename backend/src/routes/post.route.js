@@ -20,10 +20,12 @@ import {
   togglePostLike,
 } from "../models/like.model.js";
 import {
+  countCommentAndReplies,
   createComment,
   deleteComment,
   findCommentById,
   findCommentsByPostId,
+  toggleCommentReaction,
   updateComment,
 } from "../models/comment.model.js";
 import { uploadPostImage } from "../config/upload.js";
@@ -606,7 +608,7 @@ router.get("/:postId/comments", optionalAuth, async (req, res, next) => {
       });
     }
 
-    const comments = await findCommentsByPostId(postId);
+    const comments = await findCommentsByPostId(postId, req.user?.id || null);
 
     return res.json({
       comments,
@@ -642,14 +644,54 @@ router.post("/:postId/comments", requireAuth, requireActiveAccount, commentRateL
       });
     }
 
-    const comment = await createComment(postId, req.user.id, result.content);
+    const rawParentCommentId = req.body?.parentCommentId;
+    const hasParentCommentId =
+      rawParentCommentId !== undefined &&
+      rawParentCommentId !== null &&
+      rawParentCommentId !== "";
+    const parentCommentId = hasParentCommentId
+      ? parsePositiveInt(rawParentCommentId)
+      : null;
+
+    if (hasParentCommentId && !parentCommentId) {
+      return res.status(400).json({
+        message: "Comment gốc không hợp lệ.",
+      });
+    }
+
+    let parentComment = null;
+
+    if (parentCommentId) {
+      parentComment = await findCommentById(parentCommentId, req.user.id);
+
+      if (!parentComment || Number(parentComment.postId) !== Number(postId)) {
+        return res.status(404).json({
+          message: "Comment gốc không tồn tại.",
+        });
+      }
+
+      if (parentComment.parentCommentId) {
+        return res.status(400).json({
+          message: "Hiện chỉ hỗ trợ trả lời comment 1 cấp.",
+        });
+      }
+    }
+
+    const comment = await createComment(postId, req.user.id, result.content, {
+      parentCommentId,
+      currentUserId: req.user.id,
+    });
 
     await createNotification({
-      recipientId: post.userId,
+      recipientId: parentComment?.userId || post.userId,
       actorId: req.user.id,
       type: "post_comment",
       postId,
       commentId: comment.id,
+      metadata: {
+        isReply: Boolean(parentCommentId),
+        parentCommentId,
+      },
     });
 
     return res.status(201).json({
@@ -671,7 +713,7 @@ router.patch("/comments/:commentId", requireAuth, requireActiveAccount, commentR
       });
     }
 
-    const comment = await findCommentById(commentId);
+    const comment = await findCommentById(commentId, req.user.id);
 
     if (!comment) {
       return res.status(404).json({
@@ -693,7 +735,11 @@ router.patch("/comments/:commentId", requireAuth, requireActiveAccount, commentR
       });
     }
 
-    const updatedComment = await updateComment(commentId, result.content);
+    const updatedComment = await updateComment(
+      commentId,
+      result.content,
+      req.user.id
+    );
 
     return res.json({
       message: "Cập nhật comment thành công.",
@@ -714,7 +760,7 @@ router.delete("/comments/:commentId", requireAuth, requireActiveAccount, async (
       });
     }
 
-    const comment = await findCommentById(commentId);
+    const comment = await findCommentById(commentId, req.user.id);
 
     if (!comment) {
       return res.status(404).json({
@@ -728,12 +774,85 @@ router.delete("/comments/:commentId", requireAuth, requireActiveAccount, async (
       });
     }
 
+    const deletedCount = await countCommentAndReplies(commentId);
+
     await deleteComment(commentId);
 
     return res.json({
       message: "Xóa comment thành công.",
+      deletedCount,
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/comments/:commentId/reaction", requireAuth, requireActiveAccount, reactionRateLimit, async (req, res, next) => {
+  try {
+    const commentId = parsePositiveInt(req.params.commentId);
+
+    if (!commentId) {
+      return res.status(400).json({
+        message: "Comment id không hợp lệ.",
+      });
+    }
+
+    const comment = await findCommentById(commentId, req.user.id);
+
+    if (!comment) {
+      return res.status(404).json({
+        message: "Comment không tồn tại.",
+      });
+    }
+
+    const post = await findPostById(comment.postId, req.user.id);
+
+    if (!post) {
+      return res.status(404).json({
+        message: "Post không tồn tại hoặc bạn không có quyền xem.",
+      });
+    }
+
+    const reactionType = String(req.body?.reactionType || "like");
+
+    if (!ALLOWED_REACTION_TYPES.includes(reactionType)) {
+      return res.status(400).json({
+        message: "Reaction không hợp lệ.",
+      });
+    }
+
+    const wasAlreadyReacted = Boolean(comment.myReaction);
+    const result = await toggleCommentReaction(commentId, req.user.id, reactionType);
+
+    if (result.reacted && !wasAlreadyReacted) {
+      await createNotification({
+        recipientId: comment.userId,
+        actorId: req.user.id,
+        type: "comment_reaction",
+        postId: comment.postId,
+        commentId,
+        metadata: {
+          isCommentReaction: true,
+          reactionType,
+          parentCommentId: comment.parentCommentId,
+        },
+      });
+    }
+
+    return res.json({
+      message: result.reacted ? "Đã react comment." : "Đã bỏ reaction comment.",
+      reacted: result.reacted,
+      reactionType: result.reactionType,
+      likeCount: result.likeCount,
+      reactionSummary: result.reactionSummary,
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        message: "Bạn đã react comment này rồi.",
+      });
+    }
+
     next(error);
   }
 });

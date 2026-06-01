@@ -70,10 +70,12 @@ export function getPostReactions(
   return apiFetch(`/posts/${postId}/reactions?${params.toString()}`);
 }
 
-export function createComment(postId, content) {
+export function createComment(postId, content, { parentCommentId = null } = {}) {
+  const body = parentCommentId ? { content, parentCommentId } : { content };
+
   return apiFetch(`/posts/${postId}/comments`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -87,6 +89,13 @@ export function updateComment(commentId, content) {
 export function deleteComment(commentId) {
   return apiFetch(`/posts/comments/${commentId}`, {
     method: "DELETE",
+  });
+}
+
+export function toggleCommentReaction(commentId, reactionType = "like") {
+  return apiFetch(`/posts/comments/${commentId}/reaction`, {
+    method: "POST",
+    body: JSON.stringify({ reactionType }),
   });
 }
 

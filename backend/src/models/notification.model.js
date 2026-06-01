@@ -7,6 +7,7 @@ const NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES = {
   friend_accept: 60,
   post_like: 60,
   post_comment: 10,
+  comment_reaction: 60,
 };
 const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set([
   "admin_content_removed",
@@ -107,6 +108,7 @@ export async function createNotification({
         AND actor_id = ?
         AND type = ?
         AND post_id <=> ?
+        AND comment_id <=> ?
         AND conversation_id <=> ?
         AND report_id <=> ?
         AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? MINUTE)
@@ -118,6 +120,7 @@ export async function createNotification({
         actorId,
         type,
         postId,
+        commentId,
         conversationId,
         reportId,
         getDedupeWindowInMinutes(type),

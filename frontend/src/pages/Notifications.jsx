@@ -45,7 +45,13 @@ function getNotificationText(notification) {
   }
 
   if (notification.type === "post_comment") {
-    return `${actorName} đã bình luận bài viết "${notification.postTitle || ""}"`;
+    return notification.metadata?.isReply
+      ? `${actorName} đã trả lời bình luận của bạn`
+      : `${actorName} đã bình luận bài viết "${notification.postTitle || ""}"`;
+  }
+
+  if (notification.type === "comment_reaction") {
+    return `${actorName} đã bày tỏ cảm xúc với bình luận của bạn`;
   }
 
   if (notification.type === "message") {
@@ -104,7 +110,9 @@ function getNotificationTarget(notification) {
   }
 
   if (notification.postId) {
-    return `/posts/${notification.postId}`;
+    return notification.commentId
+      ? `/posts/${notification.postId}?commentId=${notification.commentId}`
+      : `/posts/${notification.postId}`;
   }
 
   return "/notifications";

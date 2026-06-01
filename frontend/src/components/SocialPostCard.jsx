@@ -8,6 +8,7 @@ import {
   getPostComments,
   getPostReactions,
   sharePost,
+  toggleCommentReaction,
   togglePostBookmark,
   togglePostLike,
   updateComment,
@@ -93,6 +94,125 @@ function getEditedState(post) {
   };
 }
 
+function getCommentReplies(comment) {
+  return Array.isArray(comment?.replies) ? comment.replies : [];
+}
+
+function getThreadCommentCount(comment) {
+  return 1 + getCommentReplies(comment).length;
+}
+
+function findCommentLocation(comments, commentId) {
+  const targetId = Number(commentId);
+
+  for (const comment of comments) {
+    if (Number(comment.id) === targetId) {
+      return {
+        comment,
+        parentId: null,
+      };
+    }
+
+    const reply = getCommentReplies(comment).find(
+      (item) => Number(item.id) === targetId
+    );
+
+    if (reply) {
+      return {
+        comment: reply,
+        parentId: comment.id,
+      };
+    }
+  }
+
+  return null;
+}
+
+function updateCommentInTree(comments, commentId, updater) {
+  const targetId = Number(commentId);
+
+  return comments.map((comment) => {
+    if (Number(comment.id) === targetId) {
+      const updatedComment = updater(comment);
+
+      return {
+        ...updatedComment,
+        replies: getCommentReplies(updatedComment).length
+          ? getCommentReplies(updatedComment)
+          : getCommentReplies(comment),
+      };
+    }
+
+    let didUpdateReply = false;
+    const nextReplies = getCommentReplies(comment).map((reply) => {
+      if (Number(reply.id) !== targetId) {
+        return reply;
+      }
+
+      didUpdateReply = true;
+
+      return {
+        ...updater(reply),
+        replies: getCommentReplies(reply),
+      };
+    });
+
+    if (!didUpdateReply) {
+      return comment;
+    }
+
+    return {
+      ...comment,
+      replies: nextReplies,
+      replyCount: Math.max(Number(comment.replyCount || 0), nextReplies.length),
+    };
+  });
+}
+
+function insertReplyIntoTree(comments, parentCommentId, reply) {
+  const parentId = Number(parentCommentId);
+
+  return comments.map((comment) => {
+    if (Number(comment.id) !== parentId) {
+      return comment;
+    }
+
+    const nextReplies = [...getCommentReplies(comment), { ...reply, replies: [] }];
+
+    return {
+      ...comment,
+      replies: nextReplies,
+      replyCount: Math.max(Number(comment.replyCount || 0) + 1, nextReplies.length),
+    };
+  });
+}
+
+function removeCommentFromTree(comments, commentId) {
+  const targetId = Number(commentId);
+
+  return comments.reduce((nextComments, comment) => {
+    if (Number(comment.id) === targetId) {
+      return nextComments;
+    }
+
+    const currentReplies = getCommentReplies(comment);
+    const nextReplies = currentReplies.filter(
+      (reply) => Number(reply.id) !== targetId
+    );
+
+    nextComments.push({
+      ...comment,
+      replies: nextReplies,
+      replyCount:
+        nextReplies.length === currentReplies.length
+          ? Number(comment.replyCount || nextReplies.length)
+          : Math.max(0, Number(comment.replyCount || currentReplies.length) - 1),
+    });
+
+    return nextComments;
+  }, []);
+}
+
 export default function SocialPostCard({
   post,
   onPostUpdated,
@@ -116,6 +236,11 @@ export default function SocialPostCard({
   const [commentSaving, setCommentSaving] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState(null);
   const [commentActionError, setCommentActionError] = useState("");
+  const [replyingToCommentId, setReplyingToCommentId] = useState(null);
+  const [replyInputs, setReplyInputs] = useState({});
+  const [replySubmittingId, setReplySubmittingId] = useState(null);
+  const [expandedReplies, setExpandedReplies] = useState({});
+  const [reactingCommentId, setReactingCommentId] = useState(null);
   const [reacting, setReacting] = useState(false);
   const [reactionPanelOpen, setReactionPanelOpen] = useState(false);
   const [reactionUsers, setReactionUsers] = useState([]);
@@ -168,11 +293,26 @@ export default function SocialPostCard({
       return;
     }
 
-    highlightedCommentRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
+    const highlightedLocation = findCommentLocation(comments, highlightCommentId);
+
+    if (!highlightedLocation) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      highlightedCommentRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     });
-  }, [commentsLoaded, commentsLoading, highlightCommentId]);
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [
+    comments,
+    commentsLoaded,
+    commentsLoading,
+    highlightCommentId,
+  ]);
 
   async function loadComments() {
     if (commentsLoaded || commentsLoading) {
@@ -288,8 +428,12 @@ export default function SocialPostCard({
       setNotice("");
 
       const data = await createComment(post.id, content);
+      const createdComment = {
+        ...data.comment,
+        replies: getCommentReplies(data.comment),
+      };
 
-      setComments((currentComments) => [...currentComments, data.comment]);
+      setComments((currentComments) => [...currentComments, createdComment]);
       setCommentsLoaded(true);
       setCommentsOpen(true);
       setCommentInput("");
@@ -302,6 +446,89 @@ export default function SocialPostCard({
       setError(error.message);
     } finally {
       setCommentSubmitting(false);
+    }
+  }
+
+  function handleStartReply(comment, parentComment = null) {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const parentId = parentComment?.id || comment.id;
+
+    setReplyingToCommentId(parentId);
+    setExpandedReplies((currentExpandedReplies) => ({
+      ...currentExpandedReplies,
+      [parentId]: true,
+    }));
+    setCommentActionError("");
+    setError("");
+    setNotice("");
+  }
+
+  function handleCancelReply(parentCommentId) {
+    if (replySubmittingId) {
+      return;
+    }
+
+    setReplyingToCommentId(null);
+    setReplyInputs((currentInputs) => ({
+      ...currentInputs,
+      [parentCommentId]: "",
+    }));
+  }
+
+  async function handleCreateReply(event, parentComment) {
+    event.preventDefault();
+
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const parentCommentId = parentComment.id;
+    const content = String(replyInputs[parentCommentId] || "").trim();
+
+    if (!content || replySubmittingId) {
+      return;
+    }
+
+    try {
+      setReplySubmittingId(parentCommentId);
+      setError("");
+      setCommentActionError("");
+      setNotice("");
+
+      const data = await createComment(post.id, content, {
+        parentCommentId,
+      });
+      const reply = {
+        ...data.comment,
+        replies: [],
+      };
+
+      setComments((currentComments) =>
+        insertReplyIntoTree(currentComments, parentCommentId, reply)
+      );
+      setReplyInputs((currentInputs) => ({
+        ...currentInputs,
+        [parentCommentId]: "",
+      }));
+      setReplyingToCommentId(null);
+      setExpandedReplies((currentExpandedReplies) => ({
+        ...currentExpandedReplies,
+        [parentCommentId]: true,
+      }));
+
+      onPostUpdated?.({
+        ...post,
+        commentCount: Number(post.commentCount || 0) + 1,
+      });
+    } catch (error) {
+      setCommentActionError(error.message);
+    } finally {
+      setReplySubmittingId(null);
     }
   }
 
@@ -352,9 +579,11 @@ export default function SocialPostCard({
       };
 
       setComments((currentComments) =>
-        currentComments.map((currentComment) =>
-          currentComment.id === comment.id ? updatedComment : currentComment
-        )
+        updateCommentInTree(currentComments, comment.id, (currentComment) => ({
+          ...currentComment,
+          ...updatedComment,
+          replies: getCommentReplies(currentComment),
+        }))
       );
       setEditingCommentId(null);
       setCommentEditInput("");
@@ -388,10 +617,10 @@ export default function SocialPostCard({
       setCommentActionError("");
       setNotice("");
 
-      await deleteComment(comment.id);
+      const data = await deleteComment(comment.id);
 
       setComments((currentComments) =>
-        currentComments.filter((currentComment) => currentComment.id !== comment.id)
+        removeCommentFromTree(currentComments, comment.id)
       );
 
       if (editingCommentId === comment.id) {
@@ -399,11 +628,22 @@ export default function SocialPostCard({
         setCommentEditInput("");
       }
 
+      if (
+        replyingToCommentId === comment.id ||
+        getCommentReplies(comment).some(
+          (reply) => Number(reply.id) === Number(replyingToCommentId)
+        )
+      ) {
+        setReplyingToCommentId(null);
+      }
+
+      const deletedCount = Number(data.deletedCount || getThreadCommentCount(comment));
+
       onPostUpdated?.({
         ...post,
         commentCount: Math.max(
           0,
-          Number(post.commentCount || comments.length || 0) - 1
+          Number(post.commentCount || comments.length || 0) - deletedCount
         ),
       });
       setNotice("Đã xóa bình luận.");
@@ -411,6 +651,39 @@ export default function SocialPostCard({
       setCommentActionError(error.message);
     } finally {
       setDeletingCommentId(null);
+    }
+  }
+
+  async function handleCommentReaction(comment, reactionType) {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (reactingCommentId) {
+      return;
+    }
+
+    try {
+      setReactingCommentId(comment.id);
+      setError("");
+      setCommentActionError("");
+      setNotice("");
+
+      const data = await toggleCommentReaction(comment.id, reactionType);
+
+      setComments((currentComments) =>
+        updateCommentInTree(currentComments, comment.id, (currentComment) => ({
+          ...currentComment,
+          myReaction: data.reactionType,
+          likeCount: data.likeCount,
+          reactionSummary: data.reactionSummary || {},
+        }))
+      );
+    } catch (error) {
+      setCommentActionError(error.message);
+    } finally {
+      setReactingCommentId(null);
     }
   }
 
@@ -512,6 +785,302 @@ export default function SocialPostCard({
     } finally {
       setBookmarking(false);
     }
+  }
+
+  function renderComment(comment, { parentComment = null } = {}) {
+    const commentAvatarUrl = getFileUrl(comment.authorAvatarUrl);
+    const { isEdited: isCommentEdited } = getEditedState(comment);
+    const isOwnComment = user && Number(user.id) === Number(comment.userId);
+    const isEditingComment = editingCommentId === comment.id;
+    const isDeletingComment = deletingCommentId === comment.id;
+    const isReply = Boolean(parentComment);
+    const isHighlighted = Number(comment.id) === Number(highlightCommentId);
+    const replies = getCommentReplies(comment);
+    const replyCount = Math.max(Number(comment.replyCount || 0), replies.length);
+    const repliesExpanded =
+      Boolean(expandedReplies[comment.id]) ||
+      replies.some((reply) => Number(reply.id) === Number(highlightCommentId));
+    const isReplyComposerOpen = replyingToCommentId === comment.id;
+    const replyInput = replyInputs[comment.id] || "";
+    const isSubmittingReply = replySubmittingId === comment.id;
+    const trimmedEditInput = commentEditInput.trim();
+    const originalCommentContent = String(comment.content || "").trim();
+    const canSaveComment =
+      !commentSaving &&
+      trimmedEditInput.length > 0 &&
+      trimmedEditInput !== originalCommentContent;
+    const commentReactionSummary = comment.reactionSummary || {};
+    const commentReactionTotal = getReactionTotal(
+      commentReactionSummary,
+      comment.likeCount
+    );
+    const commentTopReactions = getTopReactions(
+      commentReactionSummary,
+      comment.myReaction,
+      comment.likeCount
+    );
+    const commentReactionMeta = getReactionMeta(comment.myReaction || "like");
+    const isReactingComment = reactingCommentId === comment.id;
+
+    return (
+      <div
+        key={comment.id}
+        className={isReply ? "comment-thread reply-thread" : "comment-thread"}
+      >
+        <div
+          ref={isHighlighted ? highlightedCommentRef : null}
+          className={[
+            "feed-comment",
+            isReply ? "reply" : "",
+            isHighlighted ? "highlighted" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          id={`comment-${comment.id}`}
+        >
+          {commentAvatarUrl ? (
+            <img
+              className="feed-comment-avatar"
+              src={commentAvatarUrl}
+              alt={comment.authorName}
+            />
+          ) : (
+            <div className="feed-comment-avatar-placeholder">
+              {comment.authorName?.charAt(0)?.toUpperCase() || "U"}
+            </div>
+          )}
+
+          <div className="feed-comment-content">
+            <div className="feed-comment-body">
+              <strong>{comment.authorName}</strong>
+
+              {isEditingComment ? (
+                <form
+                  className="comment-edit-form"
+                  onSubmit={(event) => handleUpdateComment(event, comment)}
+                >
+                  <textarea
+                    value={commentEditInput}
+                    onChange={(event) => setCommentEditInput(event.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    disabled={commentSaving}
+                    autoFocus
+                  />
+
+                  <div className="comment-edit-actions">
+                    <button
+                      className="comment-edit-save"
+                      type="submit"
+                      disabled={!canSaveComment}
+                    >
+                      {commentSaving ? "Đang lưu..." : "Lưu"}
+                    </button>
+
+                    <button
+                      className="comment-edit-cancel"
+                      type="button"
+                      onClick={handleCancelEditComment}
+                      disabled={commentSaving}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <p>{comment.content}</p>
+              )}
+
+              <div className="comment-meta-row">
+                <span title={formatVietnamDateTime(comment.createdAt)}>
+                  {formatRelativeTime(comment.createdAt)}
+                  {isCommentEdited && (
+                    <strong className="comment-edited-badge">Đã chỉnh sửa</strong>
+                  )}
+                </span>
+
+                {commentReactionTotal > 0 && (
+                  <span className="comment-reaction-summary">
+                    {commentTopReactions.map((reaction) => (
+                      <span key={reaction.type} aria-hidden="true">
+                        {reaction.icon}
+                      </span>
+                    ))}
+                    {commentReactionTotal}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {!isEditingComment && (
+              <div className="comment-action-row">
+                <div className="comment-reaction-wrap">
+                  <button
+                    className={`comment-action-button ${
+                      comment.myReaction ? "active" : ""
+                    }`}
+                    type="button"
+                    disabled={isReactingComment}
+                    onClick={() =>
+                      handleCommentReaction(comment, comment.myReaction || "like")
+                    }
+                  >
+                    {comment.myReaction ? commentReactionMeta.label : "Thích"}
+                  </button>
+
+                  <div
+                    className="comment-reaction-picker"
+                    role="menu"
+                    aria-label="Chọn cảm xúc cho bình luận"
+                  >
+                    {reactions.map((reaction) => (
+                      <button
+                        key={reaction.type}
+                        className={
+                          comment.myReaction === reaction.type ? "active" : ""
+                        }
+                        type="button"
+                        disabled={isReactingComment}
+                        title={reaction.label}
+                        onClick={() => handleCommentReaction(comment, reaction.type)}
+                      >
+                        <span aria-hidden="true">{reaction.icon}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  className="comment-action-button"
+                  type="button"
+                  onClick={() => handleStartReply(comment, parentComment)}
+                >
+                  Trả lời
+                </button>
+
+                {isOwnComment ? (
+                  <>
+                    <button
+                      className="comment-action-button"
+                      type="button"
+                      onClick={() => handleStartEditComment(comment)}
+                      disabled={commentSaving || isDeletingComment}
+                    >
+                      Sửa
+                    </button>
+
+                    <button
+                      className="comment-action-button danger"
+                      type="button"
+                      onClick={() => handleDeleteComment(comment)}
+                      disabled={commentSaving || isDeletingComment}
+                    >
+                      {isDeletingComment ? "Đang xóa..." : "Xóa"}
+                    </button>
+                  </>
+                ) : (
+                  user && (
+                    <button
+                      className="comment-report-button"
+                      type="button"
+                      onClick={() =>
+                        setReportTarget({
+                          type: "comment",
+                          id: comment.id,
+                          title: "Báo cáo bình luận",
+                        })
+                      }
+                    >
+                      Báo cáo
+                    </button>
+                  )
+                )}
+
+                <Link
+                  className="comment-action-button comment-permalink"
+                  to={`/posts/${post.id}?commentId=${comment.id}`}
+                >
+                  Liên kết
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {!isReply && replyCount > 0 && (
+          <button
+            className="comment-replies-toggle"
+            type="button"
+            onClick={() =>
+              setExpandedReplies((currentExpandedReplies) => ({
+                ...currentExpandedReplies,
+                [comment.id]: !currentExpandedReplies[comment.id],
+              }))
+            }
+          >
+            {repliesExpanded ? "Ẩn phản hồi" : `Xem ${replyCount} phản hồi`}
+          </button>
+        )}
+
+        {!isReply && repliesExpanded && replies.length > 0 && (
+          <div className="comment-replies">
+            {replies.map((reply) =>
+              renderComment(reply, {
+                parentComment: comment,
+              })
+            )}
+          </div>
+        )}
+
+        {!isReply && isReplyComposerOpen && (
+          <form
+            className="comment-reply-form"
+            onSubmit={(event) => handleCreateReply(event, comment)}
+          >
+            {user?.avatarUrl ? (
+              <img
+                className="feed-comment-avatar"
+                src={getFileUrl(user.avatarUrl)}
+                alt={user.name}
+              />
+            ) : (
+              <div className="feed-comment-avatar-placeholder">
+                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+            )}
+
+            <input
+              value={replyInput}
+              onChange={(event) =>
+                setReplyInputs((currentInputs) => ({
+                  ...currentInputs,
+                  [comment.id]: event.target.value,
+                }))
+              }
+              placeholder="Viết phản hồi..."
+              maxLength={1000}
+              autoFocus
+            />
+
+            <button
+              type="submit"
+              disabled={!replyInput.trim() || isSubmittingReply}
+            >
+              {isSubmittingReply ? "Đang gửi..." : "Gửi"}
+            </button>
+
+            <button
+              className="comment-reply-cancel"
+              type="button"
+              onClick={() => handleCancelReply(comment.id)}
+              disabled={isSubmittingReply}
+            >
+              Hủy
+            </button>
+          </form>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -937,141 +1506,7 @@ export default function SocialPostCard({
           ) : comments.length === 0 ? (
             <p className="muted">Chưa có bình luận nào.</p>
           ) : (
-            comments.map((comment) => {
-              const commentAvatarUrl = getFileUrl(comment.authorAvatarUrl);
-              const { isEdited: isCommentEdited } = getEditedState(comment);
-              const isOwnComment =
-                user && Number(user.id) === Number(comment.userId);
-              const isEditingComment = editingCommentId === comment.id;
-              const isDeletingComment = deletingCommentId === comment.id;
-              const trimmedEditInput = commentEditInput.trim();
-              const originalCommentContent = String(comment.content || "").trim();
-              const canSaveComment =
-                !commentSaving &&
-                trimmedEditInput.length > 0 &&
-                trimmedEditInput !== originalCommentContent;
-
-              return (
-                <div
-                  key={comment.id}
-                  ref={
-                    Number(comment.id) === Number(highlightCommentId)
-                      ? highlightedCommentRef
-                      : null
-                  }
-                  className={
-                    Number(comment.id) === Number(highlightCommentId)
-                      ? "feed-comment highlighted"
-                      : "feed-comment"
-                  }
-                >
-                  {commentAvatarUrl ? (
-                    <img
-                      className="feed-comment-avatar"
-                      src={commentAvatarUrl}
-                      alt={comment.authorName}
-                    />
-                  ) : (
-                    <div className="feed-comment-avatar-placeholder">
-                      {comment.authorName?.charAt(0)?.toUpperCase() || "U"}
-                    </div>
-                  )}
-
-                  <div className="feed-comment-body">
-                    <strong>{comment.authorName}</strong>
-
-                    {isEditingComment ? (
-                      <form
-                        className="comment-edit-form"
-                        onSubmit={(event) => handleUpdateComment(event, comment)}
-                      >
-                        <textarea
-                          value={commentEditInput}
-                          onChange={(event) =>
-                            setCommentEditInput(event.target.value)
-                          }
-                          maxLength={1000}
-                          rows={3}
-                          disabled={commentSaving}
-                          autoFocus
-                        />
-
-                        <div className="comment-edit-actions">
-                          <button
-                            className="comment-edit-save"
-                            type="submit"
-                            disabled={!canSaveComment}
-                          >
-                            {commentSaving ? "Đang lưu..." : "Lưu"}
-                          </button>
-
-                          <button
-                            className="comment-edit-cancel"
-                            type="button"
-                            onClick={handleCancelEditComment}
-                            disabled={commentSaving}
-                          >
-                            Hủy
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <p>{comment.content}</p>
-                    )}
-
-                    <div className="comment-meta-row">
-                      <span title={formatVietnamDateTime(comment.createdAt)}>
-                        {formatRelativeTime(comment.createdAt)}
-                        {isCommentEdited && (
-                          <strong className="comment-edited-badge">
-                            Đã chỉnh sửa
-                          </strong>
-                        )}
-                      </span>
-
-                      {isOwnComment && !isEditingComment ? (
-                        <div className="comment-action-row">
-                          <button
-                            className="comment-action-button"
-                            type="button"
-                            onClick={() => handleStartEditComment(comment)}
-                            disabled={commentSaving || isDeletingComment}
-                          >
-                            Sửa
-                          </button>
-
-                          <button
-                            className="comment-action-button danger"
-                            type="button"
-                            onClick={() => handleDeleteComment(comment)}
-                            disabled={commentSaving || isDeletingComment}
-                          >
-                            {isDeletingComment ? "Đang xóa..." : "Xóa"}
-                          </button>
-                        </div>
-                      ) : (
-                        user &&
-                        !isOwnComment && (
-                          <button
-                            className="comment-report-button"
-                            type="button"
-                            onClick={() =>
-                              setReportTarget({
-                                type: "comment",
-                                id: comment.id,
-                                title: "Báo cáo bình luận",
-                              })
-                            }
-                          >
-                            Báo cáo
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+            comments.map((comment) => renderComment(comment))
           )}
         </div>
       )}
