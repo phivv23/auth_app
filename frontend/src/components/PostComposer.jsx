@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { createPost } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
-
-const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+import {
+  createPostMediaPreviews,
+  postMediaAccept,
+  validatePostMediaFiles,
+} from "../utils/postMedia.js";
 
 export default function PostComposer({
   onCreated,
@@ -74,31 +77,17 @@ export default function PostComposer({
       return;
     }
 
-    if (selectedFiles.length > 10) {
-      setError("Chỉ được chọn tối đa 10 ảnh.");
-      clearFiles();
-      return;
-    }
+    const validationError = validatePostMediaFiles(selectedFiles);
 
-    const invalidFile = selectedFiles.find(
-      (file) =>
-        !allowedImageTypes.includes(file.type) || file.size > 5 * 1024 * 1024
-    );
-
-    if (invalidFile) {
-      setError("Mỗi ảnh phải là JPG, PNG hoặc WEBP và tối đa 5MB.");
+    if (validationError) {
+      setError(validationError);
       clearFiles();
       return;
     }
 
     clearFiles();
     setFiles(selectedFiles);
-    setPreviews(
-      selectedFiles.map((file) => ({
-        name: file.name,
-        url: URL.createObjectURL(file),
-      }))
-    );
+    setPreviews(createPostMediaPreviews(selectedFiles));
   }
 
   async function handleSubmit(event) {
@@ -159,7 +148,7 @@ export default function PostComposer({
         </button>
 
         <div className="social-composer-quick-actions" aria-hidden="true">
-          <span>Ảnh</span>
+          <span>Ảnh/Video</span>
           <span>Cảm xúc</span>
         </div>
       </section>
@@ -229,9 +218,18 @@ export default function PostComposer({
 
             {previews.length > 0 && (
               <div className="composer-media-grid post-composer-modal-media">
-                {previews.map((preview) => (
-                  <img key={preview.url} src={preview.url} alt={preview.name} />
-                ))}
+                {previews.map((preview) =>
+                  preview.type === "video" ? (
+                    <video
+                      key={preview.url}
+                      src={preview.url}
+                      controls
+                      playsInline
+                    />
+                  ) : (
+                    <img key={preview.url} src={preview.url} alt={preview.name} />
+                  )
+                )}
               </div>
             )}
 
@@ -241,11 +239,11 @@ export default function PostComposer({
               <strong>Thêm vào bài viết của bạn</strong>
 
               <label className="post-composer-icon-button image">
-                Ảnh
+                Ảnh/Video
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept={postMediaAccept}
                   multiple
                   onChange={handleMediaChange}
                 />
@@ -262,7 +260,7 @@ export default function PostComposer({
 
             {files.length > 0 && (
               <button type="button" className="link-button" onClick={clearFiles}>
-                Xóa ảnh
+                Xóa media
               </button>
             )}
 

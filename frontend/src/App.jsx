@@ -23,6 +23,7 @@ import EditPost from "./pages/EditPost.jsx";
 import MyPosts from "./pages/MyPosts.jsx";
 import UserProfile from "./pages/UserProfile";
 import Feed from "./pages/Feed.jsx";
+import Watch from "./pages/Watch.jsx";
 import FollowList from "./pages/FollowList.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
@@ -101,14 +102,9 @@ function Navbar({ onDeveloping }) {
             <Link className="nav-icon-link" to="/feed" title="Feed" aria-label="Feed">
               <span aria-hidden="true">⌂</span>
             </Link>
-            <button
-              className="nav-icon-button disabled-feature"
-              title="Video"
-              aria-label="Video"
-              onClick={() => onDeveloping?.("Video")}
-            >
+            <Link className="nav-icon-link" to="/watch" title="Watch" aria-label="Watch">
               <span aria-hidden="true">▻</span>
-            </button>
+            </Link>
             <Link className="nav-icon-link" to="/friends" title="Friends" aria-label="Friends">
               <span aria-hidden="true">👥</span>
             </Link>
@@ -225,6 +221,11 @@ function SocialLeftSidebar({ user, onDeveloping }) {
         <strong>Đã lưu</strong>
       </Link>
 
+      <Link className="social-sidebar-item" to="/watch">
+        <span>W</span>
+        <strong>Watch</strong>
+      </Link>
+
       {developingItems.map((item) => (
         <button
           key={item.label}
@@ -271,7 +272,7 @@ export default function App() {
   const [developingNotice, setDevelopingNotice] = useState("");
   const developingTimeoutRef = useRef(null);
   const showSocialShell =
-    Boolean(user) && ["/", "/feed", "/saved"].includes(location.pathname);
+    Boolean(user) && ["/", "/feed", "/saved", "/watch"].includes(location.pathname);
 
   function showDevelopingNotice(featureName) {
     setDevelopingNotice(`${featureName} đang phát triển.`);
@@ -300,6 +301,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Feed onDeveloping={showDevelopingNotice} />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/watch"
+              element={
+                <ProtectedRoute>
+                  <Watch />
                 </ProtectedRoute>
               }
             />

@@ -17,6 +17,7 @@ import { getFileUrl } from "../api/client.js";
 import ReportDialog from "./ReportDialog.jsx";
 import { CommentListSkeleton } from "./Skeleton.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { isVideoMedia } from "../utils/postMedia.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const reactions = [
@@ -79,6 +80,28 @@ function getPostMedia(post) {
     : post?.imageUrl
       ? [{ url: post.imageUrl, type: "image" }]
       : [];
+}
+
+function renderMediaElement(
+  item,
+  { className = "", alt = "", controls = true } = {}
+) {
+  const mediaUrl = getFileUrl(item.url);
+
+  if (isVideoMedia(item)) {
+    return (
+      <video
+        className={className}
+        src={mediaUrl}
+        controls={controls}
+        muted={!controls}
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+
+  return <img className={className} src={mediaUrl} alt={alt} />;
 }
 
 function getEditedState(post) {
@@ -1184,15 +1207,34 @@ export default function SocialPostCard({
       {media.length > 0 && (
         <div className={`social-media-grid count-${Math.min(media.length, 4)}`}>
           {media.slice(0, 4).map((item, index) => {
-            const mediaUrl = getFileUrl(item.url);
             const extraCount = media.length - 4;
+            const mediaContent = renderMediaElement(item, {
+              alt: post.title || "Media bài viết",
+            });
+            const extraBadge = index === 3 && extraCount > 0 && (
+              <span className="media-extra-count">+{extraCount}</span>
+            );
+
+            if (isVideoMedia(item)) {
+              return (
+                <div
+                  key={`${item.url}-${index}`}
+                  className="social-media-item video"
+                >
+                  {mediaContent}
+                  {extraBadge}
+                </div>
+              );
+            }
 
             return (
-              <Link key={`${item.url}-${index}`} to={`/posts/${post.id}`}>
-                <img src={mediaUrl} alt={post.title || "Ảnh bài viết"} />
-                {index === 3 && extraCount > 0 && (
-                  <span className="media-extra-count">+{extraCount}</span>
-                )}
+              <Link
+                key={`${item.url}-${index}`}
+                className="social-media-item"
+                to={`/posts/${post.id}`}
+              >
+                {mediaContent}
+                {extraBadge}
               </Link>
             );
           })}
@@ -1226,11 +1268,11 @@ export default function SocialPostCard({
             {sharedPost.content && <p>{sharedPost.content}</p>}
 
             {sharedMedia[0] && (
-              <img
-                className="shared-post-image"
-                src={getFileUrl(sharedMedia[0].url)}
-                alt={sharedPost.title || "Ảnh bài viết được chia sẻ"}
-              />
+              renderMediaElement(sharedMedia[0], {
+                className: "shared-post-image",
+                alt: sharedPost.title || "Media bài viết được chia sẻ",
+                controls: false,
+              })
             )}
           </Link>
         ) : (
@@ -1470,11 +1512,11 @@ export default function SocialPostCard({
             {post.content && <p>{post.content}</p>}
 
             {media[0] && (
-              <img
-                className="share-target-image"
-                src={getFileUrl(media[0].url)}
-                alt={post.title || "Ảnh bài viết được chia sẻ"}
-              />
+              renderMediaElement(media[0], {
+                className: "share-target-image",
+                alt: post.title || "Media bài viết được chia sẻ",
+                controls: false,
+              })
             )}
           </div>
 

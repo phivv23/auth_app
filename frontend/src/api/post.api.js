@@ -34,6 +34,7 @@ export function createPost(formData) {
   return apiFetch("/posts", {
     method: "POST",
     body: formData,
+    timeoutMs: 120000,
   });
 }
 
@@ -41,6 +42,7 @@ export function updatePost(postId, formData) {
   return apiFetch(`/posts/${postId}`, {
     method: "PATCH",
     body: formData,
+    timeoutMs: 120000,
   });
 }
 
@@ -126,6 +128,15 @@ export function getFeedPosts({ page = 1, limit = 10, signal } = {}) {
   params.set("limit", limit);
 
   return apiFetch(`/posts/feed?${params.toString()}`, { signal });
+}
+
+export function getVideoPosts({ page = 1, limit = 10, signal } = {}) {
+  const params = new URLSearchParams();
+
+  params.set("page", page);
+  params.set("limit", limit);
+
+  return apiFetch(`/posts/videos?${params.toString()}`, { signal });
 }
 
 export function getBookmarkedPosts({ page = 1, limit = 10, signal } = {}) {

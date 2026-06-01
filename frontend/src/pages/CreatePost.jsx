@@ -4,8 +4,11 @@ import { useNavigate } from "react-router";
 import { createPost } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
-
-const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+import {
+  createPostMediaPreviews,
+  postMediaAccept,
+  validatePostMediaFiles,
+} from "../utils/postMedia.js";
 
 export default function CreatePost() {
   const navigate = useNavigate();
@@ -51,25 +54,17 @@ export default function CreatePost() {
       return;
     }
 
-    const invalidFile = selectedFiles.find(
-      (file) =>
-        !allowedImageTypes.includes(file.type) || file.size > 5 * 1024 * 1024
-    );
+    const validationError = validatePostMediaFiles(selectedFiles);
 
-    if (selectedFiles.length > 10 || invalidFile) {
-      setError("Chỉ được chọn tối đa 10 ảnh JPG, PNG hoặc WEBP, mỗi ảnh tối đa 5MB.");
+    if (validationError) {
+      setError(validationError);
       resetSelectedImages();
       return;
     }
 
     resetSelectedImages();
     setImages(selectedFiles);
-    setPreviews(
-      selectedFiles.map((file) => ({
-        name: file.name,
-        url: URL.createObjectURL(file),
-      }))
-    );
+    setPreviews(createPostMediaPreviews(selectedFiles));
   }
 
   async function handleSubmit(event) {
@@ -138,9 +133,18 @@ export default function CreatePost() {
 
         {previews.length > 0 && (
           <div className="composer-media-grid">
-            {previews.map((preview) => (
-              <img key={preview.url} src={preview.url} alt={preview.name} />
-            ))}
+            {previews.map((preview) =>
+              preview.type === "video" ? (
+                <video
+                  key={preview.url}
+                  src={preview.url}
+                  controls
+                  playsInline
+                />
+              ) : (
+                <img key={preview.url} src={preview.url} alt={preview.name} />
+              )
+            )}
           </div>
         )}
 
@@ -159,11 +163,11 @@ export default function CreatePost() {
           </select>
 
           <label className="composer-file-button">
-            Ảnh
+            Ảnh/Video
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept={postMediaAccept}
               multiple
               onChange={handleImageChange}
             />
@@ -171,7 +175,7 @@ export default function CreatePost() {
 
           {images.length > 0 && (
             <button type="button" className="link-button" onClick={resetSelectedImages}>
-              Xóa ảnh
+              Xóa media
             </button>
           )}
 

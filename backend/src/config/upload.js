@@ -23,6 +23,7 @@ const allowedStoryMimeTypes = [
   "video/webm",
   "video/quicktime",
 ];
+const allowedPostMimeTypes = allowedStoryMimeTypes;
 
 function imageFileFilter(req, file, cb) {
   if (!allowedMimeTypes.includes(file.mimetype)) {
@@ -36,6 +37,16 @@ function storyMediaFileFilter(req, file, cb) {
   if (!allowedStoryMimeTypes.includes(file.mimetype)) {
     return cb(
       new Error("Chỉ cho phép upload story JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
+    );
+  }
+
+  cb(null, true);
+}
+
+function postMediaFileFilter(req, file, cb) {
+  if (!allowedPostMimeTypes.includes(file.mimetype)) {
+    return cb(
+      new Error("Chỉ cho phép upload bài viết JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
     );
   }
 
@@ -88,6 +99,17 @@ export const uploadPostImage = multer({
   fileFilter: imageFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024,
+  },
+});
+
+export const uploadPostMedia = multer({
+  storage: createImageStorage({
+    uploadDir: postUploadDir,
+    prefix: "post",
+  }),
+  fileFilter: postMediaFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024,
   },
 });
 

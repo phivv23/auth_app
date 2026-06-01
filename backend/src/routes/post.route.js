@@ -11,6 +11,7 @@ import {
   findPostById,
   findPostMediaByPostId,
   findPosts,
+  findVideoPosts,
   POST_PRIVACY_VALUES,
   togglePostBookmark,
   updatePost,
@@ -29,7 +30,7 @@ import {
   toggleCommentReaction,
   updateComment,
 } from "../models/comment.model.js";
-import { uploadPostImage } from "../config/upload.js";
+import { uploadPostMedia } from "../config/upload.js";
 import { deleteLocalUpload } from "../utils/file.js";
 import { createNotification } from "../models/notification.model.js";
 
@@ -64,6 +65,8 @@ const bookmarkRateLimit = rateLimit({
   keyGenerator: (req) => req.user?.id || req.ip,
   message: "Bạn lưu bài viết quá nhanh. Vui lòng thử lại sau.",
 });
+const POST_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const POST_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
 function normalizePositiveInt(value, fallback) {
   const number = Number(value);
@@ -121,8 +124,8 @@ function normalizePostPrivacy(value) {
   };
 }
 
-function handlePostImageUpload(req, res, next) {
-  uploadPostImage.fields([
+function handlePostMediaUpload(req, res, next) {
+  uploadPostMedia.fields([
     {
       name: "image",
       maxCount: 1,
@@ -138,14 +141,18 @@ function handlePostImageUpload(req, res, next) {
 
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message: "Ảnh bài viết tối đa 5MB mỗi file",
+        message: "Media bài viết tối đa 50MB mỗi file.",
       });
     }
 
     return res.status(400).json({
-      message: error.message || "Upload ảnh bài viết thất bại",
+      message: error.message || "Upload media bài viết thất bại",
     });
   });
+}
+
+function getPostMediaType(file) {
+  return file.mimetype?.startsWith("video/") ? "video" : "image";
 }
 
 function getUploadedPostMedia(req) {
@@ -156,8 +163,27 @@ function getUploadedPostMedia(req) {
 
   return mediaFiles.map((file) => ({
     url: `/uploads/posts/${file.filename}`,
-    type: "image",
+    type: getPostMediaType(file),
+    size: file.size,
   }));
+}
+
+function validateUploadedPostMedia(media = []) {
+  const invalidMedia = media.find((item) => {
+    if (item.type === "video") {
+      return Number(item.size || 0) > POST_VIDEO_MAX_BYTES;
+    }
+
+    return Number(item.size || 0) > POST_IMAGE_MAX_BYTES;
+  });
+
+  if (!invalidMedia) {
+    return null;
+  }
+
+  return invalidMedia.type === "video"
+    ? "Video bài viết tối đa 50MB mỗi file."
+    : "Ảnh bài viết tối đa 5MB mỗi file.";
 }
 
 async function deleteUploadedPostMedia(media = []) {
@@ -240,6 +266,24 @@ router.get("/feed", requireAuth, async (req, res, next) => {
     });
 
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/videos", requireAuth, async (req, res, next) => {
+  try {
+    const page = normalizePositiveInt(req.query.page, 1);
+    const requestedLimit = normalizePositiveInt(req.query.limit, 10);
+    const limit = Math.min(requestedLimit, 50);
+
+    const result = await findVideoPosts({
+      page,
+      limit,
+      currentUserId: req.user.id,
+    });
+
+    return res.json(result);
   } catch (error) {
     next(error);
   }
@@ -374,24 +418,25 @@ router.get("/:id", optionalAuth, async (req, res, next) => {
   }
 });
 
-router.post("/", requireAuth, requireActiveAccount, createPostRateLimit, handlePostImageUpload, async (req, res, next) => {
+router.post("/", requireAuth, requireActiveAccount, createPostRateLimit, handlePostMediaUpload, async (req, res, next) => {
   const uploadedMedia = getUploadedPostMedia(req);
 
   try {
     const { title, content, privacy } = req.body;
     const result = validatePostInput({ title, content });
     const privacyResult = normalizePostPrivacy(privacy);
+    const mediaError = validateUploadedPostMedia(uploadedMedia);
 
-    if (result.error || privacyResult.error) {
+    if (result.error || privacyResult.error || mediaError) {
       await deleteUploadedPostMedia(uploadedMedia);
       return res.status(400).json({
-        message: result.error || privacyResult.error,
+        message: result.error || privacyResult.error || mediaError,
       });
     }
 
     if (!result.content && uploadedMedia.length === 0) {
       return res.status(400).json({
-        message: "Bài viết cần có nội dung hoặc ảnh.",
+        message: "Bài viết cần có nội dung, ảnh hoặc video.",
       });
     }
 
@@ -462,7 +507,7 @@ router.patch(
   "/:id",
   requireAuth,
   requireActiveAccount,
-  handlePostImageUpload,
+  handlePostMediaUpload,
   async (req, res, next) => {
     const uploadedMedia = getUploadedPostMedia(req);
 
@@ -498,12 +543,13 @@ router.patch(
       const { title, content, privacy } = req.body;
       const result = validatePostInput({ title, content });
       const privacyResult = normalizePostPrivacy(privacy || existingPost.privacy);
+      const mediaError = validateUploadedPostMedia(uploadedMedia);
 
-      if (result.error || privacyResult.error) {
+      if (result.error || privacyResult.error || mediaError) {
         await deleteUploadedPostMedia(uploadedMedia);
 
         return res.status(400).json({
-          message: result.error || privacyResult.error,
+          message: result.error || privacyResult.error || mediaError,
         });
       }
 
@@ -511,7 +557,7 @@ router.patch(
 
       if (!result.content && uploadedMedia.length === 0 && !hasExistingMedia) {
         return res.status(400).json({
-          message: "Bài viết cần có nội dung hoặc ảnh.",
+          message: "Bài viết cần có nội dung, ảnh hoặc video.",
         });
       }
 

@@ -3,8 +3,12 @@ import { useNavigate, useParams } from "react-router";
 import { getPostById, updatePost } from "../api/post.api.js";
 import { useAuth } from "../context/useAuth.js";
 import { getFileUrl } from "../api/client.js";
-
-const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+import {
+  createPostMediaPreviews,
+  isVideoMedia,
+  postMediaAccept,
+  validatePostMediaFiles,
+} from "../utils/postMedia.js";
 
 export default function EditPost() {
   const { id } = useParams();
@@ -83,25 +87,17 @@ export default function EditPost() {
       return;
     }
 
-    const invalidFile = selectedFiles.find(
-      (file) =>
-        !allowedImageTypes.includes(file.type) || file.size > 5 * 1024 * 1024
-    );
+    const validationError = validatePostMediaFiles(selectedFiles);
 
-    if (selectedFiles.length > 10 || invalidFile) {
-      setError("Chỉ được chọn tối đa 10 ảnh JPG, PNG hoặc WEBP, mỗi ảnh tối đa 5MB.");
+    if (validationError) {
+      setError(validationError);
       resetSelectedImages();
       return;
     }
 
     resetSelectedImages();
     setImages(selectedFiles);
-    setPreviews(
-      selectedFiles.map((file) => ({
-        name: file.name,
-        url: URL.createObjectURL(file),
-      }))
-    );
+    setPreviews(createPostMediaPreviews(selectedFiles));
   }
 
   function handleChange(event) {
@@ -119,7 +115,7 @@ export default function EditPost() {
     const hasMedia = images.length > 0 || Boolean(post?.media?.length);
 
     if (!form.content.trim() && !hasMedia) {
-      setError("Bài viết cần có nội dung hoặc ảnh.");
+      setError("Bài viết cần có nội dung, ảnh hoặc video.");
       return;
     }
 
@@ -193,11 +189,11 @@ export default function EditPost() {
           </label>
 
           <div className="form-group">
-            <label>Ảnh bài viết</label>
+            <label>Media bài viết</label>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept={postMediaAccept}
               multiple
               onChange={handleImageChange}
             />
@@ -205,25 +201,43 @@ export default function EditPost() {
 
           {previews.length > 0 ? (
             <div className="composer-media-grid">
-              {previews.map((preview) => (
-                <img key={preview.url} src={preview.url} alt={preview.name} />
-              ))}
+              {previews.map((preview) =>
+                preview.type === "video" ? (
+                  <video
+                    key={preview.url}
+                    src={preview.url}
+                    controls
+                    playsInline
+                  />
+                ) : (
+                  <img key={preview.url} src={preview.url} alt={preview.name} />
+                )
+              )}
             </div>
           ) : post?.media?.length ? (
             <div className="composer-media-grid">
-              {post.media.map((item) => (
-                <img
-                  key={item.url}
-                  src={getFileUrl(item.url)}
-                  alt={post.title || "Ảnh bài viết"}
-                />
-              ))}
+              {post.media.map((item) =>
+                isVideoMedia(item) ? (
+                  <video
+                    key={item.url}
+                    src={getFileUrl(item.url)}
+                    controls
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    key={item.url}
+                    src={getFileUrl(item.url)}
+                    alt={post.title || "Ảnh bài viết"}
+                  />
+                )
+              )}
             </div>
           ) : null}
 
           {images.length > 0 && (
             <button type="button" className="link-button" onClick={resetSelectedImages}>
-              Xóa ảnh mới chọn
+              Xóa media mới chọn
             </button>
           )}
 

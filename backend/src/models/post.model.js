@@ -748,6 +748,116 @@ export async function findBookmarkedPosts({
   };
 }
 
+export async function findVideoPosts({ page = 1, limit = 10, currentUserId }) {
+  const normalizedPage = Number(page);
+  const normalizedLimit = Number(limit);
+  const safePage =
+    Number.isInteger(normalizedPage) && normalizedPage > 0 ? normalizedPage : 1;
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? Math.min(normalizedLimit, 50)
+      : 10;
+  const offset = (safePage - 1) * safeLimit;
+  const visibility = buildVisibilitySql({
+    currentUserId,
+    postAlias: "p",
+  });
+
+  const posts = await query(
+    `
+    SELECT
+      p.id,
+      p.user_id AS userId,
+      p.shared_post_id AS sharedPostId,
+      p.title,
+      p.content,
+      p.image_url AS imageUrl,
+      p.privacy,
+      p.created_at AS createdAt,
+      p.updated_at AS updatedAt,
+
+      u.id AS authorId,
+      u.name AS authorName,
+      u.avatar_url AS authorAvatarUrl,
+
+      COUNT(DISTINCT pl.id) AS likeCount,
+      COUNT(DISTINCT c.id) AS commentCount,
+
+      (
+        SELECT COUNT(*)
+        FROM posts shared_posts
+        WHERE shared_posts.shared_post_id = p.id
+      ) AS shareCount,
+
+      (
+        SELECT COUNT(*)
+        FROM post_bookmarks pb
+        WHERE pb.post_id = p.id
+      ) AS bookmarkCount,
+
+      EXISTS(
+        SELECT 1
+        FROM post_likes my_like
+        WHERE my_like.post_id = p.id AND my_like.user_id = ?
+      ) AS likedByMe,
+
+      EXISTS(
+        SELECT 1
+        FROM post_bookmarks my_bookmark
+        WHERE my_bookmark.post_id = p.id AND my_bookmark.user_id = ?
+      ) AS bookmarkedByMe,
+
+      (
+        SELECT my_reaction.reaction_type
+        FROM post_likes my_reaction
+        WHERE my_reaction.post_id = p.id AND my_reaction.user_id = ?
+        LIMIT 1
+      ) AS myReaction
+
+    FROM posts p
+    JOIN users u ON u.id = p.user_id
+    LEFT JOIN post_likes pl ON pl.post_id = p.id
+    LEFT JOIN comments c ON c.post_id = p.id
+    WHERE ${visibility.sql}
+      AND EXISTS (
+        SELECT 1
+        FROM post_media video_media
+        WHERE video_media.post_id = p.id
+          AND video_media.media_type = 'video'
+      )
+    GROUP BY p.id
+    ORDER BY p.created_at DESC
+    LIMIT ${safeLimit} OFFSET ${offset}
+    `,
+    [currentUserId, currentUserId, currentUserId, ...visibility.params]
+  );
+
+  const countRows = await query(
+    `
+    SELECT COUNT(*) AS total
+    FROM posts p
+    WHERE ${visibility.sql}
+      AND EXISTS (
+        SELECT 1
+        FROM post_media video_media
+        WHERE video_media.post_id = p.id
+          AND video_media.media_type = 'video'
+      )
+    `,
+    visibility.params
+  );
+
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    posts: await attachPostExtras(posts, currentUserId),
+    page: safePage,
+    limit: safeLimit,
+    total,
+    totalPages: Math.ceil(total / safeLimit),
+  };
+}
+
 export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
   const normalizedPage = Number(page);
   const normalizedLimit = Number(limit);
