@@ -286,7 +286,8 @@ export default function PostComposer({
               </button>
             </header>
 
-            <div className="post-composer-author">
+            <div className="post-composer-modal-body">
+              <div className="post-composer-author">
               {avatarUrl ? (
                 <img className="composer-avatar" src={avatarUrl} alt={user?.name} />
               ) : (
@@ -401,13 +402,17 @@ export default function PostComposer({
               </button>
             </div>
 
-            <button
-              className="button post-composer-submit"
-              type="submit"
-              disabled={!canSubmit}
-            >
+            </div>
+
+            <footer className="post-composer-modal-footer">
+              <button
+                className="button post-composer-submit"
+                type="submit"
+                disabled={!canSubmit}
+              >
               {submitting ? "Đang đăng..." : "Đăng"}
-            </button>
+              </button>
+            </footer>
           </form>
         </div>
       )}
