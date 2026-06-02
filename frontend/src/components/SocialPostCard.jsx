@@ -85,13 +85,14 @@ function getPostMedia(post) {
 
 function renderMediaElement(
   item,
-  { className = "", alt = "", controls = true } = {}
+  { className = "", alt = "", controls = true, mediaRef = null } = {}
 ) {
   const mediaUrl = getFileUrl(item.url);
 
   if (isVideoMedia(item)) {
     return (
       <video
+        ref={mediaRef}
         className={className}
         src={mediaUrl}
         controls={controls}
@@ -251,6 +252,7 @@ export default function SocialPostCard({
   const highlightedCommentRef = useRef(null);
   const commentsRequestRef = useRef(null);
   const reactionsRequestRef = useRef(null);
+  const mediaViewerSourceVideoRef = useRef(null);
 
   const [commentsOpen, setCommentsOpen] = useState(defaultCommentsOpen);
   const [comments, setComments] = useState([]);
@@ -282,7 +284,7 @@ export default function SocialPostCard({
   const [sharePrivacy, setSharePrivacy] = useState("public");
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
-  const [mediaViewerIndex, setMediaViewerIndex] = useState(null);
+  const [mediaViewerSession, setMediaViewerSession] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -845,12 +847,45 @@ export default function SocialPostCard({
     }
   }
 
-  function handleOpenMediaViewer(index) {
-    setMediaViewerIndex(index);
+  function handleOpenMediaViewer(index, event = null) {
+    const postNode = event?.currentTarget?.closest(".social-post-card");
+    const inlineVideo =
+      event?.currentTarget
+        ?.closest(".social-media-item")
+        ?.querySelector("video") || null;
+    const isVideo = isVideoMedia(media[index]);
+    const initialVideoTime =
+      isVideo && inlineVideo ? inlineVideo.currentTime || 0 : 0;
+    const initialVideoAutoPlay =
+      isVideo && inlineVideo ? !inlineVideo.paused : true;
+
+    postNode?.querySelectorAll(".social-media-grid video").forEach((video) => {
+      video?.pause?.();
+    });
+    mediaViewerSourceVideoRef.current = inlineVideo;
+
+    setMediaViewerSession({
+      index,
+      initialVideoTime,
+      initialVideoAutoPlay,
+    });
   }
 
-  function handleCloseMediaViewer() {
-    setMediaViewerIndex(null);
+  function handleCloseMediaViewer(viewerState = {}) {
+    const inlineVideo = mediaViewerSourceVideoRef.current;
+
+    if (
+      inlineVideo &&
+      Number.isFinite(viewerState.currentTime) &&
+      Number(viewerState.index) === Number(mediaViewerSession?.index) &&
+      isVideoMedia(media[viewerState.index])
+    ) {
+      inlineVideo.currentTime = viewerState.currentTime;
+      inlineVideo.pause();
+    }
+
+    mediaViewerSourceVideoRef.current = null;
+    setMediaViewerSession(null);
   }
 
   function renderComment(comment, { parentComment = null } = {}) {
@@ -1236,7 +1271,7 @@ export default function SocialPostCard({
                   <button
                     className="media-viewer-open-button"
                     type="button"
-                    onClick={() => handleOpenMediaViewer(index)}
+                    onClick={(event) => handleOpenMediaViewer(index, event)}
                   >
                     Phóng to
                   </button>
@@ -1604,13 +1639,15 @@ export default function SocialPostCard({
         </div>
       )}
 
-      {mediaViewerIndex !== null && (
+      {mediaViewerSession && (
         <MediaViewer
           media={media}
-          initialIndex={mediaViewerIndex}
+          initialIndex={mediaViewerSession.index}
           title={post.title || "Media bài viết"}
           authorName={post.authorName}
           postUrl={`/posts/${post.id}`}
+          initialVideoTime={mediaViewerSession.initialVideoTime}
+          initialVideoAutoPlay={mediaViewerSession.initialVideoAutoPlay}
           onClose={handleCloseMediaViewer}
         />
       )}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -10,8 +10,11 @@ export default function MediaViewer({
   title = "Media bài viết",
   authorName = "",
   postUrl = "",
+  initialVideoTime = 0,
+  initialVideoAutoPlay = true,
   onClose,
 }) {
+  const activeVideoRef = useRef(null);
   const safeMedia = useMemo(
     () => media.filter((item) => item?.url),
     [media]
@@ -27,6 +30,14 @@ export default function MediaViewer({
   const activeMedia = safeMedia[activeIndex];
   const hasMultiple = safeMedia.length > 1;
   const activeUrl = getFileUrl(activeMedia?.url);
+  const shouldUseInitialVideoTime = activeIndex === initialIndex;
+
+  const closeViewer = useCallback(() => {
+    onClose?.({
+      index: activeIndex,
+      currentTime: activeVideoRef.current?.currentTime || 0,
+    });
+  }, [activeIndex, onClose]);
 
   useEffect(() => {
     if (!activeMedia) {
@@ -38,7 +49,7 @@ export default function MediaViewer({
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
-        onClose?.();
+        closeViewer();
       }
 
       if (event.key === "ArrowLeft") {
@@ -60,7 +71,19 @@ export default function MediaViewer({
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeMedia, onClose, safeMedia.length]);
+  }, [activeMedia, closeViewer, safeMedia.length]);
+
+  useEffect(() => {
+    const video = activeVideoRef.current;
+
+    if (!video || !isVideoMedia(activeMedia)) {
+      return;
+    }
+
+    if (shouldUseInitialVideoTime && Number.isFinite(initialVideoTime)) {
+      video.currentTime = Math.max(0, initialVideoTime);
+    }
+  }, [activeMedia, activeUrl, initialVideoTime, shouldUseInitialVideoTime]);
 
   if (!activeMedia) {
     return null;
@@ -84,7 +107,7 @@ export default function MediaViewer({
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
-          onClose?.();
+          closeViewer();
         }
       }}
     >
@@ -106,11 +129,11 @@ export default function MediaViewer({
 
           <div className="media-viewer-actions">
             {postUrl && (
-              <Link to={postUrl} onClick={onClose}>
+              <Link to={postUrl} onClick={closeViewer}>
                 Mở bài viết
               </Link>
             )}
-            <button type="button" aria-label="Đóng" onClick={onClose}>
+            <button type="button" aria-label="Đóng" onClick={closeViewer}>
               ×
             </button>
           </div>
@@ -131,9 +154,10 @@ export default function MediaViewer({
           {isVideoMedia(activeMedia) ? (
             <video
               key={activeUrl}
+              ref={activeVideoRef}
               src={activeUrl}
               controls
-              autoPlay
+              autoPlay={shouldUseInitialVideoTime ? initialVideoAutoPlay : true}
               playsInline
               preload="metadata"
             />
