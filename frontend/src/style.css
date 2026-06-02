@@ -1626,7 +1626,7 @@ textarea {
 }
 
 .post-composer-modal {
-  width: min(620px, 100%);
+  width: min(500px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   overflow: hidden;
   display: grid;
@@ -1640,7 +1640,7 @@ textarea {
 
 .post-composer-modal.has-media {
   height: calc(100dvh - 24px);
-  max-height: 760px;
+  max-height: 680px;
   gap: 0;
 }
 
@@ -1721,154 +1721,150 @@ textarea {
 
 .post-composer-modal-textarea {
   width: 100%;
-  min-height: 210px;
+  min-height: 154px;
   border: 0;
   border-radius: 0;
   font-size: 24px;
   line-height: 1.35;
-  padding: 4px 18px;
+  padding: 0 18px;
   resize: vertical;
 }
 
 .post-composer-modal.has-media .post-composer-modal-textarea {
-  min-height: 78px;
-  height: 92px;
-  max-height: 130px;
+  min-height: 64px;
+  height: 74px;
+  max-height: 96px;
 }
 
 .post-composer-modal-textarea:focus {
   outline: none;
 }
 
-.post-composer-dropzone {
-  display: grid;
-  place-items: center;
-  gap: 6px;
-  min-height: 118px;
+.post-composer-drag-hint {
   margin: 0 18px;
-  border: 2px dashed #cfd5df;
+  border: 1px dashed #cfd5df;
   border-radius: 8px;
   background: #f7f9fc;
   color: #667085;
-  padding: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 12px;
   text-align: center;
 }
 
-.post-composer-modal.is-dragging-media .post-composer-dropzone {
+.post-composer-modal.is-dragging-media .post-composer-drag-hint,
+.post-composer-modal.is-dragging-media .post-composer-media-panel {
   border-color: #1877f2;
   background: #e7f3ff;
   color: #101828;
 }
 
-.post-composer-dropzone strong {
-  color: #101828;
-}
-
-.post-composer-dropzone span {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.post-composer-dropzone button {
-  min-height: 34px;
-  border: 0;
+.post-composer-media-panel {
+  position: relative;
+  overflow: hidden;
+  margin: 0 18px;
+  border: 1px solid #cfd5df;
   border-radius: 8px;
-  background: #1877f2;
+  background: #111;
+}
+
+.post-composer-preview-grid {
+  height: clamp(220px, 38dvh, 320px);
+  display: grid;
+  gap: 2px;
+  background: #050505;
+}
+
+.post-composer-preview-grid.count-1 {
+  grid-template-columns: 1fr;
+}
+
+.post-composer-preview-grid.count-2,
+.post-composer-preview-grid.count-3,
+.post-composer-preview-grid.count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.post-composer-preview-item {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #050505;
+}
+
+.post-composer-preview-item img,
+.post-composer-preview-item video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.post-composer-media-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(5, 5, 5, 0.68);
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-weight: 800;
-  padding: 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.post-composer-dropzone button:disabled {
+.post-composer-media-remove:hover {
+  background: rgba(5, 5, 5, 0.86);
+}
+
+.post-composer-media-remove:disabled {
   opacity: 0.62;
   cursor: not-allowed;
 }
 
-.post-composer-modal-media {
-  margin: 0 18px;
-  max-height: min(46dvh, 420px);
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.post-composer-modal-media img,
-.post-composer-modal-media video {
-  width: 100%;
-  height: auto;
-  max-height: min(44dvh, 400px);
-  aspect-ratio: auto;
-  object-fit: contain;
-  background: #111;
-}
-
-.post-composer-media-summary {
+.post-composer-extra-count {
+  position: absolute;
+  inset: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  align-items: start;
-  margin: 0 18px;
-  border: 1px solid #d9dee7;
-  border-radius: 8px;
-  background: #f8fafc;
-  padding: 10px 12px;
+  place-items: center;
+  background: rgba(5, 5, 5, 0.58);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
 }
 
-.post-composer-media-summary > div {
-  min-width: 0;
+.post-composer-media-meta {
+  min-height: 38px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   align-items: center;
-}
-
-.post-composer-media-summary span {
+  gap: 8px;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #fff;
   color: #667085;
   font-size: 13px;
   font-weight: 700;
+  padding: 0 12px;
 }
 
-.post-composer-media-summary ul {
-  grid-column: 1;
-  display: grid;
-  gap: 3px;
+.post-composer-media-meta strong,
+.post-composer-media-meta span {
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  color: #667085;
-  font-size: 13px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.post-composer-media-summary li {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.post-composer-media-summary button {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  min-height: 34px;
-  border: 0;
-  border-radius: 8px;
-  background: #eef2f7;
-  color: #344054;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 800;
-  padding: 0 12px;
-}
-
-.post-composer-media-summary button:hover {
-  background: #e4e6eb;
-}
-
-.post-composer-media-summary button:disabled {
-  opacity: 0.62;
-  cursor: not-allowed;
+.post-composer-media-meta strong {
+  flex: 0 0 auto;
+  color: #101828;
 }
 
 .post-composer-addons {
@@ -1876,7 +1872,7 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: center;
-  margin: 0 18px;
+  margin: 0;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   padding: 10px 12px;
@@ -1919,9 +1915,11 @@ textarea {
 }
 
 .post-composer-modal-footer {
+  display: grid;
+  gap: 10px;
   border-top: 1px solid #e5e7eb;
   background: #fff;
-  padding: 12px 18px 18px;
+  padding: 12px 16px 16px;
   box-shadow:
     0 -12px 18px rgba(255, 255, 255, 0.94),
     0 1px 2px rgba(15, 23, 42, 0.12);
@@ -1929,6 +1927,11 @@ textarea {
 
 .post-composer-submit {
   width: 100%;
+  background: #1877f2;
+}
+
+.post-composer-submit:hover {
+  background: #166fe5;
 }
 
 .post-edited-badge {

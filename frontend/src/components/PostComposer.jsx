@@ -52,9 +52,10 @@ export default function PostComposer({
   const [draggingMedia, setDraggingMedia] = useState(false);
 
   const avatarUrl = getFileUrl(user?.avatarUrl);
+  const hasMedia = previews.length > 0;
+  const selectedMediaSize = files.reduce((total, file) => total + file.size, 0);
   const canSubmit =
     (content.trim().length > 0 || files.length > 0) && !submitting;
-  const selectedMediaSize = files.reduce((total, file) => total + file.size, 0);
 
   useEffect(() => {
     return () => {
@@ -261,7 +262,7 @@ export default function PostComposer({
         >
           <form
             className={`post-composer-modal ${
-              previews.length > 0 ? "has-media" : ""
+              hasMedia ? "has-media" : ""
             } ${draggingMedia ? "is-dragging-media" : ""}`.trim()}
             onSubmit={handleSubmit}
             role="dialog"
@@ -288,129 +289,147 @@ export default function PostComposer({
 
             <div className="post-composer-modal-body">
               <div className="post-composer-author">
-              {avatarUrl ? (
-                <img className="composer-avatar" src={avatarUrl} alt={user?.name} />
-              ) : (
-                <div className="composer-avatar-placeholder">
-                  {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                {avatarUrl ? (
+                  <img
+                    className="composer-avatar"
+                    src={avatarUrl}
+                    alt={user?.name}
+                  />
+                ) : (
+                  <div className="composer-avatar-placeholder">
+                    {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                  </div>
+                )}
+
+                <div>
+                  <strong>{user?.name || "Tài khoản của bạn"}</strong>
+                  <select
+                    value={privacy}
+                    onChange={(event) => setPrivacy(event.target.value)}
+                    aria-label="Quyền xem bài viết"
+                  >
+                    <option value="public">Công khai</option>
+                    <option value="followers">Người theo dõi</option>
+                    <option value="friends">Bạn bè</option>
+                    <option value="only_me">Chỉ mình tôi</option>
+                  </select>
                 </div>
+              </div>
+
+              <textarea
+                className="post-composer-modal-textarea"
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                placeholder={placeholder}
+                rows={hasMedia ? 3 : 5}
+                autoFocus
+              />
+
+              {hasMedia ? (
+                <section
+                  className="post-composer-media-panel"
+                  aria-label="Media đã chọn"
+                >
+                  <button
+                    className="post-composer-media-remove"
+                    type="button"
+                    aria-label="Xóa media"
+                    onClick={clearFiles}
+                    disabled={submitting}
+                  >
+                    ×
+                  </button>
+
+                  <div
+                    className={`post-composer-preview-grid count-${Math.min(
+                      previews.length,
+                      4
+                    )}`}
+                  >
+                    {previews.slice(0, 4).map((preview, index) => {
+                      const extraCount = previews.length - 4;
+
+                      return (
+                        <div
+                          key={preview.url}
+                          className="post-composer-preview-item"
+                        >
+                          {preview.type === "video" ? (
+                            <video
+                              src={preview.url}
+                              controls
+                              playsInline
+                              preload="metadata"
+                            />
+                          ) : (
+                            <img src={preview.url} alt={preview.name} />
+                          )}
+
+                          {index === 3 && extraCount > 0 && (
+                            <span className="post-composer-extra-count">
+                              +{extraCount}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="post-composer-media-meta">
+                    <strong>
+                      {files.length}/{postMediaMaxFiles} media
+                    </strong>
+                    <span>{formatFileSize(selectedMediaSize)}</span>
+                    <span>{files[0]?.name}</span>
+                  </div>
+                </section>
+              ) : (
+                <p className="post-composer-drag-hint">
+                  Kéo ảnh/video vào khung này hoặc dán từ clipboard.
+                </p>
               )}
 
-              <div>
-                <strong>{user?.name || "Tài khoản của bạn"}</strong>
-                <select
-                  value={privacy}
-                  onChange={(event) => setPrivacy(event.target.value)}
-                  aria-label="Quyền xem bài viết"
-                >
-                  <option value="public">Công khai</option>
-                  <option value="followers">Người theo dõi</option>
-                  <option value="friends">Bạn bè</option>
-                  <option value="only_me">Chỉ mình tôi</option>
-                </select>
-              </div>
-            </div>
-
-            <textarea
-              className="post-composer-modal-textarea"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder={placeholder}
-              rows={7}
-              autoFocus
-            />
-
-            {previews.length === 0 && (
-              <div className="post-composer-dropzone">
-                <strong>Kéo ảnh/video vào đây</strong>
-                <span>
-                  Hoặc dán từ clipboard, tối đa {postMediaMaxFiles} file.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={submitting}
-                >
-                  Chọn từ máy
-                </button>
-              </div>
-            )}
-
-            {previews.length > 0 && (
-              <div className="composer-media-grid post-composer-modal-media">
-                {previews.map((preview) =>
-                  preview.type === "video" ? (
-                    <video
-                      key={preview.url}
-                      src={preview.url}
-                      controls
-                      playsInline
-                    />
-                  ) : (
-                    <img key={preview.url} src={preview.url} alt={preview.name} />
-                  )
-                )}
-              </div>
-            )}
-
-            {files.length > 0 && (
-              <div className="post-composer-media-summary">
-                <div>
-                  <strong>
-                    {files.length}/{postMediaMaxFiles} media đã chọn
-                  </strong>
-                  <span>{formatFileSize(selectedMediaSize)}</span>
-                </div>
-
-                <ul>
-                  {files.slice(0, 3).map((file) => (
-                    <li key={`${file.name}-${file.size}-${file.lastModified}`}>
-                      {file.name}
-                    </li>
-                  ))}
-                  {files.length > 3 && <li>+{files.length - 3} file khác</li>}
-                </ul>
-
-                <button type="button" onClick={clearFiles} disabled={submitting}>
-                  Xóa media
-                </button>
-              </div>
-            )}
-
-            {error && <p className="error">{error}</p>}
-
-            <div className="post-composer-addons">
-              <strong>Thêm vào bài viết của bạn</strong>
-
-              <label className="post-composer-icon-button image">
-                Ảnh/Video
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={postMediaAccept}
-                  multiple
-                  onChange={handleMediaChange}
-                />
-              </label>
-
-              <button type="button" className="post-composer-icon-button" disabled>
-                Cảm xúc
-              </button>
-
-              <button type="button" className="post-composer-icon-button" disabled>
-                Vị trí
-              </button>
-            </div>
-
+              {error && <p className="error">{error}</p>}
             </div>
 
             <footer className="post-composer-modal-footer">
+              <div className="post-composer-addons">
+                <strong>Thêm vào bài viết của bạn</strong>
+
+                <label className="post-composer-icon-button image">
+                  Ảnh/Video
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={postMediaAccept}
+                    multiple
+                    onChange={handleMediaChange}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className="post-composer-icon-button"
+                  disabled
+                >
+                  Cảm xúc
+                </button>
+
+                <button
+                  type="button"
+                  className="post-composer-icon-button"
+                  disabled
+                >
+                  Vị trí
+                </button>
+              </div>
+
               <button
                 className="button post-composer-submit"
                 type="submit"
                 disabled={!canSubmit}
               >
-              {submitting ? "Đang đăng..." : "Đăng"}
+                {submitting ? "Đang đăng..." : "Đăng"}
               </button>
             </footer>
           </form>
