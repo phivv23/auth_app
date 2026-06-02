@@ -14,6 +14,7 @@ import {
   updateComment,
 } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
+import MediaViewer from "./MediaViewer.jsx";
 import ReportDialog from "./ReportDialog.jsx";
 import { CommentListSkeleton } from "./Skeleton.jsx";
 import { useAuth } from "../context/useAuth.js";
@@ -281,6 +282,7 @@ export default function SocialPostCard({
   const [sharePrivacy, setSharePrivacy] = useState("public");
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [bookmarking, setBookmarking] = useState(false);
+  const [mediaViewerIndex, setMediaViewerIndex] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -843,6 +845,14 @@ export default function SocialPostCard({
     }
   }
 
+  function handleOpenMediaViewer(index) {
+    setMediaViewerIndex(index);
+  }
+
+  function handleCloseMediaViewer() {
+    setMediaViewerIndex(null);
+  }
+
   function renderComment(comment, { parentComment = null } = {}) {
     const commentAvatarUrl = getFileUrl(comment.authorAvatarUrl);
     const { isEdited: isCommentEdited } = getEditedState(comment);
@@ -1223,19 +1233,27 @@ export default function SocialPostCard({
                 >
                   {mediaContent}
                   {extraBadge}
+                  <button
+                    className="media-viewer-open-button"
+                    type="button"
+                    onClick={() => handleOpenMediaViewer(index)}
+                  >
+                    Phóng to
+                  </button>
                 </div>
               );
             }
 
             return (
-              <Link
+              <button
                 key={`${item.url}-${index}`}
-                className="social-media-item"
-                to={`/posts/${post.id}`}
+                className="social-media-item media-button"
+                type="button"
+                onClick={() => handleOpenMediaViewer(index)}
               >
                 {mediaContent}
                 {extraBadge}
-              </Link>
+              </button>
             );
           })}
         </div>
@@ -1584,6 +1602,17 @@ export default function SocialPostCard({
             comments.map((comment) => renderComment(comment))
           )}
         </div>
+      )}
+
+      {mediaViewerIndex !== null && (
+        <MediaViewer
+          media={media}
+          initialIndex={mediaViewerIndex}
+          title={post.title || "Media bài viết"}
+          authorName={post.authorName}
+          postUrl={`/posts/${post.id}`}
+          onClose={handleCloseMediaViewer}
+        />
       )}
 
       <ReportDialog
