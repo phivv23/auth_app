@@ -96,6 +96,27 @@ export default function PostComposer({
     }
   }
 
+  function removeFileAtIndex(indexToRemove) {
+    const removedPreview = previews[indexToRemove];
+    const nextFiles = files.filter((_, index) => index !== indexToRemove);
+    const nextPreviews = previews.filter((_, index) => index !== indexToRemove);
+
+    if (removedPreview?.url) {
+      URL.revokeObjectURL(removedPreview.url);
+    }
+
+    setFiles(nextFiles);
+    setPreviews(nextPreviews);
+
+    if (nextFiles.length === 0) {
+      setDraggingMedia(false);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function applyMediaFiles(selectedFiles, { append = false } = {}) {
     const nextFiles = append ? [...files, ...selectedFiles] : selectedFiles;
 
@@ -330,16 +351,6 @@ export default function PostComposer({
                   className="post-composer-media-panel"
                   aria-label="Media đã chọn"
                 >
-                  <button
-                    className="post-composer-media-remove"
-                    type="button"
-                    aria-label="Xóa media"
-                    onClick={clearFiles}
-                    disabled={submitting}
-                  >
-                    ×
-                  </button>
-
                   <div
                     className={`post-composer-preview-grid count-${Math.min(
                       previews.length,
@@ -365,6 +376,16 @@ export default function PostComposer({
                             <img src={preview.url} alt={preview.name} />
                           )}
 
+                          <button
+                            className="post-composer-preview-remove"
+                            type="button"
+                            aria-label={`Xóa ${preview.name || "media"}`}
+                            onClick={() => removeFileAtIndex(index)}
+                            disabled={submitting}
+                          >
+                            ×
+                          </button>
+
                           {index === 3 && extraCount > 0 && (
                             <span className="post-composer-extra-count">
                               +{extraCount}
@@ -381,6 +402,13 @@ export default function PostComposer({
                     </strong>
                     <span>{formatFileSize(selectedMediaSize)}</span>
                     <span>{files[0]?.name}</span>
+                    <button
+                      type="button"
+                      onClick={clearFiles}
+                      disabled={submitting}
+                    >
+                      Xóa tất cả
+                    </button>
                   </div>
                 </section>
               ) : (

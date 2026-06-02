@@ -1802,29 +1802,29 @@ textarea {
   object-fit: contain;
 }
 
-.post-composer-media-remove {
+.post-composer-preview-remove {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border: 0;
   border-radius: 999px;
   background: rgba(5, 5, 5, 0.68);
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 700;
   line-height: 1;
 }
 
-.post-composer-media-remove:hover {
+.post-composer-preview-remove:hover {
   background: rgba(5, 5, 5, 0.86);
 }
 
-.post-composer-media-remove:disabled {
+.post-composer-preview-remove:disabled {
   opacity: 0.62;
   cursor: not-allowed;
 }
@@ -1852,6 +1852,29 @@ textarea {
   font-size: 13px;
   font-weight: 700;
   padding: 0 12px;
+}
+
+.post-composer-media-meta button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.post-composer-media-meta button:hover {
+  background: #e4e6eb;
+}
+
+.post-composer-media-meta button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 
 .post-composer-media-meta strong,
@@ -3376,23 +3399,24 @@ video.share-target-image {
     align-items: stretch;
   }
 
-  .post-composer-dropzone {
-    min-height: 96px;
-    padding: 12px;
+  .post-composer-preview-grid {
+    height: clamp(190px, 34dvh, 280px);
   }
 
-  .post-composer-media-summary {
-    grid-template-columns: 1fr;
+  .post-composer-media-meta {
+    flex-wrap: wrap;
+    min-height: 0;
+    padding: 8px 10px;
   }
 
-  .post-composer-media-summary ul {
-    grid-column: 1;
-  }
-
-  .post-composer-media-summary button {
-    grid-row: auto;
-    grid-column: 1;
+  .post-composer-media-meta button {
     width: 100%;
+  }
+
+  .post-composer-preview-remove {
+    width: 28px;
+    height: 28px;
+    font-size: 19px;
   }
 
   .post-composer-icon-button {
