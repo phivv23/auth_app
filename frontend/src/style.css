@@ -1639,6 +1639,8 @@ textarea {
 }
 
 .post-composer-modal.has-media {
+  height: calc(100dvh - 24px);
+  max-height: 760px;
   gap: 0;
 }
 
@@ -1786,7 +1788,7 @@ textarea {
 
 .post-composer-modal-media {
   margin: 0 18px;
-  max-height: min(56dvh, 520px);
+  max-height: min(46dvh, 420px);
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -1795,7 +1797,7 @@ textarea {
 .post-composer-modal-media video {
   width: 100%;
   height: auto;
-  max-height: min(54dvh, 500px);
+  max-height: min(44dvh, 400px);
   aspect-ratio: auto;
   object-fit: contain;
   background: #111;
