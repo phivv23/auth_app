@@ -6,8 +6,33 @@ import { useAuth } from "../context/useAuth.js";
 import {
   createPostMediaPreviews,
   postMediaAccept,
+  postMediaMaxFiles,
   validatePostMediaFiles,
 } from "../utils/postMedia.js";
+
+function formatFileSize(size) {
+  if (!Number.isFinite(size)) {
+    return "";
+  }
+
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function getMediaFilesFromItems(items) {
+  return Array.from(items || []).reduce((mediaFiles, item) => {
+    const file = item.kind === "file" ? item.getAsFile() : item;
+
+    if (file?.type?.startsWith("image/") || file?.type?.startsWith("video/")) {
+      mediaFiles.push(file);
+    }
+
+    return mediaFiles;
+  }, []);
+}
 
 export default function PostComposer({
   onCreated,
@@ -24,10 +49,12 @@ export default function PostComposer({
   const [previews, setPreviews] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [draggingMedia, setDraggingMedia] = useState(false);
 
   const avatarUrl = getFileUrl(user?.avatarUrl);
   const canSubmit =
     (content.trim().length > 0 || files.length > 0) && !submitting;
+  const selectedMediaSize = files.reduce((total, file) => total + file.size, 0);
 
   useEffect(() => {
     return () => {
@@ -61,33 +88,102 @@ export default function PostComposer({
     previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     setFiles([]);
     setPreviews([]);
+    setDraggingMedia(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   }
 
-  function handleMediaChange(event) {
-    const selectedFiles = Array.from(event.target.files || []);
+  function applyMediaFiles(selectedFiles, { append = false } = {}) {
+    const nextFiles = append ? [...files, ...selectedFiles] : selectedFiles;
 
     setError("");
 
-    if (selectedFiles.length === 0) {
+    if (nextFiles.length === 0) {
       clearFiles();
-      return;
+      return false;
     }
 
-    const validationError = validatePostMediaFiles(selectedFiles);
+    const validationError = validatePostMediaFiles(nextFiles);
 
     if (validationError) {
       setError(validationError);
-      clearFiles();
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return false;
+    }
+
+    previews.forEach((preview) => URL.revokeObjectURL(preview.url));
+    setFiles(nextFiles);
+    setPreviews(createPostMediaPreviews(nextFiles));
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    return true;
+  }
+
+  function handleMediaChange(event) {
+    const selectedFiles = Array.from(event.target.files || []);
+
+    applyMediaFiles(selectedFiles, {
+      append: files.length > 0,
+    });
+  }
+
+  function handleDragEnter(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingMedia(true);
+  }
+
+  function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingMedia(true);
+  }
+
+  function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.currentTarget.contains(event.relatedTarget)) {
       return;
     }
 
-    clearFiles();
-    setFiles(selectedFiles);
-    setPreviews(createPostMediaPreviews(selectedFiles));
+    setDraggingMedia(false);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingMedia(false);
+
+    const droppedFiles = getMediaFilesFromItems(event.dataTransfer.files);
+
+    if (droppedFiles.length === 0) {
+      return;
+    }
+
+    applyMediaFiles(droppedFiles, {
+      append: files.length > 0,
+    });
+  }
+
+  function handlePaste(event) {
+    const pastedFiles = getMediaFilesFromItems(event.clipboardData?.items);
+
+    if (pastedFiles.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    applyMediaFiles(pastedFiles, {
+      append: files.length > 0,
+    });
   }
 
   async function handleSubmit(event) {
@@ -166,11 +262,16 @@ export default function PostComposer({
           <form
             className={`post-composer-modal ${
               previews.length > 0 ? "has-media" : ""
-            }`.trim()}
+            } ${draggingMedia ? "is-dragging-media" : ""}`.trim()}
             onSubmit={handleSubmit}
             role="dialog"
             aria-modal="true"
             aria-labelledby="post-composer-title"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onPaste={handlePaste}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header className="post-composer-modal-header">
@@ -218,6 +319,22 @@ export default function PostComposer({
               autoFocus
             />
 
+            {previews.length === 0 && (
+              <div className="post-composer-dropzone">
+                <strong>Kéo ảnh/video vào đây</strong>
+                <span>
+                  Hoặc dán từ clipboard, tối đa {postMediaMaxFiles} file.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={submitting}
+                >
+                  Chọn từ máy
+                </button>
+              </div>
+            )}
+
             {previews.length > 0 && (
               <div className="composer-media-grid post-composer-modal-media">
                 {previews.map((preview) =>
@@ -232,6 +349,30 @@ export default function PostComposer({
                     <img key={preview.url} src={preview.url} alt={preview.name} />
                   )
                 )}
+              </div>
+            )}
+
+            {files.length > 0 && (
+              <div className="post-composer-media-summary">
+                <div>
+                  <strong>
+                    {files.length}/{postMediaMaxFiles} media đã chọn
+                  </strong>
+                  <span>{formatFileSize(selectedMediaSize)}</span>
+                </div>
+
+                <ul>
+                  {files.slice(0, 3).map((file) => (
+                    <li key={`${file.name}-${file.size}-${file.lastModified}`}>
+                      {file.name}
+                    </li>
+                  ))}
+                  {files.length > 3 && <li>+{files.length - 3} file khác</li>}
+                </ul>
+
+                <button type="button" onClick={clearFiles} disabled={submitting}>
+                  Xóa media
+                </button>
               </div>
             )}
 
@@ -259,12 +400,6 @@ export default function PostComposer({
                 Vị trí
               </button>
             </div>
-
-            {files.length > 0 && (
-              <button type="button" className="link-button" onClick={clearFiles}>
-                Xóa media
-              </button>
-            )}
 
             <button
               className="button post-composer-submit"
