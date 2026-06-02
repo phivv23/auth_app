@@ -1519,9 +1519,17 @@ textarea {
 .composer-media-grid video {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
+}
+
+.composer-media-grid img {
+  object-fit: cover;
+}
+
+.composer-media-grid video {
+  object-fit: contain;
+  background: #111;
 }
 
 .social-composer {
@@ -1610,16 +1618,16 @@ textarea {
 .post-composer-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 2000;
   display: grid;
   place-items: center;
   background: rgba(15, 23, 42, 0.62);
-  padding: 18px;
+  padding: 12px;
 }
 
 .post-composer-modal {
   width: min(620px, 100%);
-  max-height: calc(100dvh - 36px);
+  max-height: calc(100dvh - 24px);
   overflow: auto;
   display: grid;
   gap: 14px;
@@ -1709,8 +1717,9 @@ textarea {
 }
 
 .post-composer-modal.has-media .post-composer-modal-textarea {
-  min-height: 108px;
-  max-height: 180px;
+  min-height: 78px;
+  height: 92px;
+  max-height: 130px;
 }
 
 .post-composer-modal-textarea:focus {
@@ -1719,14 +1728,19 @@ textarea {
 
 .post-composer-modal-media {
   margin: 0 18px;
-  max-height: min(34dvh, 300px);
+  max-height: min(56dvh, 520px);
   overflow: auto;
   overscroll-behavior: contain;
 }
 
 .post-composer-modal-media img,
 .post-composer-modal-media video {
-  max-height: min(32dvh, 280px);
+  width: 100%;
+  height: auto;
+  max-height: min(54dvh, 500px);
+  aspect-ratio: auto;
+  object-fit: contain;
+  background: #111;
 }
 
 .post-composer-addons {
@@ -1905,8 +1919,15 @@ textarea {
   height: 100%;
   max-height: 480px;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
   background: #111;
+}
+
+.social-media-grid img {
+  object-fit: cover;
+}
+
+.social-media-grid video {
+  object-fit: contain;
 }
 
 .social-media-grid.count-1 img,
@@ -2004,6 +2025,10 @@ textarea {
   border-radius: 8px;
   object-fit: cover;
   background: #111;
+}
+
+video.shared-post-image {
+  object-fit: contain;
 }
 
 .shared-post-unavailable {
@@ -2435,6 +2460,10 @@ textarea {
   max-height: 260px;
   object-fit: cover;
   background: #111;
+}
+
+video.share-target-image {
+  object-fit: contain;
 }
 
 .share-panel-footer {
