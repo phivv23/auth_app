@@ -24,7 +24,10 @@ import {
   validateReportInput,
   validateReportStatusInput,
 } from "../models/report.model.js";
-import { findUserById } from "../models/user.model.js";
+import {
+  findActiveModerationUsers,
+  findUserById,
+} from "../models/user.model.js";
 import { deleteLocalUpload } from "../utils/file.js";
 import { sendError } from "../utils/http.js";
 
@@ -60,6 +63,34 @@ async function notifyReporterAboutModeration(report, moderatorId) {
       resolutionNote: report.resolutionNote,
     },
   });
+}
+
+async function notifyModeratorsAboutNewReport(report) {
+  try {
+    const recipients = await findActiveModerationUsers({
+      excludeUserId: report.reporterId,
+    });
+
+    await Promise.all(
+      recipients.map((recipient) =>
+        createNotification({
+          recipientId: recipient.id,
+          actorId: report.reporterId,
+          type: "admin_report_created",
+          reportId: report.id,
+          metadata: {
+            targetType: report.targetType,
+            targetId: report.targetId,
+            targetPostId: report.targetPostId,
+            reason: report.reason,
+            details: report.details,
+          },
+        })
+      )
+    );
+  } catch {
+    // Admin alerts are best-effort; report creation must stay reliable.
+  }
 }
 
 async function deleteReportedPost(postId, currentUserId) {
@@ -192,6 +223,8 @@ router.post("/", requireAuth, requireActiveAccount, reportRateLimit, async (req,
       details,
     });
 
+    await notifyModeratorsAboutNewReport(report);
+
     return res.status(201).json({
       message: "Đã gửi báo cáo.",
       report,
@@ -224,6 +257,28 @@ router.get("/admin", requireAuth, requireModerator, async (req, res, next) => {
     return res.json({
       ...result,
       summary,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/:id", requireAuth, requireModerator, async (req, res, next) => {
+  try {
+    const reportId = normalizePositiveInt(req.params.id, null);
+
+    if (!reportId) {
+      return sendError(res, 400, "Report id không hợp lệ.", "INVALID_REPORT_ID");
+    }
+
+    const report = await findReportById(reportId);
+
+    if (!report) {
+      return sendError(res, 404, "Không tìm thấy báo cáo.", "REPORT_NOT_FOUND");
+    }
+
+    return res.json({
+      report,
     });
   } catch (error) {
     next(error);

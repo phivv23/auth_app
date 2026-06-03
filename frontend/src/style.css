@@ -4567,6 +4567,14 @@ video.share-target-image {
   padding: 14px;
 }
 
+.admin-report-card.highlighted {
+  border-color: #1877f2;
+  background: #f7fbff;
+  box-shadow:
+    0 0 0 2px rgba(24, 119, 242, 0.16),
+    0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
 .admin-report-card header,
 .admin-report-card footer,
 .admin-report-meta,
@@ -7001,6 +7009,14 @@ textarea:focus-visible {
   border-radius: var(--fb-radius);
   background: var(--fb-card);
   box-shadow: var(--fb-shadow);
+}
+
+.admin-report-card.highlighted {
+  border-color: var(--fb-blue);
+  background: #f7fbff;
+  box-shadow:
+    0 0 0 2px rgba(24, 119, 242, 0.16),
+    0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
 .button,

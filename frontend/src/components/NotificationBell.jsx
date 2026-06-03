@@ -9,115 +9,13 @@ import {
   markNotificationAsRead,
 } from "../api/notification.api.js";
 import { useAuth } from "../context/useAuth.js";
+import {
+  getNotificationTarget,
+  getNotificationText,
+} from "../utils/notificationDisplay.js";
 import { formatRelativeTime } from "../utils/time.js";
 
 const POLL_INTERVAL_MS = 30000;
-
-const reportStatusLabels = {
-  pending: "đang chờ xử lý",
-  reviewing: "đang được xem xét",
-  resolved: "đã được xử lý",
-  dismissed: "đã được giữ lại",
-};
-
-const accountStatusLabels = {
-  active: "đã được mở lại",
-  suspended: "đã bị tạm khóa",
-  banned: "đã bị cấm đăng nhập",
-};
-
-function getNotificationText(notification) {
-  const actorName = notification.actorName || "Một người dùng";
-
-  if (notification.type === "follow") {
-    return `${actorName} đã follow bạn`;
-  }
-
-  if (notification.type === "friend_request") {
-    return `${actorName} đã gửi lời mời kết bạn`;
-  }
-
-  if (notification.type === "friend_accept") {
-    return `${actorName} đã chấp nhận lời mời kết bạn`;
-  }
-
-  if (notification.type === "post_like") {
-    return `${actorName} đã thích bài viết "${notification.postTitle || ""}"`;
-  }
-
-  if (notification.type === "post_comment") {
-    return notification.metadata?.isReply
-      ? `${actorName} đã trả lời bình luận của bạn`
-      : `${actorName} đã bình luận bài viết "${notification.postTitle || ""}"`;
-  }
-
-  if (notification.type === "comment_reaction") {
-    return `${actorName} đã bày tỏ cảm xúc với bình luận của bạn`;
-  }
-
-  if (notification.type === "message") {
-    return `${actorName} đã nhắn tin cho bạn`;
-  }
-
-  if (notification.type === "report_status_update") {
-    return `Báo cáo của bạn ${
-      reportStatusLabels[notification.reportStatus] || "đã được cập nhật"
-    }`;
-  }
-
-  if (notification.type === "admin_content_removed") {
-    const contentType =
-      notification.metadata?.contentType === "comment" ? "bình luận" : "bài viết";
-    const reason = notification.metadata?.reason || "vi phạm quy định";
-
-    return `${actorName} đã gỡ ${contentType} của bạn: ${reason}`;
-  }
-
-  if (notification.type === "admin_account_status_update") {
-    const statusText =
-      accountStatusLabels[notification.metadata?.accountStatus] ||
-      "đã được cập nhật";
-    const reason = notification.metadata?.reason;
-
-    return reason
-      ? `Tài khoản của bạn ${statusText}: ${reason}`
-      : `Tài khoản của bạn ${statusText}`;
-  }
-
-  return "Bạn có thông báo mới";
-}
-
-function getNotificationTarget(notification) {
-  if (notification.type === "follow") {
-    return `/users/${notification.actorId}`;
-  }
-
-  if (notification.type === "friend_request") {
-    return "/friends?tab=incoming";
-  }
-
-  if (notification.type === "friend_accept") {
-    return `/users/${notification.actorId}`;
-  }
-
-  if (notification.type === "message" && notification.conversationId) {
-    return `/messages?conversationId=${notification.conversationId}`;
-  }
-
-  if (notification.type === "report_status_update") {
-    return notification.reportId
-      ? `/reports?reportId=${notification.reportId}`
-      : "/reports";
-  }
-
-  if (notification.postId) {
-    return notification.commentId
-      ? `/posts/${notification.postId}?commentId=${notification.commentId}`
-      : `/posts/${notification.postId}`;
-  }
-
-  return "/notifications";
-}
 
 export default function NotificationBell() {
   const { user } = useAuth();

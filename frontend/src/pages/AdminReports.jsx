@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useSearchParams } from "react-router";
 
+import { getNotificationStreamUrl } from "../api/notification.api.js";
 import {
   applyAdminReportAction,
+  getAdminReport,
   getAdminReports,
   updateAdminReportStatus,
 } from "../api/report.api.js";
@@ -79,10 +81,39 @@ function updateSummary(summary, fromStatus, toStatus) {
   };
 }
 
+function reportMatchesFilters(report, { status, targetType }) {
+  return (
+    (!status || report.status === status) &&
+    (!targetType || report.targetType === targetType)
+  );
+}
+
+function mergePinnedReport(reports, pinnedReport) {
+  if (!pinnedReport) {
+    return reports;
+  }
+
+  return [
+    pinnedReport,
+    ...reports.filter((report) => Number(report.id) !== Number(pinnedReport.id)),
+  ];
+}
+
+function prependUniqueReport(reports, report, limit) {
+  return [
+    report,
+    ...reports.filter((item) => Number(item.id) !== Number(report.id)),
+  ].slice(0, limit);
+}
+
 export default function AdminReports() {
   const { user, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightedReportRef = useRef(null);
+  const focusedReportId = searchParams.get("reportId");
 
   const [reports, setReports] = useState([]);
+  const [focusedReport, setFocusedReport] = useState(null);
   const [summary, setSummary] = useState({});
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -97,6 +128,11 @@ export default function AdminReports() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const activeFocusedReport =
+    focusedReportId && Number(focusedReport?.id) === Number(focusedReportId)
+      ? focusedReport
+      : null;
+  const visibleReports = mergePinnedReport(reports, activeFocusedReport);
 
   useEffect(() => {
     let isActive = true;
@@ -147,6 +183,105 @@ export default function AdminReports() {
     };
   }, [user, page, limit, status, targetType, refreshKey]);
 
+  useEffect(() => {
+    if (!focusedReportId || !canAccessReports(user)) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    async function loadFocusedReport() {
+      try {
+        const data = await getAdminReport(focusedReportId);
+
+        if (isActive) {
+          setFocusedReport(data.report || null);
+        }
+      } catch (error) {
+        if (isActive) {
+          setFocusedReport(null);
+          setError(error.message);
+        }
+      }
+    }
+
+    loadFocusedReport();
+
+    return () => {
+      isActive = false;
+    };
+  }, [focusedReportId, user]);
+
+  useEffect(() => {
+    if (!focusedReportId || loading || visibleReports.length === 0) {
+      return undefined;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      highlightedReportRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [focusedReportId, loading, visibleReports.length]);
+
+  useEffect(() => {
+    if (!canAccessReports(user)) {
+      return undefined;
+    }
+
+    const eventSource = new EventSource(getNotificationStreamUrl(), {
+      withCredentials: true,
+    });
+
+    eventSource.addEventListener("notification", async (event) => {
+      const notification = JSON.parse(event.data);
+
+      if (notification.type !== "admin_report_created") {
+        return;
+      }
+
+      setNotice("Có báo cáo mới trong hàng đợi moderation.");
+
+      if (!notification.reportId || page !== 1) {
+        return;
+      }
+
+      try {
+        const data = await getAdminReport(notification.reportId);
+        const report = data.report;
+
+        if (!report || !reportMatchesFilters(report, { status, targetType })) {
+          return;
+        }
+
+        setReports((currentReports) => {
+          const alreadyExists = currentReports.some(
+            (item) => Number(item.id) === Number(report.id)
+          );
+
+          if (!alreadyExists) {
+            setTotal((currentTotal) => currentTotal + 1);
+            setSummary((currentSummary) => ({
+              ...currentSummary,
+              [report.status]: Number(currentSummary[report.status] || 0) + 1,
+            }));
+          }
+
+          return prependUniqueReport(currentReports, report, limit);
+        });
+      } catch {
+        setRefreshKey((currentKey) => currentKey + 1);
+      }
+    });
+
+    return () => {
+      eventSource.close();
+    };
+  }, [limit, page, status, targetType, user]);
+
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;
   }
@@ -194,6 +329,9 @@ export default function AdminReports() {
           currentReport.id === report.id ? data.report : currentReport
         )
       );
+      setFocusedReport((currentReport) =>
+        Number(currentReport?.id) === Number(report.id) ? data.report : currentReport
+      );
       setSummary((currentSummary) =>
         updateSummary(currentSummary, report.status, data.report.status)
       );
@@ -234,6 +372,9 @@ export default function AdminReports() {
         currentReports.map((currentReport) =>
           currentReport.id === report.id ? data.report : currentReport
         )
+      );
+      setFocusedReport((currentReport) =>
+        Number(currentReport?.id) === Number(report.id) ? data.report : currentReport
       );
       setSummary((currentSummary) =>
         updateSummary(currentSummary, report.status, data.report.status)
@@ -336,19 +477,27 @@ export default function AdminReports() {
         <section className="card">
           <p>Đang tải hàng đợi moderation...</p>
         </section>
-      ) : reports.length === 0 ? (
+      ) : visibleReports.length === 0 ? (
         <section className="card">
           <p>Không có báo cáo nào trong bộ lọc hiện tại.</p>
         </section>
       ) : (
         <div className="admin-report-list">
-          {reports.map((report) => {
+          {visibleReports.map((report) => {
             const targetUrl = getTargetUrl(report);
             const isUpdating = updatingReportId === report.id;
             const canRemove = isRemovableReport(report);
+            const isHighlighted =
+              Number(report.id) === Number(focusedReportId);
 
             return (
-              <article key={report.id} className="admin-report-card">
+              <article
+                key={report.id}
+                ref={isHighlighted ? highlightedReportRef : null}
+                className={`admin-report-card ${
+                  isHighlighted ? "highlighted" : ""
+                }`.trim()}
+              >
                 <header>
                   <div>
                     <span className={`admin-report-status ${report.status}`}>

@@ -163,6 +163,40 @@ export async function findUserById(id) {
   return rows[0] || null;
 }
 
+export async function findActiveModerationUsers({ excludeUserId = null } = {}) {
+  const params = [];
+  const whereParts = [
+    "role IN ('moderator', 'admin', 'super_admin')",
+    "account_status = 'active'",
+  ];
+
+  if (excludeUserId) {
+    whereParts.push("id <> ?");
+    params.push(excludeUserId);
+  }
+
+  return query(
+    `
+      SELECT
+        id,
+        name,
+        email,
+        role
+      FROM users
+      WHERE ${whereParts.join(" AND ")}
+      ORDER BY
+        CASE role
+          WHEN 'super_admin' THEN 1
+          WHEN 'admin' THEN 2
+          WHEN 'moderator' THEN 3
+          ELSE 4
+        END,
+        id ASC
+    `,
+    params
+  );
+}
+
 export async function findAuthUserById(id) {
   const rows = await query(
     `

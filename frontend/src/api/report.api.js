@@ -52,6 +52,10 @@ export function getAdminReports({
   return apiFetch(`/reports/admin?${params.toString()}`);
 }
 
+export function getAdminReport(reportId) {
+  return apiFetch(`/reports/admin/${reportId}`);
+}
+
 export function updateAdminReportStatus(
   reportId,
   { status, resolutionNote = "" }
