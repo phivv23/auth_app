@@ -74,7 +74,13 @@ function ChatPopupMedia({ message }) {
 
   if (message.mediaType === "file") {
     return (
-      <a className="chat-popup-file" href={mediaUrl} target="_blank" rel="noreferrer">
+      <a
+        className="chat-popup-file"
+        href={mediaUrl}
+        target="_blank"
+        rel="noreferrer"
+        download={message.mediaName || "file"}
+      >
         <span aria-hidden="true">📎</span>
         <strong>{message.mediaName || "Tệp tin"}</strong>
       </a>

@@ -4,6 +4,26 @@ import { findFriendshipBetween } from "./friend.model.js";
 import { findUserById } from "./user.model.js";
 import { isUserOnline, publishMessage } from "../realtime/messageEvents.js";
 
+const MESSAGE_UPLOAD_PATH_PREFIX = "/uploads/messages/";
+
+export function getProtectedMessageMediaUrl(mediaUrl) {
+  if (!mediaUrl) {
+    return null;
+  }
+
+  if (!String(mediaUrl).startsWith(MESSAGE_UPLOAD_PATH_PREFIX)) {
+    return mediaUrl;
+  }
+
+  const filename = String(mediaUrl).slice(MESSAGE_UPLOAD_PATH_PREFIX.length);
+
+  if (!filename || filename.includes("/") || filename.includes("\\")) {
+    return null;
+  }
+
+  return `/api/messages/media/${encodeURIComponent(filename)}`;
+}
+
 function getUserPair(userId, otherUserId) {
   return {
     userLowId: Math.min(Number(userId), Number(otherUserId)),
@@ -33,7 +53,7 @@ function normalizeConversation(row) {
           id: row.lastMessageId,
           senderId: row.lastMessageSenderId,
           content: row.lastMessageContent,
-          mediaUrl: row.lastMessageMediaUrl || null,
+          mediaUrl: getProtectedMessageMediaUrl(row.lastMessageMediaUrl),
           mediaType: row.lastMessageMediaType || null,
           mediaName: row.lastMessageMediaName || null,
           createdAt: row.lastMessageCreatedAt,
@@ -55,7 +75,7 @@ function normalizeMessage(row) {
     conversationId: row.conversationId,
     senderId: row.senderId,
     content: row.content || "",
-    mediaUrl: row.mediaUrl || null,
+    mediaUrl: getProtectedMessageMediaUrl(row.mediaUrl),
     mediaType: row.mediaType || null,
     mediaName: row.mediaName || null,
     createdAt: row.createdAt,
@@ -74,6 +94,43 @@ function normalizeMessage(row) {
           deletedAt: row.replyDeletedAt || null,
         }
       : null,
+  };
+}
+
+export async function findMessageAttachmentForUser({ filename, userId }) {
+  if (
+    !filename ||
+    String(filename).includes("/") ||
+    String(filename).includes("\\")
+  ) {
+    return null;
+  }
+
+  const rows = await query(
+    `
+    SELECT
+      m.media_url AS mediaUrl,
+      m.media_type AS mediaType,
+      m.media_name AS mediaName
+    FROM messages m
+    JOIN conversation_members member
+      ON member.conversation_id = m.conversation_id
+      AND member.user_id = ?
+    WHERE m.media_url = ?
+      AND m.deleted_at IS NULL
+    LIMIT 1
+    `,
+    [userId, `${MESSAGE_UPLOAD_PATH_PREFIX}${filename}`]
+  );
+
+  if (!rows[0]) {
+    return null;
+  }
+
+  return {
+    mediaUrl: rows[0].mediaUrl,
+    mediaType: rows[0].mediaType || "file",
+    mediaName: rows[0].mediaName || null,
   };
 }
 

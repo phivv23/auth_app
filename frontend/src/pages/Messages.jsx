@@ -111,7 +111,13 @@ function MessageMedia({ message }) {
 
   if (message.mediaType === "file") {
     return (
-      <a className="message-file" href={mediaUrl} target="_blank" rel="noreferrer">
+      <a
+        className="message-file"
+        href={mediaUrl}
+        target="_blank"
+        rel="noreferrer"
+        download={message.mediaName || "file"}
+      >
         <span aria-hidden="true">📎</span>
         <strong>{message.mediaName || "Tệp tin"}</strong>
       </a>
@@ -2027,6 +2033,7 @@ export default function Messages() {
                     href={getFileUrl(message.mediaUrl)}
                     target="_blank"
                     rel="noreferrer"
+                    download={message.mediaName || "file"}
                   >
                     <span aria-hidden="true">📎</span>
                     <strong>{message.mediaName || "Tệp tin"}</strong>

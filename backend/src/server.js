@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import notificationRoutes from "./routes/notification.routes.js";
 import friendRoutes from "./routes/friend.routes.js";
 import messageRoutes from "./routes/message.routes.js";
+import messageMediaRoutes from "./routes/messageMedia.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storyRoutes from "./routes/story.routes.js";
@@ -23,6 +24,17 @@ import { sendError } from "./utils/http.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsRoot = path.resolve(__dirname, "../uploads");
+const publicUploadBuckets = ["avatars", "covers", "posts", "stories"];
+
+const publicUploadStaticOptions = {
+  dotfiles: "deny",
+  immutable: env.nodeEnv === "production",
+  maxAge: env.nodeEnv === "production" ? "7d" : 0,
+  setHeaders(res) {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+  },
+};
 
 export function createApp({
   adminRouter = adminRoutes,
@@ -30,6 +42,7 @@ export function createApp({
   errorLogger = console,
   friendRouter = friendRoutes,
   healthRouter = createHealthRouter(),
+  messageMediaRouter = messageMediaRoutes,
   messageRouter = messageRoutes,
   notificationRouter = notificationRoutes,
   postRouter = postRoutes,
@@ -48,20 +61,16 @@ export function createApp({
 
   app.use(requestLogger);
 
-  // Cho phép frontend truy cập ảnh qua URL:
-  // http://localhost:5000/uploads/avatars/ten-file.png
-  app.use(
-    "/uploads",
-    express.static(uploadsRoot, {
-      dotfiles: "deny",
-      immutable: env.nodeEnv === "production",
-      maxAge: env.nodeEnv === "production" ? "7d" : 0,
-      setHeaders(res) {
-        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-        res.setHeader("X-Content-Type-Options", "nosniff");
-      },
-    })
-  );
+  // Chỉ public media không nhạy cảm; file tin nhắn dùng route auth riêng.
+  for (const bucket of publicUploadBuckets) {
+    app.use(
+      `/uploads/${bucket}`,
+      express.static(
+        path.join(uploadsRoot, bucket),
+        publicUploadStaticOptions
+      )
+    );
+  }
 
   app.use(
     cors({
@@ -79,6 +88,7 @@ export function createApp({
   app.use("/api/users", userRouter);
   app.use("/api/posts", postRouter);
   app.use("/api/friends", friendRouter);
+  app.use("/api/messages/media", messageMediaRouter);
   app.use("/api/messages", messageRouter);
   app.use("/api/notifications", notificationRouter);
   app.use("/api/protected", protectedRouter);

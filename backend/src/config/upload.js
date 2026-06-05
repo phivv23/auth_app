@@ -1,16 +1,20 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import multer from "multer";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
-const coverUploadDir = path.resolve(__dirname, "../../uploads/covers");
-const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
-const storyUploadDir = path.resolve(__dirname, "../../uploads/stories");
-const messageUploadDir = path.resolve(__dirname, "../../uploads/messages");
+export const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
+export const coverUploadDir = path.resolve(__dirname, "../../uploads/covers");
+export const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
+export const storyUploadDir = path.resolve(__dirname, "../../uploads/stories");
+export const messageUploadDir = path.resolve(
+  __dirname,
+  "../../uploads/messages"
+);
 
 fs.mkdirSync(avatarUploadDir, { recursive: true });
 fs.mkdirSync(coverUploadDir, { recursive: true });
@@ -18,17 +22,24 @@ fs.mkdirSync(postUploadDir, { recursive: true });
 fs.mkdirSync(storyUploadDir, { recursive: true });
 fs.mkdirSync(messageUploadDir, { recursive: true });
 
-const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-const allowedStoryMimeTypes = [
-  ...allowedMimeTypes,
+export const UPLOAD_SIZE_LIMITS = {
+  avatar: 2 * 1024 * 1024,
+  cover: 5 * 1024 * 1024,
+  post: 50 * 1024 * 1024,
+  story: 50 * 1024 * 1024,
+  message: 50 * 1024 * 1024,
+};
+
+export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export const STORY_MEDIA_MIME_TYPES = [
+  ...IMAGE_MIME_TYPES,
   "video/mp4",
   "video/webm",
   "video/quicktime",
 ];
-const allowedPostMimeTypes = allowedStoryMimeTypes;
-const allowedMessageMimeTypes = allowedStoryMimeTypes;
-const allowedMessageFileMimeTypes = [
-  ...allowedStoryMimeTypes,
+export const POST_MEDIA_MIME_TYPES = STORY_MEDIA_MIME_TYPES;
+export const MESSAGE_MEDIA_MIME_TYPES = [
+  ...STORY_MEDIA_MIME_TYPES,
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -41,8 +52,68 @@ const allowedMessageFileMimeTypes = [
   "text/plain",
 ];
 
+export const MIME_EXTENSION_MAP = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+  ["video/mp4", ".mp4"],
+  ["video/webm", ".webm"],
+  ["video/quicktime", ".mov"],
+  ["application/pdf", ".pdf"],
+  ["application/msword", ".doc"],
+  [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".docx",
+  ],
+  ["application/vnd.ms-excel", ".xls"],
+  [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xlsx",
+  ],
+  ["application/vnd.ms-powerpoint", ".ppt"],
+  [
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".pptx",
+  ],
+  ["application/zip", ".zip"],
+  ["application/x-zip-compressed", ".zip"],
+  ["text/plain", ".txt"],
+]);
+
+export function isAllowedMimeType(mimetype, allowlist) {
+  return allowlist.includes(mimetype);
+}
+
+export function getSafeUploadExtension(mimetype) {
+  return MIME_EXTENSION_MAP.get(mimetype) || "";
+}
+
+export function sanitizeUploadDisplayName(originalName = "") {
+  const basename = path.posix.basename(
+    String(originalName || "").replace(/\\/g, "/")
+  );
+  const normalizedName = basename
+    .normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f]/g, "_")
+    .replace(/[<>:"/\\|?*]/g, "_")
+    .trim();
+
+  return normalizedName.slice(0, 180);
+}
+
+export function createUploadFilename({
+  prefix,
+  mimetype,
+  randomId = randomUUID,
+}) {
+  const safePrefix = String(prefix || "upload").replace(/[^a-z0-9-]/gi, "-");
+  const extension = getSafeUploadExtension(mimetype);
+
+  return `${safePrefix}-${randomId()}${extension}`;
+}
+
 function imageFileFilter(req, file, cb) {
-  if (!allowedMimeTypes.includes(file.mimetype)) {
+  if (!isAllowedMimeType(file.mimetype, IMAGE_MIME_TYPES)) {
     return cb(new Error("Chỉ cho phép upload ảnh JPG, PNG hoặc WEBP"));
   }
 
@@ -50,7 +121,7 @@ function imageFileFilter(req, file, cb) {
 }
 
 function storyMediaFileFilter(req, file, cb) {
-  if (!allowedStoryMimeTypes.includes(file.mimetype)) {
+  if (!isAllowedMimeType(file.mimetype, STORY_MEDIA_MIME_TYPES)) {
     return cb(
       new Error("Chỉ cho phép upload story JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
     );
@@ -60,7 +131,7 @@ function storyMediaFileFilter(req, file, cb) {
 }
 
 function postMediaFileFilter(req, file, cb) {
-  if (!allowedPostMimeTypes.includes(file.mimetype)) {
+  if (!isAllowedMimeType(file.mimetype, POST_MEDIA_MIME_TYPES)) {
     return cb(
       new Error("Chỉ cho phép upload bài viết JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
     );
@@ -70,7 +141,7 @@ function postMediaFileFilter(req, file, cb) {
 }
 
 function messageMediaFileFilter(req, file, cb) {
-  if (!allowedMessageFileMimeTypes.includes(file.mimetype)) {
+  if (!isAllowedMimeType(file.mimetype, MESSAGE_MEDIA_MIME_TYPES)) {
     return cb(
       new Error("Chỉ cho phép gửi ảnh, video, PDF, Office, TXT hoặc ZIP")
     );
@@ -86,9 +157,10 @@ function createImageStorage({ uploadDir, prefix }) {
     },
 
     filename(req, file, cb) {
-      const ext = path.extname(file.originalname).toLowerCase();
-
-      const filename = `${prefix}-${req.user.id}-${Date.now()}${ext}`;
+      const filename = createUploadFilename({
+        prefix,
+        mimetype: file.mimetype,
+      });
 
       cb(null, filename);
     },
@@ -102,7 +174,7 @@ export const uploadAvatar = multer({
   }),
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.avatar,
   },
 });
 
@@ -113,7 +185,7 @@ export const uploadCover = multer({
   }),
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.cover,
   },
 });
 
@@ -124,7 +196,7 @@ export const uploadPostImage = multer({
   }),
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.post,
   },
 });
 
@@ -135,7 +207,7 @@ export const uploadPostMedia = multer({
   }),
   fileFilter: postMediaFileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.post,
   },
 });
 
@@ -146,7 +218,7 @@ export const uploadStoryMedia = multer({
   }),
   fileFilter: storyMediaFileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.story,
   },
 });
 
@@ -157,6 +229,6 @@ export const uploadMessageMedia = multer({
   }),
   fileFilter: messageMediaFileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024,
+    fileSize: UPLOAD_SIZE_LIMITS.message,
   },
 });

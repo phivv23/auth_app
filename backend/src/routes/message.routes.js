@@ -1,6 +1,9 @@
 import { Router } from "express";
 
-import { uploadMessageMedia } from "../config/upload.js";
+import {
+  sanitizeUploadDisplayName,
+  uploadMessageMedia,
+} from "../config/upload.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { rateLimit } from "../middleware/rateLimit.js";
@@ -123,7 +126,7 @@ function getMessageMedia(req) {
     return {
       mediaUrl: `/uploads/messages/${req.file.filename}`,
       mediaType: getMessageMediaType(req.file),
-      mediaName: req.file.originalname || null,
+      mediaName: sanitizeUploadDisplayName(req.file.originalname) || null,
     };
   }
 

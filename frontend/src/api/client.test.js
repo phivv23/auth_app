@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   ApiRequestError,
   apiFetch,
+  getFileUrl,
   isRetryableApiError,
 } from "./client.js";
 
@@ -29,6 +30,13 @@ function installWindow({ triggerTimeout = false } = {}) {
 }
 
 describe("apiFetch", () => {
+  it("builds protected message media URLs from the API origin", () => {
+    assert.equal(
+      getFileUrl("/api/messages/media/message-id.txt"),
+      "http://localhost:5000/api/messages/media/message-id.txt"
+    );
+  });
+
   it("throws a typed HTTP error with request metadata", async () => {
     installWindow();
     globalThis.fetch = async () => ({
