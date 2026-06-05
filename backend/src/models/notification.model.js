@@ -12,6 +12,8 @@ const NOTIFICATION_DEDUPE_WINDOWS_IN_MINUTES = {
 const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set([
   "admin_content_removed",
   "report_status_update",
+  "story_reply",
+  "story_reaction",
 ]);
 
 function getDedupeWindowInMinutes(type) {

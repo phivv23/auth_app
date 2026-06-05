@@ -43,12 +43,61 @@ export function getConversationMessages({
   );
 }
 
-export function sendMessage(conversationId, content) {
+export function sendMessage(
+  conversationId,
+  { content = "", media = null, gifUrl = "", replyToMessageId = null } = {}
+) {
+  if (media) {
+    const formData = new FormData();
+
+    formData.append("content", content);
+    formData.append("media", media);
+
+    if (replyToMessageId) {
+      formData.append("replyToMessageId", replyToMessageId);
+    }
+
+    return apiFetch(`/messages/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: formData,
+      timeoutMs: 120000,
+    });
+  }
+
   return apiFetch(`/messages/conversations/${conversationId}/messages`, {
     method: "POST",
     body: JSON.stringify({
       content,
+      gifUrl,
+      replyToMessageId,
     }),
+  });
+}
+
+export function reactToMessage(conversationId, messageId, reaction) {
+  return apiFetch(
+    `/messages/conversations/${conversationId}/messages/${messageId}/reaction`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        reaction,
+      }),
+    }
+  );
+}
+
+export function editMessage(conversationId, messageId, content) {
+  return apiFetch(`/messages/conversations/${conversationId}/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      content,
+    }),
+  });
+}
+
+export function deleteMessage(conversationId, messageId) {
+  return apiFetch(`/messages/conversations/${conversationId}/messages/${messageId}`, {
+    method: "DELETE",
   });
 }
 

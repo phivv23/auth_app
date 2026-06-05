@@ -29,6 +29,7 @@ const targetTypes = [
   { value: "post", label: "Bài viết" },
   { value: "comment", label: "Bình luận" },
   { value: "message", label: "Tin nhắn" },
+  { value: "story", label: "Story" },
 ];
 
 const reasonLabels = {
@@ -62,11 +63,15 @@ function getTargetUrl(report) {
     return `/posts/${report.targetPostId}?commentId=${report.targetId}`;
   }
 
+  if (report.targetType === "story") {
+    return `/stories/${report.targetId}`;
+  }
+
   return "";
 }
 
 function isRemovableReport(report) {
-  return ["post", "comment"].includes(report.targetType);
+  return ["post", "comment", "story"].includes(report.targetType);
 }
 
 function updateSummary(summary, fromStatus, toStatus) {

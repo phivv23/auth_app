@@ -33,7 +33,12 @@ function normalizeConversation(row) {
           id: row.lastMessageId,
           senderId: row.lastMessageSenderId,
           content: row.lastMessageContent,
+          mediaUrl: row.lastMessageMediaUrl || null,
+          mediaType: row.lastMessageMediaType || null,
+          mediaName: row.lastMessageMediaName || null,
           createdAt: row.lastMessageCreatedAt,
+          editedAt: row.lastMessageEditedAt || null,
+          deletedAt: row.lastMessageDeletedAt || null,
         }
       : null,
     unreadCount: Number(row.unreadCount || 0),
@@ -49,11 +54,101 @@ function normalizeMessage(row) {
     id: row.id,
     conversationId: row.conversationId,
     senderId: row.senderId,
-    content: row.content,
+    content: row.content || "",
+    mediaUrl: row.mediaUrl || null,
+    mediaType: row.mediaType || null,
+    mediaName: row.mediaName || null,
     createdAt: row.createdAt,
+    editedAt: row.editedAt || null,
+    deletedAt: row.deletedAt || null,
     senderName: row.senderName,
     senderAvatarUrl: row.senderAvatarUrl,
+    replyToMessage: row.replyToMessageId
+      ? {
+          id: row.replyToMessageId,
+          senderId: row.replySenderId,
+          senderName: row.replySenderName,
+          content: row.replyContent || "",
+          mediaType: row.replyMediaType || null,
+          mediaName: row.replyMediaName || null,
+          deletedAt: row.replyDeletedAt || null,
+        }
+      : null,
   };
+}
+
+function normalizeMessageReaction(row) {
+  return {
+    userId: row.userId,
+    reaction: row.reaction,
+    userName: row.userName,
+    userAvatarUrl: row.userAvatarUrl,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function withMessageReactions(message, reactions = [], currentUserId) {
+  const normalizedReactions = reactions.map(normalizeMessageReaction);
+  const myReaction =
+    normalizedReactions.find(
+      (reaction) => Number(reaction.userId) === Number(currentUserId)
+    )?.reaction || null;
+
+  return {
+    ...message,
+    reactions: normalizedReactions,
+    myReaction,
+  };
+}
+
+async function findReactionsByMessageIds(messageIds) {
+  const ids = [...new Set(messageIds.map(Number).filter(Boolean))];
+
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = await query(
+    `
+    SELECT
+      reaction.message_id AS messageId,
+      reaction.user_id AS userId,
+      reaction.reaction,
+      reaction.updated_at AS updatedAt,
+      reactor.name AS userName,
+      reactor.avatar_url AS userAvatarUrl
+    FROM message_reactions reaction
+    JOIN users reactor ON reactor.id = reaction.user_id
+    WHERE reaction.message_id IN (${placeholders})
+    ORDER BY reaction.updated_at ASC, reaction.id ASC
+    `,
+    ids
+  );
+
+  return rows.reduce((reactionsByMessageId, row) => {
+    const key = Number(row.messageId);
+    const reactions = reactionsByMessageId.get(key) || [];
+
+    reactions.push(row);
+    reactionsByMessageId.set(key, reactions);
+
+    return reactionsByMessageId;
+  }, new Map());
+}
+
+async function attachReactionsToMessages(messages, currentUserId) {
+  const reactionsByMessageId = await findReactionsByMessageIds(
+    messages.map((message) => message.id)
+  );
+
+  return messages.map((message) =>
+    withMessageReactions(
+      message,
+      reactionsByMessageId.get(Number(message.id)) || [],
+      currentUserId
+    )
+  );
 }
 
 export async function findMessageByIdForUser(messageId, currentUserId) {
@@ -64,21 +159,44 @@ export async function findMessageByIdForUser(messageId, currentUserId) {
       m.conversation_id AS conversationId,
       m.sender_id AS senderId,
       m.content,
+      m.media_url AS mediaUrl,
+      m.media_type AS mediaType,
+      m.media_name AS mediaName,
       m.created_at AS createdAt,
+      m.edited_at AS editedAt,
+      m.deleted_at AS deletedAt,
       sender.name AS senderName,
-      sender.avatar_url AS senderAvatarUrl
+      sender.avatar_url AS senderAvatarUrl,
+      reply_message.id AS replyToMessageId,
+      reply_message.sender_id AS replySenderId,
+      reply_sender.name AS replySenderName,
+      reply_message.content AS replyContent,
+      reply_message.media_type AS replyMediaType,
+      reply_message.media_name AS replyMediaName,
+      reply_message.deleted_at AS replyDeletedAt
     FROM messages m
     JOIN conversation_members member
       ON member.conversation_id = m.conversation_id
       AND member.user_id = ?
     JOIN users sender ON sender.id = m.sender_id
+    LEFT JOIN messages reply_message ON reply_message.id = m.reply_to_message_id
+    LEFT JOIN users reply_sender ON reply_sender.id = reply_message.sender_id
     WHERE m.id = ?
     LIMIT 1
     `,
     [currentUserId, messageId]
   );
 
-  return rows[0] ? normalizeMessage(rows[0]) : null;
+  if (!rows[0]) {
+    return null;
+  }
+
+  const [message] = await attachReactionsToMessages(
+    [normalizeMessage(rows[0])],
+    currentUserId
+  );
+
+  return message;
 }
 
 export async function assertCanMessage(userId, otherUserId) {
@@ -137,7 +255,12 @@ export async function findConversationById(conversationId, currentUserId) {
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
       last_message.content AS lastMessageContent,
+      last_message.media_url AS lastMessageMediaUrl,
+      last_message.media_type AS lastMessageMediaType,
+      last_message.media_name AS lastMessageMediaName,
       last_message.created_at AS lastMessageCreatedAt,
+      last_message.edited_at AS lastMessageEditedAt,
+      last_message.deleted_at AS lastMessageDeletedAt,
 
       (
         SELECT COUNT(*)
@@ -301,7 +424,12 @@ export async function findConversationsByUserId({
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
       last_message.content AS lastMessageContent,
+      last_message.media_url AS lastMessageMediaUrl,
+      last_message.media_type AS lastMessageMediaType,
+      last_message.media_name AS lastMessageMediaName,
       last_message.created_at AS lastMessageCreatedAt,
+      last_message.edited_at AS lastMessageEditedAt,
+      last_message.deleted_at AS lastMessageDeletedAt,
 
       (
         SELECT COUNT(*)
@@ -444,7 +572,12 @@ export async function findMessageRequestsByUserId({
       last_message.id AS lastMessageId,
       last_message.sender_id AS lastMessageSenderId,
       last_message.content AS lastMessageContent,
+      last_message.media_url AS lastMessageMediaUrl,
+      last_message.media_type AS lastMessageMediaType,
+      last_message.media_name AS lastMessageMediaName,
       last_message.created_at AS lastMessageCreatedAt,
+      last_message.edited_at AS lastMessageEditedAt,
+      last_message.deleted_at AS lastMessageDeletedAt,
 
       (
         SELECT COUNT(*)
@@ -581,11 +714,25 @@ export async function findMessagesByConversationId({
       m.conversation_id AS conversationId,
       m.sender_id AS senderId,
       m.content,
+      m.media_url AS mediaUrl,
+      m.media_type AS mediaType,
+      m.media_name AS mediaName,
       m.created_at AS createdAt,
+      m.edited_at AS editedAt,
+      m.deleted_at AS deletedAt,
       sender.name AS senderName,
-      sender.avatar_url AS senderAvatarUrl
+      sender.avatar_url AS senderAvatarUrl,
+      reply_message.id AS replyToMessageId,
+      reply_message.sender_id AS replySenderId,
+      reply_sender.name AS replySenderName,
+      reply_message.content AS replyContent,
+      reply_message.media_type AS replyMediaType,
+      reply_message.media_name AS replyMediaName,
+      reply_message.deleted_at AS replyDeletedAt
     FROM messages m
     JOIN users sender ON sender.id = m.sender_id
+    LEFT JOIN messages reply_message ON reply_message.id = m.reply_to_message_id
+    LEFT JOIN users reply_sender ON reply_sender.id = reply_message.sender_id
     WHERE m.conversation_id = ?
     ORDER BY m.id DESC
     LIMIT ${safeLimit} OFFSET ${offset}
@@ -603,10 +750,15 @@ export async function findMessagesByConversationId({
   );
 
   const total = Number(countRows[0]?.total || 0);
+  const normalizedMessages = messages.map(normalizeMessage).reverse();
+  const messagesWithReactions = await attachReactionsToMessages(
+    normalizedMessages,
+    currentUserId
+  );
 
   return {
     conversation,
-    messages: messages.map(normalizeMessage).reverse(),
+    messages: messagesWithReactions,
     page: safePage,
     limit: safeLimit,
     total,
@@ -617,12 +769,38 @@ export async function findMessagesByConversationId({
 export async function createMessage({
   conversationId,
   senderId,
-  content,
+  content = "",
+  mediaUrl = null,
+  mediaType = null,
+  mediaName = null,
+  replyToMessageId = null,
 }) {
   const conversation = await findConversationById(conversationId, senderId);
 
   if (!conversation) {
     return null;
+  }
+
+  const normalizedReplyToMessageId = replyToMessageId
+    ? Number(replyToMessageId)
+    : null;
+
+  if (normalizedReplyToMessageId) {
+    const replyRows = await query(
+      `
+      SELECT id
+      FROM messages
+      WHERE id = ? AND conversation_id = ?
+      LIMIT 1
+      `,
+      [normalizedReplyToMessageId, conversationId]
+    );
+
+    if (!replyRows[0]) {
+      return {
+        invalidReply: true,
+      };
+    }
   }
 
   const recipientId =
@@ -635,10 +813,26 @@ export async function createMessage({
 
   const result = await query(
     `
-    INSERT INTO messages (conversation_id, sender_id, content)
-    VALUES (?, ?, ?)
+    INSERT INTO messages (
+      conversation_id,
+      sender_id,
+      content,
+      media_url,
+      media_type,
+      media_name,
+      reply_to_message_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    [conversationId, senderId, content]
+    [
+      conversationId,
+      senderId,
+      content || "",
+      mediaUrl,
+      mediaType,
+      mediaName,
+      normalizedReplyToMessageId,
+    ]
   );
 
   await query(
@@ -661,24 +855,241 @@ export async function createMessage({
       m.conversation_id AS conversationId,
       m.sender_id AS senderId,
       m.content,
+      m.media_url AS mediaUrl,
+      m.media_type AS mediaType,
+      m.media_name AS mediaName,
       m.created_at AS createdAt,
+      m.edited_at AS editedAt,
+      m.deleted_at AS deletedAt,
       sender.name AS senderName,
-      sender.avatar_url AS senderAvatarUrl
+      sender.avatar_url AS senderAvatarUrl,
+      reply_message.id AS replyToMessageId,
+      reply_message.sender_id AS replySenderId,
+      reply_sender.name AS replySenderName,
+      reply_message.content AS replyContent,
+      reply_message.media_type AS replyMediaType,
+      reply_message.media_name AS replyMediaName,
+      reply_message.deleted_at AS replyDeletedAt
     FROM messages m
     JOIN users sender ON sender.id = m.sender_id
+    LEFT JOIN messages reply_message ON reply_message.id = m.reply_to_message_id
+    LEFT JOIN users reply_sender ON reply_sender.id = reply_message.sender_id
     WHERE m.id = ?
     LIMIT 1
     `,
     [result.insertId]
   );
 
-  const message = normalizeMessage(messages[0]);
+  const message = withMessageReactions(normalizeMessage(messages[0]), [], senderId);
   publishMessage(recipientId, message);
   publishMessage(senderId, message);
 
   return {
     ...message,
     acceptedRequest: isReplyingToRequest,
+  };
+}
+
+export async function updateMessageContent({
+  conversationId,
+  messageId,
+  senderId,
+  content,
+}) {
+  const conversation = await findConversationById(conversationId, senderId);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const messageRows = await query(
+    `
+    SELECT
+      sender_id AS senderId,
+      deleted_at AS deletedAt
+    FROM messages
+    WHERE id = ? AND conversation_id = ?
+    LIMIT 1
+    `,
+    [messageId, conversationId]
+  );
+  const existingMessage = messageRows[0];
+
+  if (!existingMessage) {
+    return null;
+  }
+
+  if (Number(existingMessage.senderId) !== Number(senderId)) {
+    return {
+      forbidden: true,
+    };
+  }
+
+  if (existingMessage.deletedAt) {
+    return {
+      deleted: true,
+    };
+  }
+
+  await query(
+    `
+    UPDATE messages
+    SET content = ?,
+        edited_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `,
+    [content, messageId]
+  );
+
+  const recipientId =
+    Number(conversation.userLowId) === Number(senderId)
+      ? conversation.userHighId
+      : conversation.userLowId;
+  const message = await findMessageByIdForUser(messageId, senderId);
+
+  return {
+    conversation,
+    recipientId,
+    message,
+  };
+}
+
+export async function deleteMessageForEveryone({
+  conversationId,
+  messageId,
+  senderId,
+}) {
+  const conversation = await findConversationById(conversationId, senderId);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const messageRows = await query(
+    `
+    SELECT
+      sender_id AS senderId,
+      media_url AS mediaUrl
+    FROM messages
+    WHERE id = ? AND conversation_id = ?
+    LIMIT 1
+    `,
+    [messageId, conversationId]
+  );
+  const existingMessage = messageRows[0];
+
+  if (!existingMessage) {
+    return null;
+  }
+
+  if (Number(existingMessage.senderId) !== Number(senderId)) {
+    return {
+      forbidden: true,
+    };
+  }
+
+  await query(
+    `
+    UPDATE messages
+    SET content = '',
+        media_url = NULL,
+        media_type = NULL,
+        media_name = NULL,
+        edited_at = NULL,
+        deleted_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `,
+    [messageId]
+  );
+
+  await query(
+    `
+    DELETE FROM message_reactions
+    WHERE message_id = ?
+    `,
+    [messageId]
+  );
+
+  const recipientId =
+    Number(conversation.userLowId) === Number(senderId)
+      ? conversation.userHighId
+      : conversation.userLowId;
+  const message = await findMessageByIdForUser(messageId, senderId);
+
+  return {
+    conversation,
+    recipientId,
+    message,
+    removedMediaUrl: existingMessage.mediaUrl || null,
+  };
+}
+
+export async function setMessageReaction({
+  conversationId,
+  messageId,
+  userId,
+  reaction,
+}) {
+  const conversation = await findConversationById(conversationId, userId);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const messageRows = await query(
+    `
+    SELECT id
+    FROM messages
+    WHERE id = ? AND conversation_id = ?
+    LIMIT 1
+    `,
+    [messageId, conversationId]
+  );
+
+  if (!messageRows[0]) {
+    return null;
+  }
+
+  if (reaction) {
+    await query(
+      `
+      INSERT INTO message_reactions (message_id, user_id, reaction)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        reaction = VALUES(reaction),
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [messageId, userId, reaction]
+    );
+  } else {
+    await query(
+      `
+      DELETE FROM message_reactions
+      WHERE message_id = ? AND user_id = ?
+      `,
+      [messageId, userId]
+    );
+  }
+
+  const reactionsByMessageId = await findReactionsByMessageIds([messageId]);
+  const reactions = (reactionsByMessageId.get(Number(messageId)) || []).map(
+    normalizeMessageReaction
+  );
+  const recipientId =
+    Number(conversation.userLowId) === Number(userId)
+      ? conversation.userHighId
+      : conversation.userLowId;
+
+  return {
+    conversation,
+    recipientId,
+    reaction: {
+      conversationId,
+      messageId,
+      userId,
+      reaction: reaction || null,
+      reactions,
+    },
   };
 }
 

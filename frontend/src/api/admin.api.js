@@ -1,81 +1,87 @@
 import { apiFetch } from "./client.js";
 
-function buildAdminParams(options = {}) {
-  const {
-    page = 1,
-    limit = 20,
-    search = "",
-    role = "",
-    accountStatus = "",
-    authorId = "",
-    privacy = "",
-    reportedOnly = false,
-    minReports = "",
-    fromDate = "",
-    toDate = "",
-    actorId = "",
-    targetUserId = "",
-    action = "",
-    targetType = "",
-  } = options;
+const ADMIN_QUERY_DEFAULTS = {
+  page: 1,
+  limit: 20,
+  search: "",
+  role: "",
+  accountStatus: "",
+  authorId: "",
+  privacy: "",
+  reportedOnly: false,
+  minReports: "",
+  fromDate: "",
+  toDate: "",
+  actorId: "",
+  targetUserId: "",
+  action: "",
+  targetType: "",
+};
+
+const ADMIN_QUERY_KEYS = Object.keys(ADMIN_QUERY_DEFAULTS);
+
+function normalizeQueryValue(value) {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "1" : "";
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+}
+
+function buildAdminQuery(options = {}) {
   const params = new URLSearchParams();
 
-  params.set("page", page);
-  params.set("limit", limit);
+  for (const key of ADMIN_QUERY_KEYS) {
+    const value = Object.hasOwn(options, key)
+      ? options[key]
+      : ADMIN_QUERY_DEFAULTS[key];
+    const normalizedValue = normalizeQueryValue(value);
+    const defaultValue = normalizeQueryValue(ADMIN_QUERY_DEFAULTS[key]);
 
-  if (search.trim()) {
-    params.set("search", search.trim());
-  }
+    if (!normalizedValue || normalizedValue === defaultValue) {
+      continue;
+    }
 
-  if (role) {
-    params.set("role", role);
-  }
-
-  if (accountStatus) {
-    params.set("accountStatus", accountStatus);
-  }
-
-  if (authorId) {
-    params.set("authorId", authorId);
-  }
-
-  if (privacy) {
-    params.set("privacy", privacy);
-  }
-
-  if (reportedOnly) {
-    params.set("reportedOnly", "1");
-  }
-
-  if (minReports) {
-    params.set("minReports", minReports);
-  }
-
-  if (fromDate) {
-    params.set("fromDate", fromDate);
-  }
-
-  if (toDate) {
-    params.set("toDate", toDate);
-  }
-
-  if (actorId) {
-    params.set("actorId", actorId);
-  }
-
-  if (targetUserId) {
-    params.set("targetUserId", targetUserId);
-  }
-
-  if (action) {
-    params.set("action", action);
-  }
-
-  if (targetType) {
-    params.set("targetType", targetType);
+    params.set(key, normalizedValue);
   }
 
   return params.toString();
+}
+
+function withAdminQuery(path, options) {
+  const query = buildAdminQuery(options);
+
+  return query ? `${path}?${query}` : path;
+}
+
+function pathId(value, label) {
+  const normalizedValue = String(value ?? "").trim();
+
+  if (!normalizedValue) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return encodeURIComponent(normalizedValue);
+}
+
+function adminUserPath(userId, suffix = "") {
+  return `/admin/users/${pathId(userId, "User id")}${suffix}`;
+}
+
+function adminPostPath(postId) {
+  return `/admin/posts/${pathId(postId, "Post id")}`;
+}
+
+function adminCommentPath(commentId) {
+  return `/admin/comments/${pathId(commentId, "Comment id")}`;
 }
 
 export function getAdminOverview() {
@@ -83,15 +89,15 @@ export function getAdminOverview() {
 }
 
 export function getAdminUsers(options = {}) {
-  return apiFetch(`/admin/users?${buildAdminParams(options)}`);
+  return apiFetch(withAdminQuery("/admin/users", options));
 }
 
 export function getAdminUserDetail(userId) {
-  return apiFetch(`/admin/users/${userId}`);
+  return apiFetch(adminUserPath(userId));
 }
 
 export function updateAdminUserRole(userId, role) {
-  return apiFetch(`/admin/users/${userId}/role`, {
+  return apiFetch(adminUserPath(userId, "/role"), {
     method: "PATCH",
     body: JSON.stringify({ role }),
   });
@@ -101,7 +107,7 @@ export function updateAdminUserStatus(
   userId,
   { accountStatus, reason = "" }
 ) {
-  return apiFetch(`/admin/users/${userId}/status`, {
+  return apiFetch(adminUserPath(userId, "/status"), {
     method: "PATCH",
     body: JSON.stringify({
       accountStatus,
@@ -111,20 +117,20 @@ export function updateAdminUserStatus(
 }
 
 export function deleteAdminUser(userId) {
-  return apiFetch(`/admin/users/${userId}`, {
+  return apiFetch(adminUserPath(userId), {
     method: "DELETE",
   });
 }
 
 export function getAdminPosts(options = {}) {
-  return apiFetch(`/admin/posts?${buildAdminParams(options)}`);
+  return apiFetch(withAdminQuery("/admin/posts", options));
 }
 
 export function deleteAdminPost(
   postId,
   { reason = "", resolutionNote = "" } = {}
 ) {
-  return apiFetch(`/admin/posts/${postId}`, {
+  return apiFetch(adminPostPath(postId), {
     method: "DELETE",
     body: JSON.stringify({
       reason,
@@ -134,14 +140,14 @@ export function deleteAdminPost(
 }
 
 export function getAdminComments(options = {}) {
-  return apiFetch(`/admin/comments?${buildAdminParams(options)}`);
+  return apiFetch(withAdminQuery("/admin/comments", options));
 }
 
 export function deleteAdminComment(
   commentId,
   { reason = "", resolutionNote = "" } = {}
 ) {
-  return apiFetch(`/admin/comments/${commentId}`, {
+  return apiFetch(adminCommentPath(commentId), {
     method: "DELETE",
     body: JSON.stringify({
       reason,
@@ -151,5 +157,5 @@ export function deleteAdminComment(
 }
 
 export function getAdminAuditLogs(options = {}) {
-  return apiFetch(`/admin/audit-logs?${buildAdminParams(options)}`);
+  return apiFetch(withAdminQuery("/admin/audit-logs", options));
 }

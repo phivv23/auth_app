@@ -15,13 +15,12 @@ import {
 } from "../utils/notificationDisplay.js";
 import { formatRelativeTime } from "../utils/time.js";
 
-const POLL_INTERVAL_MS = 30000;
-
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const wrapperRef = useRef(null);
+  const isNotificationsPage = location.pathname === "/notifications";
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -29,7 +28,7 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || isNotificationsPage) {
       return;
     }
 
@@ -63,16 +62,13 @@ export default function NotificationBell() {
 
     loadNotificationPreview({ showLoading: true });
 
-    const intervalId = setInterval(loadNotificationPreview, POLL_INTERVAL_MS);
-
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
     };
-  }, [user]);
+  }, [isNotificationsPage, user]);
 
   useEffect(() => {
-    if (!user || location.pathname === "/notifications") {
+    if (!user || isNotificationsPage) {
       return;
     }
 
@@ -99,7 +95,7 @@ export default function NotificationBell() {
     return () => {
       eventSource.close();
     };
-  }, [location.pathname, user]);
+  }, [isNotificationsPage, user]);
 
   useEffect(() => {
     if (!open) {
@@ -144,6 +140,19 @@ export default function NotificationBell() {
 
   if (!user) {
     return null;
+  }
+
+  if (isNotificationsPage) {
+    return (
+      <Link
+        className="notification-bell nav-icon-link"
+        to="/notifications"
+        aria-label="Thông báo"
+        title="Thông báo"
+      >
+        <span aria-hidden="true">🔔</span>
+      </Link>
+    );
   }
 
   return (

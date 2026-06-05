@@ -10,7 +10,7 @@
     "migrate:status": "node src/scripts/migrate.js status"
   },
   "keywords": [],
-  "author": "",
+  "author": "Phi",
   "license": "ISC",
   "type": "module",
   "dependencies": {

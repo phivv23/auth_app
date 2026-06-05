@@ -16,6 +16,7 @@ const reportTargetLabels = {
   post: "bài viết",
   comment: "bình luận",
   message: "tin nhắn",
+  story: "story",
 };
 
 export function getNotificationText(notification) {
@@ -49,6 +50,20 @@ export function getNotificationText(notification) {
 
   if (notification.type === "message") {
     return `${actorName} đã nhắn tin cho bạn`;
+  }
+
+  if (notification.type === "story_reply") {
+    const content = notification.metadata?.content;
+
+    return content
+      ? `${actorName} đã trả lời story của bạn: ${content}`
+      : `${actorName} đã trả lời story của bạn`;
+  }
+
+  if (notification.type === "story_reaction") {
+    const reaction = notification.metadata?.reaction || "cảm xúc";
+
+    return `${actorName} đã thả ${reaction} vào story của bạn`;
   }
 
   if (notification.type === "report_status_update") {
@@ -101,6 +116,14 @@ export function getNotificationTarget(notification) {
 
   if (notification.type === "message" && notification.conversationId) {
     return `/messages?conversationId=${notification.conversationId}`;
+  }
+
+  if (
+    (notification.type === "story_reply" ||
+      notification.type === "story_reaction") &&
+    notification.metadata?.storyId
+  ) {
+    return `/stories/${notification.metadata.storyId}`;
   }
 
   if (notification.type === "report_status_update") {

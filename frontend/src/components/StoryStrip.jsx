@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
 import {
   createStory,
-  deleteStory,
   getStories,
-  markStoryViewed,
 } from "../api/story.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
-import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const allowedStoryMediaTypes = [
   "image/jpeg",
@@ -51,12 +49,6 @@ function formatExpiry(secondsUntilExpiry) {
   return `Còn ${minutes} phút`;
 }
 
-function updateStoryInList(stories, updatedStory) {
-  return stories.map((story) =>
-    story.id === updatedStory.id ? updatedStory : story
-  );
-}
-
 function getMediaTypeFromFile(file) {
   return file?.type?.startsWith("video/") ? "video" : "image";
 }
@@ -67,6 +59,7 @@ function isStoryVideo(story) {
 
 export default function StoryStrip({ onNotice }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
   const [stories, setStories] = useState([]);
@@ -81,10 +74,6 @@ export default function StoryStrip({ onNotice }) {
   const [previewMediaType, setPreviewMediaType] = useState("image");
   const [composerError, setComposerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const [activeStory, setActiveStory] = useState(null);
-  const [viewerError, setViewerError] = useState("");
-  const [deleting, setDeleting] = useState(false);
 
   const canSubmit = Boolean(file) && !submitting;
 
@@ -133,9 +122,7 @@ export default function StoryStrip({ onNotice }) {
   }, [previewUrl]);
 
   useEffect(() => {
-    const hasOverlay = composerOpen || activeStory;
-
-    if (!hasOverlay) {
+    if (!composerOpen) {
       return undefined;
     }
 
@@ -143,9 +130,8 @@ export default function StoryStrip({ onNotice }) {
     document.body.style.overflow = "hidden";
 
     function handleKeyDown(event) {
-      if (event.key === "Escape" && !submitting && !deleting) {
+      if (event.key === "Escape" && !submitting) {
         setComposerOpen(false);
-        setActiveStory(null);
       }
     }
 
@@ -155,7 +141,7 @@ export default function StoryStrip({ onNotice }) {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeStory, composerOpen, deleting, submitting]);
+  }, [composerOpen, submitting]);
 
   function clearFile() {
     if (previewUrl) {
@@ -239,46 +225,8 @@ export default function StoryStrip({ onNotice }) {
     }
   }
 
-  async function handleOpenStory(story) {
-    setActiveStory(story);
-    setViewerError("");
-
-    try {
-      const data = await markStoryViewed(story.id);
-      const updatedStory = data.story || story;
-
-      setActiveStory(updatedStory);
-      setStories((currentStories) => updateStoryInList(currentStories, updatedStory));
-    } catch (error) {
-      setViewerError(error.message);
-    }
-  }
-
-  async function handleDeleteStory() {
-    if (!activeStory || !activeStory.isMine) {
-      return;
-    }
-
-    if (!window.confirm("Xóa story này?")) {
-      return;
-    }
-
-    try {
-      setDeleting(true);
-      setViewerError("");
-
-      await deleteStory(activeStory.id);
-
-      setStories((currentStories) =>
-        currentStories.filter((story) => story.id !== activeStory.id)
-      );
-      setActiveStory(null);
-      onNotice?.("Đã xóa story.");
-    } catch (error) {
-      setViewerError(error.message);
-    } finally {
-      setDeleting(false);
-    }
+  function handleOpenStory(story) {
+    navigate(`/stories/${encodeURIComponent(story.id)}`);
   }
 
   const userAvatarUrl = getFileUrl(user?.avatarUrl);
@@ -441,83 +389,6 @@ export default function StoryStrip({ onNotice }) {
         </div>
       )}
 
-      {activeStory && (
-        <div
-          className="story-viewer-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !deleting) {
-              setActiveStory(null);
-            }
-          }}
-        >
-          <article
-            className="story-viewer"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Story"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header>
-              <div className="story-viewer-author">
-                {getFileUrl(activeStory.authorAvatarUrl) ? (
-                  <img src={getFileUrl(activeStory.authorAvatarUrl)} alt="" />
-                ) : (
-                  <span>{getInitial(activeStory.authorName)}</span>
-                )}
-                <div>
-                  <strong>{activeStory.authorName}</strong>
-                  <small title={formatVietnamDateTime(activeStory.createdAt)}>
-                    {formatRelativeTime(activeStory.createdAt)} ·{" "}
-                    {formatExpiry(activeStory.secondsUntilExpiry)}
-                  </small>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Đóng story"
-                disabled={deleting}
-                onClick={() => setActiveStory(null)}
-              >
-                ×
-              </button>
-            </header>
-
-            <div className="story-viewer-media">
-              {isStoryVideo(activeStory) ? (
-                <video
-                  src={getFileUrl(activeStory.mediaUrl)}
-                  controls
-                  autoPlay
-                  playsInline
-                />
-              ) : (
-                <img src={getFileUrl(activeStory.mediaUrl)} alt="" />
-              )}
-            </div>
-
-            {activeStory.caption && <p>{activeStory.caption}</p>}
-            {viewerError && <p className="error">{viewerError}</p>}
-
-            <footer>
-              {activeStory.isMine && (
-                <>
-                  <span>{activeStory.viewCount} lượt xem</span>
-                  <button
-                    type="button"
-                    className="button danger"
-                    disabled={deleting}
-                    onClick={handleDeleteStory}
-                  >
-                    {deleting ? "Đang xóa..." : "Xóa story"}
-                  </button>
-                </>
-              )}
-            </footer>
-          </article>
-        </div>
-      )}
     </>
   );
 }

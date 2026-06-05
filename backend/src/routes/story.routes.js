@@ -5,6 +5,10 @@ import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
+  createMessage,
+  findOrCreateConversation,
+} from "../models/message.model.js";
+import {
   createStory,
   deleteStory,
   findActiveStories,
@@ -24,6 +28,15 @@ const createStoryRateLimit = rateLimit({
   keyGenerator: (req) => req.user?.id || req.ip,
   message: "Bạn tạo story quá nhanh. Vui lòng thử lại sau.",
 });
+const storyInteractionRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  keyPrefix: "story:interact",
+  keyGenerator: (req) => req.user?.id || req.ip,
+  message: "Bạn tương tác với story quá nhanh. Vui lòng thử lại sau.",
+});
+
+const STORY_REACTIONS = new Set(["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"]);
 
 function parsePositiveInt(value) {
   const number = Number(value);
@@ -77,6 +90,101 @@ function getUploadedStoryMedia(req) {
   return {
     url: `/uploads/stories/${req.file.filename}`,
     type: getStoryMediaType(req.file),
+  };
+}
+
+function validateStoryReplyContent(content) {
+  const normalizedContent = String(content || "").trim();
+
+  if (!normalizedContent) {
+    return {
+      value: "",
+      error: "Nội dung trả lời không được để trống.",
+    };
+  }
+
+  if (normalizedContent.length > 1000) {
+    return {
+      value: "",
+      error: "Nội dung trả lời không được vượt quá 1000 ký tự.",
+    };
+  }
+
+  return {
+    value: normalizedContent,
+    error: "",
+  };
+}
+
+function validateStoryReaction(reaction) {
+  const normalizedReaction = String(reaction || "").trim();
+
+  if (!STORY_REACTIONS.has(normalizedReaction)) {
+    return {
+      value: "",
+      error: "Cảm xúc story không hợp lệ.",
+    };
+  }
+
+  return {
+    value: normalizedReaction,
+    error: "",
+  };
+}
+
+async function findVisibleStoryForInteraction(req, res) {
+  const storyId = parsePositiveInt(req.params.id);
+
+  if (!storyId) {
+    sendError(res, 400, "Story id không hợp lệ.", "INVALID_STORY_ID");
+    return null;
+  }
+
+  const story = await findStoryById(storyId, req.user.id);
+
+  if (!story) {
+    sendError(
+      res,
+      404,
+      "Story không tồn tại, đã hết hạn hoặc bạn không có quyền xem.",
+      "STORY_NOT_FOUND"
+    );
+    return null;
+  }
+
+  if (story.isMine) {
+    sendError(
+      res,
+      400,
+      "Bạn không thể tương tác với story của chính mình.",
+      "STORY_SELF_INTERACTION_NOT_ALLOWED"
+    );
+    return null;
+  }
+
+  return story;
+}
+
+async function sendStoryMessage({ senderId, story, content }) {
+  const conversation = await findOrCreateConversation(senderId, story.userId);
+
+  if (!conversation) {
+    return null;
+  }
+
+  const message = await createMessage({
+    conversationId: conversation.id,
+    senderId,
+    content,
+  });
+
+  if (!message) {
+    return null;
+  }
+
+  return {
+    conversation,
+    message,
   };
 }
 
@@ -209,6 +317,99 @@ router.post("/:id/view", requireAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+router.post(
+  "/:id/reply",
+  requireAuth,
+  requireActiveAccount,
+  storyInteractionRateLimit,
+  async (req, res, next) => {
+    try {
+      const story = await findVisibleStoryForInteraction(req, res);
+
+      if (!story) {
+        return null;
+      }
+
+      const validation = validateStoryReplyContent(req.body?.content);
+
+      if (validation.error) {
+        return sendError(res, 400, validation.error, "INVALID_STORY_REPLY");
+      }
+
+      const result = await sendStoryMessage({
+        senderId: req.user.id,
+        story,
+        content: `Đã trả lời story của bạn: ${validation.value}`,
+      });
+
+      if (!result) {
+        return sendError(
+          res,
+          403,
+          "Không thể gửi trả lời story cho người dùng này.",
+          "STORY_REPLY_NOT_ALLOWED"
+        );
+      }
+
+      return res.status(201).json({
+        message: "Đã gửi trả lời vào tin nhắn.",
+        storyId: story.id,
+        conversation: result.conversation,
+        replyMessage: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  "/:id/reaction",
+  requireAuth,
+  requireActiveAccount,
+  storyInteractionRateLimit,
+  async (req, res, next) => {
+    try {
+      const story = await findVisibleStoryForInteraction(req, res);
+
+      if (!story) {
+        return null;
+      }
+
+      const validation = validateStoryReaction(req.body?.reaction);
+
+      if (validation.error) {
+        return sendError(res, 400, validation.error, "INVALID_STORY_REACTION");
+      }
+
+      const result = await sendStoryMessage({
+        senderId: req.user.id,
+        story,
+        content: `${validation.value} story của bạn`,
+      });
+
+      if (!result) {
+        return sendError(
+          res,
+          403,
+          "Không thể thả cảm xúc story cho người dùng này.",
+          "STORY_REACTION_NOT_ALLOWED"
+        );
+      }
+
+      return res.status(201).json({
+        message: "Đã gửi cảm xúc vào tin nhắn.",
+        storyId: story.id,
+        reaction: validation.value,
+        conversation: result.conversation,
+        replyMessage: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 router.delete(
   "/:id",

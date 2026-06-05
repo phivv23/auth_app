@@ -40,6 +40,7 @@ import AdminContent from "./pages/AdminContent.jsx";
 import AdminAuditLogs from "./pages/AdminAuditLogs.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
+import StoryViewer from "./pages/StoryViewer.jsx";
 import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
 
 const developingItems = [
@@ -271,8 +272,20 @@ export default function App() {
   const location = useLocation();
   const [developingNotice, setDevelopingNotice] = useState("");
   const developingTimeoutRef = useRef(null);
+  const isStoryRoute = location.pathname.startsWith("/stories");
+  const isMessagesRoute = location.pathname.startsWith("/messages");
   const showSocialShell =
-    Boolean(user) && ["/", "/feed", "/saved", "/watch"].includes(location.pathname);
+    Boolean(user) &&
+    !isStoryRoute &&
+    !isMessagesRoute &&
+    ["/", "/feed", "/saved", "/watch"].includes(location.pathname);
+  const mainClassName = isStoryRoute
+    ? "story-main"
+    : isMessagesRoute
+      ? "messages-main"
+    : showSocialShell
+      ? "social-main"
+      : "container";
 
   function showDevelopingNotice(featureName) {
     setDevelopingNotice(`${featureName} đang phát triển.`);
@@ -284,14 +297,14 @@ export default function App() {
 
   return (
     <>
-      <Navbar onDeveloping={showDevelopingNotice} />
+      {!isStoryRoute && <Navbar onDeveloping={showDevelopingNotice} />}
 
       <div className={showSocialShell ? "social-shell" : ""}>
         {showSocialShell && (
           <SocialLeftSidebar user={user} onDeveloping={showDevelopingNotice} />
         )}
 
-        <main className={showSocialShell ? "social-main" : "container"}>
+        <main className={mainClassName}>
           <Routes>
             <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Home />} />
 
@@ -369,6 +382,8 @@ export default function App() {
               <Route path="/admin/content" element={<AdminContent />} />
               <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
               <Route path="/admin/reports" element={<AdminReports />} />
+              <Route path="/stories" element={<StoryViewer />} />
+              <Route path="/stories/:storyId" element={<StoryViewer />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -386,7 +401,7 @@ export default function App() {
         </div>
       )}
 
-      <MessagePopups />
+      {!isStoryRoute && !isMessagesRoute && <MessagePopups />}
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
@@ -10,23 +10,42 @@ import { useAuth } from "../context/useAuth.js";
 import { formatRelativeTime } from "../utils/time.js";
 import { openMessagePopup } from "../utils/messagePopup.js";
 
-const POLL_INTERVAL_MS = 30000;
+const POLL_INTERVAL_MS = 120000;
 
 function getPreview(conversation, currentUserId) {
   if (!conversation.lastMessage) {
     return "Chưa có tin nhắn.";
   }
 
+  if (conversation.lastMessage.deletedAt) {
+    return Number(conversation.lastMessage.senderId) === Number(currentUserId)
+      ? "Bạn đã thu hồi một tin nhắn."
+      : "Tin nhắn đã bị thu hồi.";
+  }
+
   const prefix =
     Number(conversation.lastMessage.senderId) === Number(currentUserId)
       ? "Bạn: "
       : "";
+  const content = conversation.lastMessage.content?.trim();
 
-  return `${prefix}${conversation.lastMessage.content}`;
+  if (content) {
+    return `${prefix}${content}`;
+  }
+
+  const mediaLabels = {
+    gif: "[GIF]",
+    image: "[Ảnh]",
+    video: "[Video]",
+    file: "[Tệp tin]",
+  };
+
+  return `${prefix}${mediaLabels[conversation.lastMessage.mediaType] || "[File]"}`;
 }
 
 export default function MessageDropdown() {
   const { user } = useAuth();
+  const location = useLocation();
   const wrapperRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("inbox");
@@ -36,6 +55,7 @@ export default function MessageDropdown() {
   const [loading, setLoading] = useState(false);
 
   const activeConversations = activeTab === "requests" ? requests : conversations;
+  const isMessagesPage = location.pathname.startsWith("/messages");
   const filteredConversations = activeConversations.filter((conversation) =>
     conversation.otherUser.name
       ?.toLowerCase()
@@ -76,7 +96,7 @@ export default function MessageDropdown() {
   }
 
   useEffect(() => {
-    if (!user) {
+    if (!user || isMessagesPage) {
       return;
     }
 
@@ -89,7 +109,7 @@ export default function MessageDropdown() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [user]);
+  }, [isMessagesPage, user]);
 
   useEffect(() => {
     if (!open) {
@@ -116,6 +136,14 @@ export default function MessageDropdown() {
 
   if (!user) {
     return null;
+  }
+
+  if (isMessagesPage) {
+    return (
+      <Link className="nav-icon-link" to="/messages" title="Messenger" aria-label="Messenger">
+        <span aria-hidden="true">💬</span>
+      </Link>
+    );
   }
 
   return (

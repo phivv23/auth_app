@@ -258,6 +258,21 @@ export async function findOwnStoryById(storyId, userId) {
   return rows[0] ? normalizeStory(rows[0], userId) : null;
 }
 
+export async function findStoryByIdForModeration(storyId) {
+  const rows = await query(
+    `
+    ${getStorySelectSql()}
+    FROM stories s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.id = ?
+    LIMIT 1
+    `,
+    [null, storyId]
+  );
+
+  return rows[0] ? normalizeStory(rows[0]) : null;
+}
+
 export async function markStoryViewed(storyId, viewerId) {
   await query(
     `
@@ -266,6 +281,24 @@ export async function markStoryViewed(storyId, viewerId) {
     `,
     [storyId, viewerId]
   );
+}
+
+export async function deleteStoryByIdForModeration(storyId) {
+  const story = await findStoryByIdForModeration(storyId);
+
+  if (!story) {
+    return null;
+  }
+
+  await query(
+    `
+    DELETE FROM stories
+    WHERE id = ?
+    `,
+    [storyId]
+  );
+
+  return story;
 }
 
 export async function deleteStory(storyId, userId) {

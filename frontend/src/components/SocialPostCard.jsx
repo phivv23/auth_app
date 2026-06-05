@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import {
@@ -13,6 +13,8 @@ import {
   togglePostLike,
   updateComment,
 } from "../api/post.api.js";
+import { getFriends } from "../api/friend.api.js";
+import { sendMessage, startConversation } from "../api/message.api.js";
 import { getFileUrl } from "../api/client.js";
 import MediaViewer from "./MediaViewer.jsx";
 import ReportDialog from "./ReportDialog.jsx";
@@ -36,6 +38,10 @@ const privacyLabels = {
   friends: "Bạn bè",
   only_me: "Chỉ mình tôi",
 };
+
+const MAX_FORWARD_RECIPIENTS = 10;
+const MAX_FORWARD_NOTE_LENGTH = 400;
+const MAX_FORWARD_MESSAGE_LENGTH = 2000;
 
 const reactionByType = Object.fromEntries(
   reactions.map((reaction) => [reaction.type, reaction])
@@ -81,6 +87,38 @@ function getPostMedia(post) {
     : post?.imageUrl
       ? [{ url: post.imageUrl, type: "image" }]
       : [];
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function getPostShareUrl(postId) {
+  if (typeof window === "undefined") {
+    return `/posts/${postId}`;
+  }
+
+  return `${window.location.origin}/posts/${postId}`;
+}
+
+function buildForwardMessage(post, note = "") {
+  const postSummary =
+    post.title || post.content || `${post.authorName || "Người dùng"} đã chia sẻ một bài viết`;
+  const lines = [
+    truncateText(note, MAX_FORWARD_NOTE_LENGTH),
+    "Mình gửi bạn bài viết này:",
+    `${post.authorName || "Người dùng"}: ${truncateText(postSummary, 360)}`,
+    getPostShareUrl(post.id),
+  ].filter(Boolean);
+  const message = lines.join("\n");
+
+  return truncateText(message, MAX_FORWARD_MESSAGE_LENGTH);
 }
 
 function renderMediaElement(
@@ -279,10 +317,19 @@ export default function SocialPostCard({
   const [reactionFilter, setReactionFilter] = useState("");
   const [reactionsLoading, setReactionsLoading] = useState(false);
   const [reactionsError, setReactionsError] = useState("");
+  const [shareMode, setShareMode] = useState("timeline");
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   const [shareContent, setShareContent] = useState("");
   const [sharePrivacy, setSharePrivacy] = useState("public");
   const [shareSubmitting, setShareSubmitting] = useState(false);
+  const [forwardFriends, setForwardFriends] = useState([]);
+  const [forwardFriendsLoaded, setForwardFriendsLoaded] = useState(false);
+  const [forwardFriendsLoading, setForwardFriendsLoading] = useState(false);
+  const [forwardFriendSearch, setForwardFriendSearch] = useState("");
+  const [selectedForwardFriendIds, setSelectedForwardFriendIds] = useState([]);
+  const [forwardNote, setForwardNote] = useState("");
+  const [forwardSubmitting, setForwardSubmitting] = useState(false);
+  const [forwardStatusByUserId, setForwardStatusByUserId] = useState({});
   const [bookmarking, setBookmarking] = useState(false);
   const [mediaViewerSession, setMediaViewerSession] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
@@ -309,6 +356,23 @@ export default function SocialPostCard({
   const shareAuthorAvatarUrl = getFileUrl(user?.avatarUrl);
   const shareContentLength = shareContent.length;
   const canSubmitShare = !shareSubmitting && shareContentLength <= 5000;
+  const filteredForwardFriends = useMemo(() => {
+    const keyword = forwardFriendSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return forwardFriends;
+    }
+
+    return forwardFriends.filter((friend) =>
+      friend.name?.toLowerCase().includes(keyword)
+    );
+  }, [forwardFriendSearch, forwardFriends]);
+  const selectedForwardFriends = forwardFriends.filter((friend) =>
+    selectedForwardFriendIds.includes(friend.id)
+  );
+  const quickForwardFriends = forwardFriends.slice(0, 7);
+  const canForwardPost =
+    !forwardSubmitting && selectedForwardFriendIds.length > 0;
 
   useEffect(() => {
     if (defaultCommentsOpen) {
@@ -317,6 +381,78 @@ export default function SocialPostCard({
     // loadComments reads local loading flags; post id is the important reset key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultCommentsOpen, post.id]);
+
+  useEffect(() => {
+    if (!sharePanelOpen || forwardFriendsLoaded) {
+      return;
+    }
+
+    let isActive = true;
+
+    async function loadForwardFriends() {
+      try {
+        setForwardFriendsLoading(true);
+        setError("");
+
+        const data = await getFriends({
+          page: 1,
+          limit: 50,
+        });
+
+        if (!isActive) {
+          return;
+        }
+
+        setForwardFriends(data.users || []);
+        setForwardFriendsLoaded(true);
+      } catch (error) {
+        if (isActive) {
+          setError(error.message);
+        }
+      } finally {
+        if (isActive) {
+          setForwardFriendsLoading(false);
+        }
+      }
+    }
+
+    loadForwardFriends();
+
+    return () => {
+      isActive = false;
+    };
+  }, [forwardFriendsLoaded, sharePanelOpen]);
+
+  useEffect(() => {
+    if (!sharePanelOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+
+    function handleShareModalKeyDown(event) {
+      if (event.key === "Escape") {
+        if (shareSubmitting || forwardSubmitting) {
+          return;
+        }
+
+        setSharePanelOpen(false);
+        setForwardFriendSearch("");
+        setSelectedForwardFriendIds([]);
+        setForwardNote("");
+        setForwardStatusByUserId({});
+        setError("");
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleShareModalKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleShareModalKeyDown);
+    };
+  }, [forwardSubmitting, sharePanelOpen, shareSubmitting]);
 
   useEffect(() => {
     return () => {
@@ -769,18 +905,201 @@ export default function SocialPostCard({
       return;
     }
 
-    setSharePanelOpen((currentOpen) => !currentOpen);
+    if (sharePanelOpen) {
+      handleCloseSharePanel();
+      return;
+    }
+
+    setShareMode("timeline");
+    setSharePanelOpen(true);
+    setForwardFriendSearch("");
+    setSelectedForwardFriendIds([]);
+    setForwardNote("");
+    setForwardStatusByUserId({});
     setError("");
     setNotice("");
   }
 
   function handleCloseSharePanel() {
-    if (shareSubmitting) {
+    if (shareSubmitting || forwardSubmitting) {
       return;
     }
 
     setSharePanelOpen(false);
+    setForwardFriendSearch("");
+    setSelectedForwardFriendIds([]);
+    setForwardNote("");
+    setForwardStatusByUserId({});
     setError("");
+  }
+
+  function handleShareModalBackdropMouseDown(event) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    handleCloseSharePanel();
+  }
+
+  function handleChangeShareMode(nextMode) {
+    setShareMode(nextMode);
+    setError("");
+    setNotice("");
+  }
+
+  function handleToggleForwardFriend(friendId) {
+    setError("");
+    setNotice("");
+    setForwardStatusByUserId({});
+
+    setSelectedForwardFriendIds((currentIds) => {
+      if (currentIds.includes(friendId)) {
+        return currentIds.filter((currentId) => currentId !== friendId);
+      }
+
+      if (currentIds.length >= MAX_FORWARD_RECIPIENTS) {
+        setError(`Bạn chỉ có thể gửi tối đa ${MAX_FORWARD_RECIPIENTS} người mỗi lần.`);
+        return currentIds;
+      }
+
+      return [...currentIds, friendId];
+    });
+  }
+
+  async function sendForwardMessageToFriend(friend, messageContent) {
+    setForwardStatusByUserId((currentStatus) => ({
+      ...currentStatus,
+      [friend.id]: "sending",
+    }));
+
+    const conversationData = await startConversation(friend.id);
+    await sendMessage(conversationData.conversation.id, {
+      content: messageContent,
+    });
+
+    setForwardStatusByUserId((currentStatus) => ({
+      ...currentStatus,
+      [friend.id]: "sent",
+    }));
+  }
+
+  async function handleQuickForwardFriend(friend) {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (forwardSubmitting) {
+      return;
+    }
+
+    try {
+      setForwardSubmitting(true);
+      setError("");
+      setNotice("");
+
+      await sendForwardMessageToFriend(
+        friend,
+        buildForwardMessage(post, shareContent || forwardNote)
+      );
+
+      setNotice(`Đã gửi bài viết cho ${friend.name}.`);
+    } catch (error) {
+      setForwardStatusByUserId((currentStatus) => ({
+        ...currentStatus,
+        [friend.id]: "failed",
+      }));
+      setError(error.message || `Chưa gửi được cho ${friend.name}.`);
+    } finally {
+      setForwardSubmitting(false);
+    }
+  }
+
+  async function handleCopyPostLink() {
+    try {
+      setError("");
+      setNotice("");
+      await navigator.clipboard.writeText(getPostShareUrl(post.id));
+      setNotice("Đã sao chép liên kết bài viết.");
+    } catch {
+      setError("Không thể sao chép liên kết. Vui lòng thử lại.");
+    }
+  }
+
+  async function handleNativeSharePost() {
+    const shareUrl = getPostShareUrl(post.id);
+    const shareTitle = post.title || `Bài viết của ${post.authorName || "Phivv"}`;
+    const shareText = truncateText(post.content || shareTitle, 180);
+
+    if (!navigator.share) {
+      await handleCopyPostLink();
+      return;
+    }
+
+    try {
+      setError("");
+      setNotice("");
+      await navigator.share({
+        title: shareTitle,
+        text: shareText,
+        url: shareUrl,
+      });
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        setError("Không thể mở chia sẻ hệ thống. Vui lòng thử lại.");
+      }
+    }
+  }
+
+  async function handleForwardSubmit(event) {
+    event.preventDefault();
+
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!canForwardPost) {
+      setError("Chọn ít nhất một người bạn để gửi.");
+      return;
+    }
+
+    const messageContent = buildForwardMessage(post, forwardNote);
+    const failedFriends = [];
+
+    try {
+      setForwardSubmitting(true);
+      setError("");
+      setNotice("");
+
+      for (const friend of selectedForwardFriends) {
+        try {
+          await sendForwardMessageToFriend(friend, messageContent);
+        } catch {
+          failedFriends.push(friend.name || "Người dùng");
+          setForwardStatusByUserId((currentStatus) => ({
+            ...currentStatus,
+            [friend.id]: "failed",
+          }));
+        }
+      }
+
+      if (failedFriends.length > 0) {
+        setError(`Chưa gửi được cho: ${failedFriends.join(", ")}.`);
+        return;
+      }
+
+      setNotice(
+        selectedForwardFriends.length > 1
+          ? `Đã gửi bài viết cho ${selectedForwardFriends.length} người bạn.`
+          : "Đã gửi bài viết qua Messenger."
+      );
+      setSelectedForwardFriendIds([]);
+      setForwardFriendSearch("");
+      setForwardNote("");
+    } finally {
+      setForwardSubmitting(false);
+    }
   }
 
   async function handleShareSubmit(event) {
@@ -1509,8 +1828,35 @@ export default function SocialPostCard({
       </div>
 
       {sharePanelOpen && (
-        <form className="share-panel" onSubmit={handleShareSubmit}>
-          <div className="share-panel-header">
+        <div
+          className="share-modal-backdrop"
+          onMouseDown={handleShareModalBackdropMouseDown}
+        >
+          <section
+            className="share-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`share-modal-title-${post.id}`}
+          >
+            <header className="share-modal-header">
+              <h2 id={`share-modal-title-${post.id}`}>Chia sẻ</h2>
+              <button
+                type="button"
+                onClick={handleCloseSharePanel}
+                disabled={shareSubmitting || forwardSubmitting}
+                aria-label="Đóng chia sẻ"
+              >
+                ×
+              </button>
+            </header>
+
+            <form
+              className="share-panel"
+              onSubmit={
+                shareMode === "message" ? handleForwardSubmit : handleShareSubmit
+              }
+            >
+            <div className="share-panel-header">
             {shareAuthorAvatarUrl ? (
               <img
                 className="share-panel-avatar"
@@ -1525,72 +1871,276 @@ export default function SocialPostCard({
 
             <div className="share-panel-author">
               <strong>{user?.name || "Tài khoản của bạn"}</strong>
-              <select
-                value={sharePrivacy}
-                onChange={(event) => setSharePrivacy(event.target.value)}
-                aria-label="Quyền xem bài chia sẻ"
-              >
-                <option value="public">Công khai</option>
-                <option value="followers">Người theo dõi</option>
-                <option value="friends">Bạn bè</option>
-                <option value="only_me">Chỉ mình tôi</option>
-              </select>
+              {shareMode === "timeline" && (
+                <select
+                  value={sharePrivacy}
+                  onChange={(event) => setSharePrivacy(event.target.value)}
+                  aria-label="Quyền xem bài chia sẻ"
+                >
+                  <option value="public">Công khai</option>
+                  <option value="followers">Người theo dõi</option>
+                  <option value="friends">Bạn bè</option>
+                  <option value="only_me">Chỉ mình tôi</option>
+                </select>
+              )}
             </div>
           </div>
 
-          <textarea
-            value={shareContent}
-            onChange={(event) => setShareContent(event.target.value)}
-            placeholder="Viết gì đó về bài viết này..."
-            maxLength={5000}
-          />
+          <div className="share-mode-tabs" role="tablist" aria-label="Cách chia sẻ">
+            <button
+              type="button"
+              className={shareMode === "timeline" ? "active" : ""}
+              onClick={() => handleChangeShareMode("timeline")}
+              role="tab"
+              aria-selected={shareMode === "timeline"}
+            >
+              Trang cá nhân
+            </button>
+            <button
+              type="button"
+              className={shareMode === "message" ? "active" : ""}
+              onClick={() => handleChangeShareMode("message")}
+              role="tab"
+              aria-selected={shareMode === "message"}
+            >
+              Gửi Messenger
+            </button>
+          </div>
 
-          <div className="share-target-preview" aria-label="Bài viết được chia sẻ">
-            <div className="share-target-author">
-              {authorAvatarUrl ? (
-                <img src={authorAvatarUrl} alt={post.authorName} />
+          <section className="share-messenger-strip" aria-label="Gửi bằng Messenger">
+            <div className="share-section-title">
+              <strong>Gửi bằng Messenger</strong>
+              {forwardFriendsLoading && <span>Đang tải...</span>}
+            </div>
+
+            <div className="share-messenger-row">
+              {forwardFriendsLoading ? (
+                Array.from({ length: 5 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="share-messenger-skeleton"
+                    aria-hidden="true"
+                  />
+                ))
+              ) : quickForwardFriends.length === 0 ? (
+                <p>Chưa có bạn bè để gửi nhanh.</p>
               ) : (
-                <span>{post.authorName?.charAt(0)?.toUpperCase() || "U"}</span>
+                quickForwardFriends.map((friend) => {
+                  const avatarUrl = getFileUrl(friend.avatarUrl);
+                  const status = forwardStatusByUserId[friend.id];
+
+                  return (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      className={status === "sent" ? "sent" : ""}
+                      onClick={() => handleQuickForwardFriend(friend)}
+                      disabled={forwardSubmitting}
+                      title={`Gửi cho ${friend.name}`}
+                    >
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={friend.name} />
+                      ) : (
+                        <span>{friend.name?.charAt(0)?.toUpperCase() || "U"}</span>
+                      )}
+                      <strong>{friend.name}</strong>
+                      {status === "sent" && <small>Đã gửi</small>}
+                      {status === "sending" && <small>Đang gửi</small>}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section className="share-destination-row" aria-label="Chia sẻ lên">
+            <div className="share-section-title">
+              <strong>Chia sẻ lên</strong>
+            </div>
+
+            <div className="share-destination-actions">
+              <button type="button" onClick={() => handleChangeShareMode("message")}>
+                <span aria-hidden="true">💬</span>
+                Messenger
+              </button>
+              <button type="button" onClick={handleCopyPostLink}>
+                <span aria-hidden="true">🔗</span>
+                Sao chép liên kết
+              </button>
+              <button type="button" onClick={() => handleChangeShareMode("timeline")}>
+                <span aria-hidden="true">👤</span>
+                Bảng feed
+              </button>
+              <button type="button" onClick={handleNativeSharePost}>
+                <span aria-hidden="true">↗</span>
+                Khác
+              </button>
+            </div>
+          </section>
+
+          {shareMode === "timeline" ? (
+            <>
+              <textarea
+                value={shareContent}
+                onChange={(event) => setShareContent(event.target.value)}
+                placeholder="Viết gì đó về bài viết này..."
+                maxLength={5000}
+              />
+
+              <div className="share-target-preview" aria-label="Bài viết được chia sẻ">
+                <div className="share-target-author">
+                  {authorAvatarUrl ? (
+                    <img src={authorAvatarUrl} alt={post.authorName} />
+                  ) : (
+                    <span>{post.authorName?.charAt(0)?.toUpperCase() || "U"}</span>
+                  )}
+
+                  <div>
+                    <strong>{post.authorName}</strong>
+                    <small title={formatVietnamDateTime(post.createdAt)}>
+                      {formatRelativeTime(post.createdAt)}
+                    </small>
+                  </div>
+                </div>
+
+                {post.title && <h3>{post.title}</h3>}
+                {post.content && <p>{post.content}</p>}
+
+                {media[0] && (
+                  renderMediaElement(media[0], {
+                    className: "share-target-image",
+                    alt: post.title || "Media bài viết được chia sẻ",
+                    controls: false,
+                  })
+                )}
+              </div>
+
+              <div className="share-panel-footer">
+                <span className="share-character-count">
+                  {shareContentLength}/5000
+                </span>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={handleCloseSharePanel}
+                  disabled={shareSubmitting}
+                >
+                  Hủy
+                </button>
+
+                <button className="button" type="submit" disabled={!canSubmitShare}>
+                  {shareSubmitting ? "Đang chia sẻ..." : "Chia sẻ ngay"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="share-message-panel">
+              <textarea
+                value={forwardNote}
+                onChange={(event) => setForwardNote(event.target.value)}
+                placeholder="Viết tin nhắn kèm theo..."
+                maxLength={MAX_FORWARD_NOTE_LENGTH}
+              />
+
+              <div className="share-forward-preview">
+                <strong>Gửi kèm bài viết</strong>
+                <span>
+                  {truncateText(post.title || post.content || post.authorName, 120)}
+                </span>
+              </div>
+
+              <div className="share-friend-search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  value={forwardFriendSearch}
+                  onChange={(event) => setForwardFriendSearch(event.target.value)}
+                  placeholder="Tìm bạn bè"
+                />
+              </div>
+
+              {selectedForwardFriends.length > 0 && (
+                <div className="share-selected-friends">
+                  {selectedForwardFriends.map((friend) => (
+                    <button
+                      key={friend.id}
+                      type="button"
+                      onClick={() => handleToggleForwardFriend(friend.id)}
+                    >
+                      {friend.name}
+                      <span aria-hidden="true">×</span>
+                    </button>
+                  ))}
+                </div>
               )}
 
-              <div>
-                <strong>{post.authorName}</strong>
-                <small title={formatVietnamDateTime(post.createdAt)}>
-                  {formatRelativeTime(post.createdAt)}
-                </small>
+              <div className="share-friend-list">
+                {forwardFriendsLoading ? (
+                  <p>Đang tải danh sách bạn bè...</p>
+                ) : forwardFriends.length === 0 ? (
+                  <p>Bạn chưa có bạn bè để gửi bài viết này.</p>
+                ) : filteredForwardFriends.length === 0 ? (
+                  <p>Không tìm thấy bạn bè phù hợp.</p>
+                ) : (
+                  filteredForwardFriends.map((friend) => {
+                    const avatarUrl = getFileUrl(friend.avatarUrl);
+                    const isSelected = selectedForwardFriendIds.includes(friend.id);
+                    const status = forwardStatusByUserId[friend.id];
+
+                    return (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        className={isSelected ? "selected" : ""}
+                        onClick={() => handleToggleForwardFriend(friend.id)}
+                        disabled={forwardSubmitting}
+                      >
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={friend.name} />
+                        ) : (
+                          <span className="share-friend-avatar">
+                            {friend.name?.charAt(0)?.toUpperCase() || "U"}
+                          </span>
+                        )}
+                        <span className="share-friend-name">{friend.name}</span>
+                        <strong>
+                          {status === "sending"
+                            ? "Đang gửi"
+                            : status === "sent"
+                              ? "Đã gửi"
+                              : status === "failed"
+                                ? "Lỗi"
+                                : isSelected
+                                  ? "Đã chọn"
+                                  : "Gửi"}
+                        </strong>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="share-panel-footer">
+                <span className="share-character-count">
+                  {selectedForwardFriendIds.length}/{MAX_FORWARD_RECIPIENTS} người
+                </span>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={handleCloseSharePanel}
+                  disabled={forwardSubmitting}
+                >
+                  Hủy
+                </button>
+
+                <button className="button" type="submit" disabled={!canForwardPost}>
+                  {forwardSubmitting ? "Đang gửi..." : "Gửi bài viết"}
+                </button>
               </div>
             </div>
-
-            {post.title && <h3>{post.title}</h3>}
-            {post.content && <p>{post.content}</p>}
-
-            {media[0] && (
-              renderMediaElement(media[0], {
-                className: "share-target-image",
-                alt: post.title || "Media bài viết được chia sẻ",
-                controls: false,
-              })
-            )}
-          </div>
-
-          <div className="share-panel-footer">
-            <span className="share-character-count">
-              {shareContentLength}/5000
-            </span>
-            <button
-              className="button secondary"
-              type="button"
-              onClick={handleCloseSharePanel}
-              disabled={shareSubmitting}
-            >
-              Hủy
-            </button>
-
-            <button className="button" type="submit" disabled={!canSubmitShare}>
-              {shareSubmitting ? "Đang chia sẻ..." : "Chia sẻ ngay"}
-            </button>
-          </div>
-        </form>
+          )}
+            </form>
+          </section>
+        </div>
       )}
 
       {user && (

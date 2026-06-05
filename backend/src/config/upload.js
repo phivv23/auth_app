@@ -10,11 +10,13 @@ const avatarUploadDir = path.resolve(__dirname, "../../uploads/avatars");
 const coverUploadDir = path.resolve(__dirname, "../../uploads/covers");
 const postUploadDir = path.resolve(__dirname, "../../uploads/posts");
 const storyUploadDir = path.resolve(__dirname, "../../uploads/stories");
+const messageUploadDir = path.resolve(__dirname, "../../uploads/messages");
 
 fs.mkdirSync(avatarUploadDir, { recursive: true });
 fs.mkdirSync(coverUploadDir, { recursive: true });
 fs.mkdirSync(postUploadDir, { recursive: true });
 fs.mkdirSync(storyUploadDir, { recursive: true });
+fs.mkdirSync(messageUploadDir, { recursive: true });
 
 const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 const allowedStoryMimeTypes = [
@@ -24,6 +26,20 @@ const allowedStoryMimeTypes = [
   "video/quicktime",
 ];
 const allowedPostMimeTypes = allowedStoryMimeTypes;
+const allowedMessageMimeTypes = allowedStoryMimeTypes;
+const allowedMessageFileMimeTypes = [
+  ...allowedStoryMimeTypes,
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/zip",
+  "application/x-zip-compressed",
+  "text/plain",
+];
 
 function imageFileFilter(req, file, cb) {
   if (!allowedMimeTypes.includes(file.mimetype)) {
@@ -47,6 +63,16 @@ function postMediaFileFilter(req, file, cb) {
   if (!allowedPostMimeTypes.includes(file.mimetype)) {
     return cb(
       new Error("Chỉ cho phép upload bài viết JPG, PNG, WEBP, MP4, WEBM hoặc MOV")
+    );
+  }
+
+  cb(null, true);
+}
+
+function messageMediaFileFilter(req, file, cb) {
+  if (!allowedMessageFileMimeTypes.includes(file.mimetype)) {
+    return cb(
+      new Error("Chỉ cho phép gửi ảnh, video, PDF, Office, TXT hoặc ZIP")
     );
   }
 
@@ -119,6 +145,17 @@ export const uploadStoryMedia = multer({
     prefix: "story",
   }),
   fileFilter: storyMediaFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+});
+
+export const uploadMessageMedia = multer({
+  storage: createImageStorage({
+    uploadDir: messageUploadDir,
+    prefix: "message",
+  }),
+  fileFilter: messageMediaFileFilter,
   limits: {
     fileSize: 50 * 1024 * 1024,
   },

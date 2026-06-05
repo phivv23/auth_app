@@ -21,6 +21,7 @@ const targetTypeLabels = {
   post: "Bài viết",
   comment: "Bình luận",
   message: "Tin nhắn",
+  story: "Story",
 };
 
 const reasonLabels = {
@@ -45,6 +46,10 @@ function getTargetUrl(report) {
 
   if (report.targetType === "comment" && report.targetPostId) {
     return `/posts/${report.targetPostId}?commentId=${report.targetId}`;
+  }
+
+  if (report.targetType === "story") {
+    return `/stories/${report.targetId}`;
   }
 
   return "";

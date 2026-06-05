@@ -15,8 +15,6 @@ import {
 } from "../utils/notificationDisplay.js";
 import { formatRelativeTime } from "../utils/time.js";
 
-const POLL_INTERVAL_MS = 5000;
-
 export default function Notifications() {
   const navigate = useNavigate();
   const requestRef = useRef({
@@ -82,21 +80,9 @@ export default function Notifications() {
 
     loadNotifications();
 
-    let intervalId = null;
-
-    if (page === 1) {
-      intervalId = setInterval(() => {
-        loadNotifications({ silent: true });
-      }, POLL_INTERVAL_MS);
-    }
-
     return () => {
       isActive = false;
       requestRef.current.controller?.abort();
-
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
     };
   }, [page, limit]);
 

@@ -17,7 +17,7 @@ async function updateUserLastSeen(userId) {
   }
 }
 
-function getUserClients(userId) {
+const getUserClients = (userId) => {
   const key = String(userId);
 
   if (!messageClients.has(key)) {

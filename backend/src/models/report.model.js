@@ -1,6 +1,6 @@
 import { query } from "../db/pool.js";
 
-export const REPORT_TARGET_TYPES = ["user", "post", "comment", "message"];
+export const REPORT_TARGET_TYPES = ["user", "post", "comment", "message", "story"];
 export const REPORT_STATUSES = ["pending", "reviewing", "resolved", "dismissed"];
 export const REPORT_REASONS = [
   "spam",
@@ -77,6 +77,12 @@ function getReportSelectSql() {
           WHERE target_message.id = r.target_id
           LIMIT 1
         )
+        WHEN 'story' THEN (
+          SELECT COALESCE(NULLIF(target_story.caption, ''), CONCAT('Story #', target_story.id))
+          FROM stories target_story
+          WHERE target_story.id = r.target_id
+          LIMIT 1
+        )
         ELSE NULL
       END AS targetPreview,
       CASE r.target_type
@@ -105,6 +111,13 @@ function getReportSelectSql() {
           FROM messages target_message
           JOIN users message_author ON message_author.id = target_message.sender_id
           WHERE target_message.id = r.target_id
+          LIMIT 1
+        )
+        WHEN 'story' THEN (
+          SELECT story_author.name
+          FROM stories target_story
+          JOIN users story_author ON story_author.id = target_story.user_id
+          WHERE target_story.id = r.target_id
           LIMIT 1
         )
         ELSE NULL

@@ -12,6 +12,10 @@ import {
   findPostById,
   findPostMediaByPostId,
 } from "../models/post.model.js";
+import {
+  deleteStoryByIdForModeration,
+  findStoryById,
+} from "../models/story.model.js";
 import { createNotification } from "../models/notification.model.js";
 import {
   createReport,
@@ -135,6 +139,17 @@ async function removeReportedTarget(report, currentUserId) {
     return true;
   }
 
+  if (report.targetType === "story") {
+    const story = await deleteStoryByIdForModeration(report.targetId);
+
+    if (!story) {
+      return false;
+    }
+
+    await deleteLocalUpload(story.mediaUrl);
+    return true;
+  }
+
   return false;
 }
 
@@ -161,6 +176,10 @@ async function assertReportTargetExists({ targetType, targetId, currentUserId })
 
   if (targetType === "message") {
     return Boolean(await findMessageByIdForUser(targetId, currentUserId));
+  }
+
+  if (targetType === "story") {
+    return Boolean(await findStoryById(targetId, currentUserId));
   }
 
   return false;
@@ -386,7 +405,7 @@ router.post(
       let removed = false;
 
       if (action === "remove") {
-        if (!["post", "comment"].includes(existingReport.targetType)) {
+        if (!["post", "comment", "story"].includes(existingReport.targetType)) {
           return sendError(
             res,
             400,
