@@ -233,6 +233,7 @@ export default function Messages() {
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const searchInputRef = useRef(null);
+  const messageSearchInputRef = useRef(null);
   const sendingRef = useRef(false);
   const typingStopTimeoutRef = useRef(null);
   const refreshListsTimeoutRef = useRef(null);
@@ -254,8 +255,10 @@ export default function Messages() {
   const [editingText, setEditingText] = useState("");
   const [replyingToMessage, setReplyingToMessage] = useState(null);
   const [conversationSearch, setConversationSearch] = useState("");
+  const [messageSearch, setMessageSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeCall, setActiveCall] = useState(null);
   const [muted, setMuted] = useState(false);
   const [accentTheme, setAccentTheme] = useState("blue");
   const [quickEmoji, setQuickEmoji] = useState("👍");
@@ -308,6 +311,61 @@ export default function Messages() {
       return matchesKeyword && matchesTab;
     });
   }, [activeTab, conversationSearch, conversations, messageRequests]);
+
+  const messageSearchMatches = useMemo(() => {
+    const keyword = messageSearch.trim().toLowerCase();
+
+    if (!keyword) {
+      return [];
+    }
+
+    return messages.filter((message) => {
+      if (message.deletedAt) {
+        return false;
+      }
+
+      const searchableText = [
+        stripSharedPostUrl(message.content || ""),
+        message.mediaName || "",
+        message.senderName || "",
+        message.mediaType || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(keyword);
+    });
+  }, [messageSearch, messages]);
+
+  const messageSearchResultIds = useMemo(
+    () => new Set(messageSearchMatches.map((message) => Number(message.id))),
+    [messageSearchMatches]
+  );
+
+  const visibleMessageSearchResults = useMemo(
+    () => messageSearchMatches.slice(-8).reverse(),
+    [messageSearchMatches]
+  );
+
+  const mediaMessages = useMemo(
+    () =>
+      messages.filter(
+        (message) =>
+          !message.deletedAt &&
+          message.mediaUrl &&
+          ["gif", "image", "video"].includes(message.mediaType)
+      ),
+    [messages]
+  );
+
+  const fileMessages = useMemo(
+    () =>
+      messages.filter(
+        (message) =>
+          !message.deletedAt && message.mediaUrl && message.mediaType === "file"
+      ),
+    [messages]
+  );
 
   const loadConversations = useCallback(async function loadConversations() {
     const data = await getConversations({
@@ -748,6 +806,8 @@ export default function Messages() {
     setEditingMessageId(null);
     setEditingText("");
     setReplyingToMessage(null);
+    setMessageSearch("");
+    setActiveCall(null);
     setDetailsOpen(false);
     setSearchParams({
       conversationId: String(conversation.id),
@@ -774,6 +834,40 @@ export default function Messages() {
       ...currentNicknames,
       [activeOtherUser.id]: normalizedNickname || activeOtherUser.name,
     }));
+  }
+
+  function scrollToMessage(messageId) {
+    const messageElement = document.getElementById(`message-${messageId}`);
+
+    if (!messageElement) {
+      return;
+    }
+
+    messageElement.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    messageElement.classList.add("message-jump-highlight");
+
+    window.setTimeout(() => {
+      messageElement.classList.remove("message-jump-highlight");
+    }, 1400);
+  }
+
+  function focusMessageSearch() {
+    setDetailsOpen(true);
+    window.setTimeout(() => {
+      messageSearchInputRef.current?.focus();
+    }, 0);
+  }
+
+  function handleStartCall(type) {
+    setActiveCall({
+      type,
+      muted: false,
+      cameraOff: false,
+      startedAt: Date.now(),
+    });
   }
 
   async function submitMessage({ allowQuickEmoji = false } = {}) {
@@ -1148,16 +1242,16 @@ export default function Messages() {
                 <button
                   type="button"
                   aria-label="Gọi thoại"
-                  title="Tính năng gọi thoại đang phát triển"
-                  disabled
+                  title="Gọi thoại"
+                  onClick={() => handleStartCall("voice")}
                 >
                   ☎
                 </button>
                 <button
                   type="button"
                   aria-label="Gọi video"
-                  title="Tính năng gọi video đang phát triển"
-                  disabled
+                  title="Gọi video"
+                  onClick={() => handleStartCall("video")}
                 >
                   ▣
                 </button>
@@ -1217,6 +1311,9 @@ export default function Messages() {
                     previousSameSender ? "group-continued" : "group-start",
                     nextSameSender ? "group-not-end" : "group-end",
                     isDeleted ? "is-deleted" : "",
+                    messageSearchResultIds.has(Number(message.id))
+                      ? "message-search-match"
+                      : "",
                   ]
                     .filter(Boolean)
                     .join(" ");
@@ -1225,7 +1322,11 @@ export default function Messages() {
                   const canDelete = isMine && !isDeleted;
 
                   return (
-                    <div key={message.id} className="message-block">
+                    <div
+                      key={message.id}
+                      id={`message-${message.id}`}
+                      className="message-block"
+                    >
                       {shouldShowTimeSeparator(messages, index) && (
                         <div className="message-time-separator">
                           {formatClockTime(message.createdAt)}
@@ -1639,11 +1740,46 @@ export default function Messages() {
               <span>🔔</span>
               {muted ? "Bật thông báo" : "Tắt thông báo"}
             </button>
-            <button type="button" onClick={() => searchInputRef.current?.focus()}>
+            <button type="button" onClick={focusMessageSearch}>
               <span>⌕</span>
               Tìm kiếm
             </button>
           </div>
+
+          <section className="messages-details-section message-search-section">
+            <h3>Tìm trong đoạn chat</h3>
+            <label className="message-search-box">
+              <span aria-hidden="true">⌕</span>
+              <input
+                ref={messageSearchInputRef}
+                value={messageSearch}
+                onChange={(event) => setMessageSearch(event.target.value)}
+                placeholder="Tìm tin nhắn"
+              />
+            </label>
+            {messageSearch.trim() && (
+              <div className="message-search-results">
+                {visibleMessageSearchResults.length > 0 ? (
+                  visibleMessageSearchResults.map((message) => (
+                    <button
+                      key={message.id}
+                      type="button"
+                      onClick={() => scrollToMessage(message.id)}
+                    >
+                      <strong>
+                        {Number(message.senderId) === Number(user.id)
+                          ? "Bạn"
+                          : message.senderName || activePeerName}
+                      </strong>
+                      <span>{getReplyPreviewText(message)}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p>Không tìm thấy tin nhắn phù hợp.</p>
+                )}
+              </div>
+            )}
+          </section>
 
           <section className="messages-details-section">
             <h3>Thông tin về đoạn chat</h3>
@@ -1699,12 +1835,54 @@ export default function Messages() {
 
           <section className="messages-details-section">
             <h3>File phương tiện và file</h3>
-            <button type="button" disabled>
-              File phương tiện
-            </button>
-            <button type="button" disabled>
-              File
-            </button>
+            {mediaMessages.length > 0 ? (
+              <div className="message-detail-media-grid">
+                {mediaMessages.slice(-9).reverse().map((message) => {
+                  const mediaUrl = getFileUrl(message.mediaUrl);
+
+                  return (
+                    <button
+                      key={message.id}
+                      type="button"
+                      onClick={() => scrollToMessage(message.id)}
+                      aria-label="Mở file phương tiện trong đoạn chat"
+                    >
+                      {message.mediaType === "video" ? (
+                        <video src={mediaUrl} muted preload="metadata" />
+                      ) : (
+                        <img
+                          src={mediaUrl}
+                          alt={message.mediaName || "File phương tiện"}
+                          loading="lazy"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="messages-details-empty">
+                Chưa có ảnh, video hoặc GIF.
+              </p>
+            )}
+
+            <div className="message-detail-file-list">
+              {fileMessages.length > 0 ? (
+                fileMessages.slice(-6).reverse().map((message) => (
+                  <a
+                    key={message.id}
+                    href={getFileUrl(message.mediaUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <span aria-hidden="true">📎</span>
+                    <strong>{message.mediaName || "Tệp tin"}</strong>
+                  </a>
+                ))
+              ) : (
+                <p className="messages-details-empty">Chưa có tệp tin.</p>
+              )}
+            </div>
           </section>
 
           <section className="messages-details-section">
@@ -1721,6 +1899,99 @@ export default function Messages() {
             </button>
           </section>
         </aside>
+      )}
+
+      {activeCall && activeConversation && (
+        <div className="message-call-overlay" role="dialog" aria-modal="true">
+          <section
+            className={[
+              "message-call-card",
+              activeCall.type === "video" ? "video" : "voice",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <button
+              className="message-call-close"
+              type="button"
+              onClick={() => setActiveCall(null)}
+              aria-label="Đóng cuộc gọi"
+            >
+              ×
+            </button>
+
+            {activeCall.type === "video" && (
+              <div className="message-call-video-surface">
+                {activeAvatarUrl ? (
+                  <img src={activeAvatarUrl} alt="" />
+                ) : (
+                  <span>{activePeerName?.charAt(0)?.toUpperCase() || "U"}</span>
+                )}
+                <small>
+                  {activeCall.cameraOff ? "Camera đã tắt" : "Đang kết nối video"}
+                </small>
+              </div>
+            )}
+
+            <div className="message-call-profile">
+              {activeAvatarUrl ? (
+                <img src={activeAvatarUrl} alt={activePeerName} />
+              ) : (
+                <span>{activePeerName?.charAt(0)?.toUpperCase() || "U"}</span>
+              )}
+              <h2>{activePeerName}</h2>
+              <p>
+                {activeCall.type === "video"
+                  ? "Đang kết nối video..."
+                  : "Đang kết nối cuộc gọi..."}
+              </p>
+            </div>
+
+            <div className="message-call-actions">
+              <button
+                type="button"
+                className={activeCall.muted ? "active" : ""}
+                onClick={() =>
+                  setActiveCall((currentCall) =>
+                    currentCall
+                      ? {
+                          ...currentCall,
+                          muted: !currentCall.muted,
+                        }
+                      : currentCall
+                  )
+                }
+              >
+                {activeCall.muted ? "Bật mic" : "Tắt mic"}
+              </button>
+              {activeCall.type === "video" && (
+                <button
+                  type="button"
+                  className={activeCall.cameraOff ? "active" : ""}
+                  onClick={() =>
+                    setActiveCall((currentCall) =>
+                      currentCall
+                        ? {
+                            ...currentCall,
+                            cameraOff: !currentCall.cameraOff,
+                          }
+                        : currentCall
+                    )
+                  }
+                >
+                  {activeCall.cameraOff ? "Bật camera" : "Tắt camera"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="danger"
+                onClick={() => setActiveCall(null)}
+              >
+                Kết thúc
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       <ReportDialog

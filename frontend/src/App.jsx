@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -41,7 +41,11 @@ import AdminAuditLogs from "./pages/AdminAuditLogs.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
 import StoryViewer from "./pages/StoryViewer.jsx";
+import { getFileUrl } from "./api/client.js";
+import { getConversations, getMessageStreamUrl } from "./api/message.api.js";
 import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
+import { connectReconnectingEventSource } from "./utils/reconnectingEventSource.js";
+import { formatRelativeTime } from "./utils/time.js";
 
 const developingItems = [
   { icon: "✺", label: "Meta AI" },
@@ -242,7 +246,129 @@ function SocialLeftSidebar({ user, onDeveloping }) {
   );
 }
 
-function SocialRightSidebar({ onDeveloping }) {
+function getSidebarContactStatus(conversation) {
+  if (conversation.otherUser?.isOnline) {
+    return "Đang hoạt động";
+  }
+
+  if (conversation.lastMessage?.deletedAt) {
+    return "Tin nhắn đã được thu hồi";
+  }
+
+  if (conversation.lastMessage?.content?.trim()) {
+    return conversation.lastMessage.content;
+  }
+
+  const mediaLabels = {
+    gif: "Đã gửi GIF",
+    image: "Đã gửi ảnh",
+    video: "Đã gửi video",
+    file: "Đã gửi tệp tin",
+  };
+
+  if (conversation.lastMessage?.mediaType) {
+    return mediaLabels[conversation.lastMessage.mediaType] || "Đã gửi file";
+  }
+
+  if (conversation.otherUser?.lastSeenAt) {
+    return `Hoạt động ${formatRelativeTime(conversation.otherUser.lastSeenAt)}`;
+  }
+
+  return "Mở Messenger";
+}
+
+function SocialRightSidebar({ user, onDeveloping }) {
+  const [contacts, setContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
+  const [contactError, setContactError] = useState("");
+  const userId = user?.id || null;
+
+  const loadContacts = useCallback(
+    async function loadContacts({ quiet = false } = {}) {
+      if (!userId) {
+        setContacts([]);
+        setLoadingContacts(false);
+        return;
+      }
+
+      try {
+        if (!quiet) {
+          setLoadingContacts(true);
+        }
+
+        setContactError("");
+        const data = await getConversations({
+          page: 1,
+          limit: 12,
+        });
+
+        setContacts(data.conversations || []);
+      } catch (error) {
+        setContactError(error.message);
+      } finally {
+        if (!quiet) {
+          setLoadingContacts(false);
+        }
+      }
+    },
+    [userId]
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      loadContacts();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadContacts]);
+
+  useEffect(() => {
+    if (!userId) {
+      return undefined;
+    }
+
+    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
+      listeners: {
+        message: () => {
+          loadContacts({ quiet: true }).catch(() => {});
+        },
+        messageUpdate: () => {
+          loadContacts({ quiet: true }).catch(() => {});
+        },
+        read: () => {
+          loadContacts({ quiet: true }).catch(() => {});
+        },
+        presence: (event) => {
+          const presenceEvent = JSON.parse(event.data);
+
+          setContacts((currentContacts) =>
+            currentContacts.map((conversation) =>
+              Number(conversation.otherUser?.id) ===
+              Number(presenceEvent.userId)
+                ? {
+                    ...conversation,
+                    otherUser: {
+                      ...conversation.otherUser,
+                      isOnline: Boolean(presenceEvent.isOnline),
+                      lastSeenAt: presenceEvent.isOnline
+                        ? conversation.otherUser.lastSeenAt
+                        : new Date().toISOString(),
+                    },
+                  }
+                : conversation
+            )
+          );
+        },
+      },
+    });
+
+    return () => {
+      connection.close();
+    };
+  }, [loadContacts, userId]);
+
   return (
     <aside className="social-sidebar right">
       <section className="right-panel">
@@ -256,12 +382,59 @@ function SocialRightSidebar({ onDeveloping }) {
       <section className="right-panel">
         <div className="right-panel-header">
           <h2>Người liên hệ</h2>
-          <button type="button" onClick={() => onDeveloping("Gọi video")}>
-            ◦◦◦
+          <button
+            type="button"
+            onClick={() => loadContacts()}
+            aria-label="Làm mới người liên hệ"
+          >
+            ↻
           </button>
         </div>
 
-        <p className="right-panel-empty">Danh bạ realtime đang phát triển.</p>
+        {loadingContacts ? (
+          <p className="right-panel-empty">Đang tải người liên hệ...</p>
+        ) : contactError ? (
+          <button type="button" onClick={() => loadContacts()}>
+            Không tải được danh bạ. Thử lại
+          </button>
+        ) : contacts.length === 0 ? (
+          <p className="right-panel-empty">Chưa có cuộc trò chuyện gần đây.</p>
+        ) : (
+          contacts.map((conversation) => {
+            const otherUser = conversation.otherUser || {};
+            const avatarUrl = getFileUrl(otherUser.avatarUrl);
+
+            return (
+              <Link
+                key={conversation.id}
+                className="contact-row"
+                to={`/messages?conversationId=${conversation.id}`}
+              >
+                <span className="contact-avatar-wrap">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={otherUser.name || ""} />
+                  ) : (
+                    <span className="contact-avatar-placeholder">
+                      {otherUser.name?.charAt(0)?.toUpperCase() || "U"}
+                    </span>
+                  )}
+                  <span
+                    className={
+                      otherUser.isOnline
+                        ? "contact-presence online"
+                        : "contact-presence"
+                    }
+                    aria-hidden="true"
+                  />
+                </span>
+                <div className="contact-row-content">
+                  <strong>{otherUser.name || "Người dùng"}</strong>
+                  <small>{getSidebarContactStatus(conversation)}</small>
+                </div>
+              </Link>
+            );
+          })
+        )}
       </section>
     </aside>
   );
@@ -391,7 +564,7 @@ export default function App() {
         </main>
 
         {showSocialShell && (
-          <SocialRightSidebar onDeveloping={showDevelopingNotice} />
+          <SocialRightSidebar user={user} onDeveloping={showDevelopingNotice} />
         )}
       </div>
 
