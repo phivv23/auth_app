@@ -49,6 +49,7 @@ export default function Feed() {
           page,
           limit,
           signal: controller.signal,
+          timeoutMs: 12000,
         });
 
         if (!isActive) {

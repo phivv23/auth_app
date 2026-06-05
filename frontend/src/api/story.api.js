@@ -10,12 +10,15 @@ function storyPath(storyId, suffix = "") {
   return `/stories/${encodeURIComponent(normalizedStoryId)}${suffix}`;
 }
 
-export function getStories({ limit = 50, signal } = {}) {
+export function getStories({ limit = 50, signal, timeoutMs } = {}) {
   const params = new URLSearchParams();
 
   params.set("limit", limit);
 
-  return apiFetch(`/stories?${params.toString()}`, { signal });
+  return apiFetch(`/stories?${params.toString()}`, {
+    signal,
+    timeoutMs,
+  });
 }
 
 export function createStory(formData) {

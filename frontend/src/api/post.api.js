@@ -121,13 +121,21 @@ export function togglePostBookmark(postId) {
   });
 }
 
-export function getFeedPosts({ page = 1, limit = 10, signal } = {}) {
+export function getFeedPosts({
+  page = 1,
+  limit = 10,
+  signal,
+  timeoutMs,
+} = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/posts/feed?${params.toString()}`, { signal });
+  return apiFetch(`/posts/feed?${params.toString()}`, {
+    signal,
+    timeoutMs,
+  });
 }
 
 export function getVideoPosts({ page = 1, limit = 10, signal } = {}) {

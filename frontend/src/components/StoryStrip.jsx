@@ -89,6 +89,7 @@ export default function StoryStrip({ onNotice }) {
         const data = await getStories({
           limit: 50,
           signal: controller.signal,
+          timeoutMs: 8000,
         });
 
         if (isActive) {

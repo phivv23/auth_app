@@ -75,10 +75,13 @@ export function searchUsers(
   return apiFetch(`/users/search?${params.toString()}`);
 }
 
-export function getSuggestedUsers({ limit = 5, signal } = {}) {
+export function getSuggestedUsers({ limit = 5, signal, timeoutMs } = {}) {
   const params = new URLSearchParams();
 
   params.set("limit", limit);
 
-  return apiFetch(`/users/suggestions?${params.toString()}`, { signal });
+  return apiFetch(`/users/suggestions?${params.toString()}`, {
+    signal,
+    timeoutMs,
+  });
 }

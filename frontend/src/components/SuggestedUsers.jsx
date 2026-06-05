@@ -31,6 +31,7 @@ export default function SuggestedUsers({ limit = 5, onFollowed }) {
         const data = await getSuggestedUsers({
           limit,
           signal: controller.signal,
+          timeoutMs: 8000,
         });
 
         if (!isActive) {

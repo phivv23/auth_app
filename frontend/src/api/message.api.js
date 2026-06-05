@@ -4,22 +4,38 @@ export function getMessageStreamUrl() {
   return `${API_URL}/messages/stream`;
 }
 
-export function getConversations({ page = 1, limit = 20 } = {}) {
+export function getConversations({
+  page = 1,
+  limit = 20,
+  signal,
+  timeoutMs,
+} = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/messages/conversations?${params.toString()}`);
+  return apiFetch(`/messages/conversations?${params.toString()}`, {
+    signal,
+    timeoutMs,
+  });
 }
 
-export function getMessageRequests({ page = 1, limit = 20 } = {}) {
+export function getMessageRequests({
+  page = 1,
+  limit = 20,
+  signal,
+  timeoutMs,
+} = {}) {
   const params = new URLSearchParams();
 
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/messages/requests?${params.toString()}`);
+  return apiFetch(`/messages/requests?${params.toString()}`, {
+    signal,
+    timeoutMs,
+  });
 }
 
 export function startConversation(userId) {

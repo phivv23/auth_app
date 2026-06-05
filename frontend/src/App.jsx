@@ -43,10 +43,11 @@ import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
 import StoryViewer from "./pages/StoryViewer.jsx";
 import { getFileUrl } from "./api/client.js";
-import { getConversations, getMessageStreamUrl } from "./api/message.api.js";
+import { getConversations } from "./api/message.api.js";
 import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
-import { connectReconnectingEventSource } from "./utils/reconnectingEventSource.js";
 import { formatRelativeTime } from "./utils/time.js";
+
+const CONTACT_REFRESH_INTERVAL_MS = 60000;
 
 const developingItems = [
   { icon: "✺", label: "Meta AI" },
@@ -282,15 +283,21 @@ function SocialRightSidebar({ user, onDeveloping }) {
   const [contacts, setContacts] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [contactError, setContactError] = useState("");
+  const contactsRequestRef = useRef(null);
   const userId = user?.id || null;
 
   const loadContacts = useCallback(
     async function loadContacts({ quiet = false } = {}) {
       if (!userId) {
+        contactsRequestRef.current?.abort();
         setContacts([]);
         setLoadingContacts(false);
         return;
       }
+
+      contactsRequestRef.current?.abort();
+      const controller = new AbortController();
+      contactsRequestRef.current = controller;
 
       try {
         if (!quiet) {
@@ -301,13 +308,28 @@ function SocialRightSidebar({ user, onDeveloping }) {
         const data = await getConversations({
           page: 1,
           limit: 12,
+          signal: controller.signal,
+          timeoutMs: 8000,
         });
 
-        setContacts(data.conversations || []);
+        if (contactsRequestRef.current === controller) {
+          setContacts(data.conversations || []);
+        }
       } catch (error) {
-        setContactError(error.message);
+        if (
+          contactsRequestRef.current === controller &&
+          error.name !== "AbortError"
+        ) {
+          setContactError(error.message);
+        }
       } finally {
-        if (!quiet) {
+        const isLatestRequest = contactsRequestRef.current === controller;
+
+        if (isLatestRequest) {
+          contactsRequestRef.current = null;
+        }
+
+        if (isLatestRequest) {
           setLoadingContacts(false);
         }
       }
@@ -322,6 +344,7 @@ function SocialRightSidebar({ user, onDeveloping }) {
 
     return () => {
       window.clearTimeout(timeoutId);
+      contactsRequestRef.current?.abort();
     };
   }, [loadContacts]);
 
@@ -330,43 +353,21 @@ function SocialRightSidebar({ user, onDeveloping }) {
       return undefined;
     }
 
-    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
-      listeners: {
-        message: () => {
-          loadContacts({ quiet: true }).catch(() => {});
-        },
-        messageUpdate: () => {
-          loadContacts({ quiet: true }).catch(() => {});
-        },
-        read: () => {
-          loadContacts({ quiet: true }).catch(() => {});
-        },
-        presence: (event) => {
-          const presenceEvent = JSON.parse(event.data);
+    const intervalId = window.setInterval(() => {
+      loadContacts({ quiet: true }).catch(() => {});
+    }, CONTACT_REFRESH_INTERVAL_MS);
 
-          setContacts((currentContacts) =>
-            currentContacts.map((conversation) =>
-              Number(conversation.otherUser?.id) ===
-              Number(presenceEvent.userId)
-                ? {
-                    ...conversation,
-                    otherUser: {
-                      ...conversation.otherUser,
-                      isOnline: Boolean(presenceEvent.isOnline),
-                      lastSeenAt: presenceEvent.isOnline
-                        ? conversation.otherUser.lastSeenAt
-                        : new Date().toISOString(),
-                    },
-                  }
-                : conversation
-            )
-          );
-        },
-      },
-    });
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadContacts({ quiet: true }).catch(() => {});
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      connection.close();
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [loadContacts, userId]);
 
