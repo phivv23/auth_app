@@ -29,6 +29,7 @@ import Notifications from "./pages/Notifications.jsx";
 import NotificationBell from "./components/NotificationBell.jsx";
 import MessagePopups from "./components/MessagePopups.jsx";
 import MessageDropdown from "./components/MessageDropdown.jsx";
+import { openMessagePopup } from "./utils/messagePopup.js";
 import UserSearch from "./pages/UserSearch.jsx";
 import Friends from "./pages/Friends.jsx";
 import Messages from "./pages/Messages.jsx";
@@ -405,10 +406,11 @@ function SocialRightSidebar({ user, onDeveloping }) {
             const avatarUrl = getFileUrl(otherUser.avatarUrl);
 
             return (
-              <Link
+              <button
                 key={conversation.id}
+                type="button"
                 className="contact-row"
-                to={`/messages?conversationId=${conversation.id}`}
+                onClick={() => openMessagePopup(otherUser.id)}
               >
                 <span className="contact-avatar-wrap">
                   {avatarUrl ? (
@@ -431,7 +433,7 @@ function SocialRightSidebar({ user, onDeveloping }) {
                   <strong>{otherUser.name || "Người dùng"}</strong>
                   <small>{getSidebarContactStatus(conversation)}</small>
                 </div>
-              </Link>
+              </button>
             );
           })
         )}

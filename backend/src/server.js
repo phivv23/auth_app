@@ -15,22 +15,33 @@ import reportRoutes from "./routes/report.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storyRoutes from "./routes/story.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
+import { applySecurityMiddleware } from "./middleware/security.js";
 import { sendError } from "./utils/http.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const uploadsRoot = path.resolve(__dirname, "../uploads");
 
-app.use((req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  next();
+applySecurityMiddleware(app, {
+  isProduction: env.nodeEnv === "production",
+  trustProxy: env.trustProxy,
 });
 
 // Cho phép frontend truy cập ảnh qua URL:
 // http://localhost:5000/uploads/avatars/ten-file.png
-app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
+app.use(
+  "/uploads",
+  express.static(uploadsRoot, {
+    dotfiles: "deny",
+    immutable: env.nodeEnv === "production",
+    maxAge: env.nodeEnv === "production" ? "7d" : 0,
+    setHeaders(res) {
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+    },
+  })
+);
 
 app.use(
   cors({
