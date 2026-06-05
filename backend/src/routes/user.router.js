@@ -44,6 +44,83 @@ const router = Router();
 
 const SALT_ROUNDS = 12;
 
+export function createChangePasswordHandler({
+  findUserWithPasswordById: findUserWithPassword = findUserWithPasswordById,
+  passwordHasher = bcrypt,
+  signAccessToken: signToken = signAccessToken,
+  updateUserPassword: updatePassword = updateUserPassword,
+} = {}) {
+  return async (req, res, next) => {
+    try {
+      const validation = validatePasswordChangeInput(req.body);
+
+      if (validation.error) {
+        return sendError(
+          res,
+          400,
+          validation.error.message,
+          validation.error.code,
+          validation.error.fields
+        );
+      }
+
+      const {
+        currentPassword: rawCurrentPassword,
+        newPassword: rawNewPassword,
+      } = validation.value;
+
+      /**
+       * Cần lấy user kèm passwordHash để so sánh password hiện tại.
+       */
+      const user = await findUserWithPassword(req.user.id);
+
+      if (!user) {
+        return sendError(res, 401, "User không tồn tại.", "USER_NOT_FOUND");
+      }
+
+      /**
+       * Kiểm tra password hiện tại có đúng không.
+       */
+      const isCurrentPasswordCorrect = await passwordHasher.compare(
+        rawCurrentPassword,
+        user.passwordHash
+      );
+
+      if (!isCurrentPasswordCorrect) {
+        return sendError(
+          res,
+          401,
+          "Password hiện tại không đúng.",
+          "INVALID_CURRENT_PASSWORD"
+        );
+      }
+
+      /**
+       * Hash password mới.
+       * Không bao giờ lưu raw password vào database.
+       */
+      const newPasswordHash = await passwordHasher.hash(
+        rawNewPassword,
+        SALT_ROUNDS
+      );
+
+      /**
+       * Lưu passwordHash mới.
+       */
+      const updatedUser = await updatePassword(user.id, newPasswordHash);
+      const token = signToken(updatedUser.id, updatedUser.tokenVersion || 0);
+
+      res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+
+      return res.json({
+        message: "Đổi password thành công.",
+      });
+    } catch (error) {
+      return next(error);
+    }
+  };
+}
+
 function parsePositiveInt(value) {
   const number = Number(value);
 
@@ -200,72 +277,7 @@ router.patch("/me", requireAuth, async (req, res, next) => {
  *   "newPassword": "abcdef"
  * }
  */
-router.patch("/me/password", requireAuth, async (req, res, next) => {
-  try {
-    const validation = validatePasswordChangeInput(req.body);
-
-    if (validation.error) {
-      return sendError(
-        res,
-        400,
-        validation.error.message,
-        validation.error.code,
-        validation.error.fields
-      );
-    }
-
-    const {
-      currentPassword: rawCurrentPassword,
-      newPassword: rawNewPassword,
-    } = validation.value;
-
-    /**
-     * Cần lấy user kèm passwordHash để so sánh password hiện tại.
-     */
-    const user = await findUserWithPasswordById(req.user.id);
-
-    if (!user) {
-      return sendError(res, 401, "User không tồn tại.", "USER_NOT_FOUND");
-    }
-
-    /**
-     * Kiểm tra password hiện tại có đúng không.
-     */
-    const isCurrentPasswordCorrect = await bcrypt.compare(
-      rawCurrentPassword,
-      user.passwordHash
-    );
-
-    if (!isCurrentPasswordCorrect) {
-      return sendError(
-        res,
-        401,
-        "Password hiện tại không đúng.",
-        "INVALID_CURRENT_PASSWORD"
-      );
-    }
-
-    /**
-     * Hash password mới.
-     * Không bao giờ lưu raw password vào database.
-     */
-    const newPasswordHash = await bcrypt.hash(rawNewPassword, SALT_ROUNDS);
-
-    /**
-     * Lưu passwordHash mới.
-     */
-    const updatedUser = await updateUserPassword(user.id, newPasswordHash);
-    const token = signAccessToken(updatedUser.id, updatedUser.tokenVersion || 0);
-
-    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
-
-    return res.json({
-      message: "Đổi password thành công.",
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+router.patch("/me/password", requireAuth, createChangePasswordHandler());
 
 router.patch(
   "/me/avatar",

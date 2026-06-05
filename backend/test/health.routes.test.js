@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import express from "express";
+
+import { request } from "./helpers/http.js";
 
 process.env.CLIENT_URL ||= "http://localhost:5173";
 process.env.DB_HOST ||= "127.0.0.1";
@@ -12,32 +14,6 @@ process.env.JWT_SECRET ||= "development_secret_with_enough_length";
 process.env.NODE_ENV ||= "test";
 
 const { createHealthRouter } = await import("../src/health.js");
-
-const servers = [];
-
-after(async () => {
-  await Promise.all(
-    servers.map(
-      (server) =>
-        new Promise((resolve) => {
-          server.close(resolve);
-        })
-    )
-  );
-});
-
-async function request(app, path) {
-  const server = app.listen(0);
-  servers.push(server);
-  const { port } = server.address();
-  const response = await fetch(`http://127.0.0.1:${port}${path}`);
-  const body = await response.json();
-
-  return {
-    status: response.status,
-    body,
-  };
-}
 
 describe("health routes", () => {
   it("returns live status without touching the database", async () => {

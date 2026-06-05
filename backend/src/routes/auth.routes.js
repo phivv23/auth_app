@@ -7,11 +7,15 @@ import {
 } from "../config/cookie.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
-  createUser,
-  findPublicUserByEmail,
-  findUserByEmail,
+  createUser as createUserModel,
+  findPublicUserByEmail as findPublicUserByEmailModel,
+  findUserByEmail as findUserByEmailModel,
+  incrementUserTokenVersion as incrementUserTokenVersionModel,
 } from "../models/user.model.js";
-import { signAccessToken } from "../utils/token.js";
+import {
+  signAccessToken as signAccessTokenJwt,
+  verifyAccessToken as verifyAccessTokenJwt,
+} from "../utils/token.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { sendError } from "../utils/http.js";
 import {
@@ -19,22 +23,23 @@ import {
   validateRegisterInput,
 } from "../validation/auth.validation.js";
 
-const router = Router();
-
 const SALT_ROUNDS = 12;
-const authRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  keyPrefix: "auth",
-  message: "Bạn thử đăng nhập/đăng ký quá nhiều lần. Vui lòng thử lại sau.",
-});
+
+function createAuthRateLimit() {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    keyPrefix: "auth",
+    message: "Bạn thử đăng nhập/đăng ký quá nhiều lần. Vui lòng thử lại sau.",
+  });
+}
 
 /**
  * Chuẩn hóa user trước khi trả về frontend.
  *
  * Không bao giờ trả passwordHash.
  */
-function toPublicUser(user) {
+export function toPublicUser(user) {
   return {
     id: user.id,
     name: user.name,
@@ -50,6 +55,41 @@ function toPublicUser(user) {
     updatedAt: user.updatedAt,
   };
 }
+
+async function revokeValidSessionToken({
+  token,
+  verifyAccessToken,
+  incrementUserTokenVersion,
+}) {
+  if (!token) {
+    return;
+  }
+
+  let payload = null;
+
+  try {
+    payload = verifyAccessToken(token);
+  } catch {
+    return;
+  }
+
+  if (payload?.userId) {
+    await incrementUserTokenVersion(payload.userId);
+  }
+}
+
+export function createAuthRouter({
+  authRateLimit = createAuthRateLimit(),
+  createUser = createUserModel,
+  findPublicUserByEmail = findPublicUserByEmailModel,
+  findUserByEmail = findUserByEmailModel,
+  incrementUserTokenVersion = incrementUserTokenVersionModel,
+  passwordHasher = bcrypt,
+  requireAuthMiddleware = requireAuth,
+  signAccessToken = signAccessTokenJwt,
+  verifyAccessToken = verifyAccessTokenJwt,
+} = {}) {
+  const router = Router();
 
 /**
  * POST /api/auth/register
@@ -95,7 +135,7 @@ router.post("/register", authRateLimit, async (req, res, next) => {
      *
      * Tuyệt đối không lưu raw password.
      */
-    const passwordHash = await bcrypt.hash(rawPassword, SALT_ROUNDS);
+    const passwordHash = await passwordHasher.hash(rawPassword, SALT_ROUNDS);
 
     /**
      * INSERT user vào MySQL.
@@ -175,7 +215,7 @@ router.post("/login", authRateLimit, async (req, res, next) => {
     /**
      * So sánh password user nhập với passwordHash trong DB.
      */
-    const isPasswordCorrect = await bcrypt.compare(
+    const isPasswordCorrect = await passwordHasher.compare(
       rawPassword,
       user.passwordHash
     );
@@ -220,19 +260,28 @@ router.post("/login", authRateLimit, async (req, res, next) => {
 /**
  * POST /api/auth/logout
  *
- * Với JWT lưu cookie, logout cơ bản là clear cookie.
+ * Với JWT lưu cookie, logout cần clear cookie và revoke token version.
  *
  * Lưu ý:
- * - JWT là stateless.
- * - Nếu token bị copy ra ngoài trước khi logout, token đó vẫn hợp lệ đến khi hết hạn.
- * - Production thường dùng thêm refresh token hoặc token blacklist.
+ * - Nếu cookie không có hoặc token không hợp lệ, logout vẫn thành công.
+ * - Nếu token hợp lệ, tăng token_version để token cũ hết hiệu lực.
  */
-router.post("/logout", (req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME, getClearCookieOptions());
+router.post("/logout", async (req, res, next) => {
+  try {
+    await revokeValidSessionToken({
+      token: req.cookies?.[AUTH_COOKIE_NAME],
+      verifyAccessToken,
+      incrementUserTokenVersion,
+    });
 
-  return res.json({
-    message: "Logout thành công.",
-  });
+    res.clearCookie(AUTH_COOKIE_NAME, getClearCookieOptions());
+
+    return res.json({
+      message: "Logout thành công.",
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 /**
@@ -245,10 +294,13 @@ router.post("/logout", (req, res) => {
  * - SELECT user từ database
  * - gắn user vào req.user
  */
-router.get("/me", requireAuth, (req, res) => {
+router.get("/me", requireAuthMiddleware, (req, res) => {
   return res.json({
     user: req.user,
   });
 });
 
-export default router;
+  return router;
+}
+
+export default createAuthRouter();

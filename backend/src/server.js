@@ -20,88 +20,108 @@ import { createRequestLogger } from "./middleware/requestLogger.js";
 import { applySecurityMiddleware } from "./middleware/security.js";
 import { sendError } from "./utils/http.js";
 
-export const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsRoot = path.resolve(__dirname, "../uploads");
 
-applySecurityMiddleware(app, {
-  isProduction: env.nodeEnv === "production",
-  trustProxy: env.trustProxy,
-});
+export function createApp({
+  adminRouter = adminRoutes,
+  authRouter = authRoutes,
+  errorLogger = console,
+  friendRouter = friendRoutes,
+  healthRouter = createHealthRouter(),
+  messageRouter = messageRoutes,
+  notificationRouter = notificationRoutes,
+  postRouter = postRoutes,
+  protectedRouter = protectedRoutes,
+  reportRouter = reportRoutes,
+  requestLogger = createRequestLogger(),
+  storyRouter = storyRoutes,
+  userRouter = userRoutes,
+} = {}) {
+  const app = express();
 
-app.use(createRequestLogger());
+  applySecurityMiddleware(app, {
+    isProduction: env.nodeEnv === "production",
+    trustProxy: env.trustProxy,
+  });
 
-// Cho phép frontend truy cập ảnh qua URL:
-// http://localhost:5000/uploads/avatars/ten-file.png
-app.use(
-  "/uploads",
-  express.static(uploadsRoot, {
-    dotfiles: "deny",
-    immutable: env.nodeEnv === "production",
-    maxAge: env.nodeEnv === "production" ? "7d" : 0,
-    setHeaders(res) {
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      res.setHeader("X-Content-Type-Options", "nosniff");
-    },
-  })
-);
+  app.use(requestLogger);
 
-app.use(
-  cors({
-    origin: env.clientUrl,
-    credentials: true,
-  })
-);
+  // Cho phép frontend truy cập ảnh qua URL:
+  // http://localhost:5000/uploads/avatars/ten-file.png
+  app.use(
+    "/uploads",
+    express.static(uploadsRoot, {
+      dotfiles: "deny",
+      immutable: env.nodeEnv === "production",
+      maxAge: env.nodeEnv === "production" ? "7d" : 0,
+      setHeaders(res) {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+      },
+    })
+  );
 
-app.use(cookieParser());
-app.use(requireTrustedOrigin);
-app.use(express.json({ limit: "1mb" }));
+  app.use(
+    cors({
+      origin: env.clientUrl,
+      credentials: true,
+    })
+  );
 
-app.use("/api/health", createHealthRouter());
+  app.use(cookieParser());
+  app.use(requireTrustedOrigin);
+  app.use(express.json({ limit: "1mb" }));
 
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/posts", postRoutes);
-app.use("/api/friends", friendRoutes);
-app.use("/api/messages", messageRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/protected", protectedRoutes);
-app.use("/api/reports", reportRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/stories", storyRoutes);
+  app.use("/api/health", healthRouter);
+  app.use("/api/auth", authRouter);
+  app.use("/api/users", userRouter);
+  app.use("/api/posts", postRouter);
+  app.use("/api/friends", friendRouter);
+  app.use("/api/messages", messageRouter);
+  app.use("/api/notifications", notificationRouter);
+  app.use("/api/protected", protectedRouter);
+  app.use("/api/reports", reportRouter);
+  app.use("/api/admin", adminRouter);
+  app.use("/api/stories", storyRouter);
 
-/**
- * 404 handler.
- */
-app.use((req, res) => {
-  return sendError(res, 404, "Route không tồn tại.", "ROUTE_NOT_FOUND");
-});
+  /**
+   * 404 handler.
+   */
+  app.use((req, res) => {
+    return sendError(res, 404, "Route không tồn tại.", "ROUTE_NOT_FOUND");
+  });
 
-app.use((err, req, res, next) => {
-  const errorDetails = {
-    requestId: req.requestId || res.locals.requestId,
-    method: req.method,
-    path: req.originalUrl || req.url,
-    message: err.message,
-  };
+  app.use((err, req, res, next) => {
+    const errorDetails = {
+      requestId: req.requestId || res.locals.requestId,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      message: err.message,
+    };
 
-  if (env.nodeEnv === "production") {
-    console.error("Unhandled request error", errorDetails);
-  } else {
-    console.error(err);
-  }
+    if (env.nodeEnv === "production") {
+      errorLogger.error("Unhandled request error", errorDetails);
+    } else {
+      errorLogger.error(err);
+    }
 
-  if (err.type === "entity.parse.failed") {
-    return sendError(res, 400, "JSON không hợp lệ.", "INVALID_JSON");
-  }
+    if (err.type === "entity.parse.failed") {
+      return sendError(res, 400, "JSON không hợp lệ.", "INVALID_JSON");
+    }
 
-  if (err.type === "entity.too.large") {
-    return sendError(res, 413, "Payload quá lớn.", "PAYLOAD_TOO_LARGE");
-  }
+    if (err.type === "entity.too.large") {
+      return sendError(res, 413, "Payload quá lớn.", "PAYLOAD_TOO_LARGE");
+    }
 
-  return sendError(res, 500, "Lỗi server.", "INTERNAL_SERVER_ERROR");
-});
+    return sendError(res, 500, "Lỗi server.", "INTERNAL_SERVER_ERROR");
+  });
+
+  return app;
+}
+
+export const app = createApp();
 
 if (env.nodeEnv !== "test") {
   app.listen(env.port, () => {
