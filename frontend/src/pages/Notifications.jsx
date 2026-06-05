@@ -3,12 +3,12 @@ import { Link, useNavigate } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
-  getNotificationStreamUrl,
   getNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../api/notification.api.js";
 import { NotificationListSkeleton } from "../components/Skeleton.jsx";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import {
   getNotificationTarget,
   getNotificationText,
@@ -86,16 +86,10 @@ export default function Notifications() {
     };
   }, [page, limit]);
 
-  useEffect(() => {
-    if (page !== 1) {
-      return;
-    }
-
-    const eventSource = new EventSource(getNotificationStreamUrl(), {
-      withCredentials: true,
-    });
-
-    eventSource.addEventListener("notification", (event) => {
+  useRealtimeSubscription(
+    "notifications",
+    "notification",
+    (event) => {
       const notification = JSON.parse(event.data);
 
       setNotifications((currentNotifications) => {
@@ -106,12 +100,11 @@ export default function Notifications() {
         return [notification, ...withoutDuplicate].slice(0, limit);
       });
       setTotal((currentTotal) => currentTotal + 1);
-    });
-
-    return () => {
-      eventSource.close();
-    };
-  }, [page, limit]);
+    },
+    {
+      enabled: page === 1,
+    }
+  );
 
   async function handleOpenNotification(notification) {
     try {

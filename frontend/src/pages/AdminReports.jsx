@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
 
-import { getNotificationStreamUrl } from "../api/notification.api.js";
 import {
   applyAdminReportAction,
   getAdminReport,
@@ -9,6 +8,7 @@ import {
   updateAdminReportStatus,
 } from "../api/report.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import {
   canAccessReports,
   canManageAdminArea,
@@ -232,16 +232,10 @@ export default function AdminReports() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [focusedReportId, loading, visibleReports.length]);
 
-  useEffect(() => {
-    if (!canAccessReports(user)) {
-      return undefined;
-    }
-
-    const eventSource = new EventSource(getNotificationStreamUrl(), {
-      withCredentials: true,
-    });
-
-    eventSource.addEventListener("notification", async (event) => {
+  useRealtimeSubscription(
+    "notifications",
+    "notification",
+    async (event) => {
       const notification = JSON.parse(event.data);
 
       if (notification.type !== "admin_report_created") {
@@ -280,12 +274,11 @@ export default function AdminReports() {
       } catch {
         setRefreshKey((currentKey) => currentKey + 1);
       }
-    });
-
-    return () => {
-      eventSource.close();
-    };
-  }, [limit, page, status, targetType, user]);
+    },
+    {
+      enabled: canAccessReports(user),
+    }
+  );
 
   if (authLoading) {
     return <p>Đang kiểm tra quyền quản trị...</p>;

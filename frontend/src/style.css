@@ -380,6 +380,35 @@
   padding: 16px 18px 18px;
 }
 
+.messages-main .load-older-messages {
+  align-self: center;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 14px;
+}
+
+.messages-main .load-older-messages:hover:not(:disabled) {
+  background: #4e4f50;
+}
+
+.messages-main .load-older-messages:disabled {
+  color: #b0b3b8;
+  cursor: not-allowed;
+}
+
+.messages-main .messages-render-limit-note {
+  align-self: center;
+  color: #b0b3b8;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 4px 0 10px;
+}
+
 .message-block {
   display: grid;
   gap: 2px;

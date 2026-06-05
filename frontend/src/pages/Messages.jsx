@@ -6,7 +6,6 @@ import {
   getConversationMessages,
   getConversations,
   getMessageRequests,
-  getMessageStreamUrl,
   deleteMessage,
   editMessage,
   markConversationRead,
@@ -18,10 +17,14 @@ import {
 import ReportDialog from "../components/ReportDialog.jsx";
 import SharedPostMessagePreview from "../components/SharedPostMessagePreview.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import LinkifiedText from "../utils/linkify.jsx";
-import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
 import { stripSharedPostUrl } from "../utils/sharedPostMessage.js";
 import { formatRelativeTime } from "../utils/time.js";
+
+const INITIAL_MESSAGE_LIMIT = 40;
+const OLDER_MESSAGE_LIMIT = 40;
+const MAX_RENDERED_MESSAGES = 180;
 
 function upsertMessage(messages, nextMessage) {
   const withoutDuplicate = messages.filter(
@@ -231,18 +234,22 @@ export default function Messages() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const bottomRef = useRef(null);
+  const threadRef = useRef(null);
   const fileInputRef = useRef(null);
   const searchInputRef = useRef(null);
   const messageSearchInputRef = useRef(null);
   const sendingRef = useRef(false);
   const typingStopTimeoutRef = useRef(null);
   const refreshListsTimeoutRef = useRef(null);
+  const preserveThreadScrollRef = useRef(false);
   const searchParamKey = searchParams.toString();
 
   const [conversations, setConversations] = useState([]);
   const [messageRequests, setMessageRequests] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [messagePage, setMessagePage] = useState(1);
+  const [messageTotalPages, setMessageTotalPages] = useState(1);
   const [messageInput, setMessageInput] = useState("");
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [selectedMediaPreview, setSelectedMediaPreview] = useState("");
@@ -266,10 +273,12 @@ export default function Messages() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [typingByConversation, setTypingByConversation] = useState({});
   const [reportMessage, setReportMessage] = useState(null);
   const [error, setError] = useState("");
+  const [olderMessagesError, setOlderMessagesError] = useState("");
 
   const activeConversationId = activeConversation?.id || null;
   const activeOtherUser = activeConversation?.otherUser || null;
@@ -345,6 +354,14 @@ export default function Messages() {
   const visibleMessageSearchResults = useMemo(
     () => messageSearchMatches.slice(-8).reverse(),
     [messageSearchMatches]
+  );
+  const renderedMessages = useMemo(
+    () => messages.slice(-MAX_RENDERED_MESSAGES),
+    [messages]
+  );
+  const hiddenRenderedMessageCount = Math.max(
+    0,
+    messages.length - renderedMessages.length
   );
 
   const mediaMessages = useMemo(
@@ -620,7 +637,7 @@ export default function Messages() {
         const data = await getConversationMessages({
           conversationId: activeConversationId,
           page: 1,
-          limit: 80,
+          limit: INITIAL_MESSAGE_LIMIT,
         });
 
         if (!isActive) {
@@ -629,6 +646,9 @@ export default function Messages() {
 
         setActiveConversation(data.conversation);
         setMessages(data.messages || []);
+        setMessagePage(data.page || 1);
+        setMessageTotalPages(data.totalPages || 1);
+        setOlderMessagesError("");
         await markConversationRead(activeConversationId);
         setConversations((currentConversations) =>
           currentConversations.map((conversation) =>
@@ -668,106 +688,151 @@ export default function Messages() {
     };
   }, [activeConversationId]);
 
-  useEffect(() => {
-    if (!user) {
-      return;
+  useRealtimeSubscription(
+    "messages",
+    "message",
+    async (event) => {
+      if (!user) {
+        return;
+      }
+
+      const nextMessage = JSON.parse(event.data);
+      const isActiveThread =
+        Number(nextMessage.conversationId) === Number(activeConversationId);
+
+      if (isActiveThread) {
+        setMessages((currentMessages) =>
+          upsertMessage(currentMessages, nextMessage)
+        );
+
+        if (Number(nextMessage.senderId) !== Number(user.id)) {
+          await markConversationRead(nextMessage.conversationId);
+        }
+      }
+
+      scheduleRefreshConversationLists();
+    },
+    {
+      enabled: Boolean(user),
     }
+  );
 
-    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
-      listeners: {
-        message: async (event) => {
-          const nextMessage = JSON.parse(event.data);
-          const isActiveThread =
-            Number(nextMessage.conversationId) === Number(activeConversationId);
+  useRealtimeSubscription(
+    "messages",
+    "messageUpdate",
+    (event) => {
+      const nextMessage = JSON.parse(event.data);
 
-          if (isActiveThread) {
-            setMessages((currentMessages) =>
-              upsertMessage(currentMessages, nextMessage)
-            );
+      if (Number(nextMessage.conversationId) === Number(activeConversationId)) {
+        setMessages((currentMessages) =>
+          upsertMessage(currentMessages, nextMessage)
+        );
+      }
 
-            if (Number(nextMessage.senderId) !== Number(user.id)) {
-              await markConversationRead(nextMessage.conversationId);
+      scheduleRefreshConversationLists();
+    },
+    {
+      enabled: Boolean(user),
+    }
+  );
+
+  useRealtimeSubscription(
+    "messages",
+    "typing",
+    (event) => {
+      if (!user) {
+        return;
+      }
+
+      const typingEvent = JSON.parse(event.data);
+
+      if (Number(typingEvent.userId) === Number(user.id)) {
+        return;
+      }
+
+      setTypingByConversation((currentTyping) => ({
+        ...currentTyping,
+        [typingEvent.conversationId]: Boolean(typingEvent.isTyping),
+      }));
+    },
+    {
+      enabled: Boolean(user),
+    }
+  );
+
+  useRealtimeSubscription(
+    "messages",
+    "read",
+    (event) => {
+      const readEvent = JSON.parse(event.data);
+
+      setActiveConversation((currentConversation) =>
+        currentConversation &&
+        Number(currentConversation.id) === Number(readEvent.conversationId)
+          ? {
+              ...currentConversation,
+              peerLastReadMessageId: readEvent.lastReadMessageId,
             }
-          }
+          : currentConversation
+      );
 
-          scheduleRefreshConversationLists();
-        },
-        messageUpdate: (event) => {
-          const nextMessage = JSON.parse(event.data);
+      const applyReadState = (currentConversations) =>
+        currentConversations.map((conversation) =>
+          Number(conversation.id) === Number(readEvent.conversationId)
+            ? {
+                ...conversation,
+                peerLastReadMessageId: readEvent.lastReadMessageId,
+              }
+            : conversation
+        );
 
-          if (Number(nextMessage.conversationId) === Number(activeConversationId)) {
-            setMessages((currentMessages) =>
-              upsertMessage(currentMessages, nextMessage)
-            );
-          }
+      setConversations(applyReadState);
+      setMessageRequests(applyReadState);
+    },
+    {
+      enabled: Boolean(user),
+    }
+  );
 
-          scheduleRefreshConversationLists();
-        },
-        typing: (event) => {
-          const typingEvent = JSON.parse(event.data);
+  useRealtimeSubscription(
+    "messages",
+    "reaction",
+    (event) => {
+      if (!user) {
+        return;
+      }
 
-          if (Number(typingEvent.userId) === Number(user.id)) {
-            return;
-          }
+      const reactionEvent = JSON.parse(event.data);
 
-          setTypingByConversation((currentTyping) => ({
-            ...currentTyping,
-            [typingEvent.conversationId]: Boolean(typingEvent.isTyping),
-          }));
-        },
-        read: (event) => {
-          const readEvent = JSON.parse(event.data);
+      if (
+        Number(reactionEvent.conversationId) !== Number(activeConversationId)
+      ) {
+        return;
+      }
 
-          setActiveConversation((currentConversation) =>
-            currentConversation &&
-            Number(currentConversation.id) === Number(readEvent.conversationId)
-              ? {
-                  ...currentConversation,
-                  peerLastReadMessageId: readEvent.lastReadMessageId,
-                }
-              : currentConversation
-          );
+      setMessages((currentMessages) =>
+        applyMessageReaction(currentMessages, reactionEvent, user.id)
+      );
+    },
+    {
+      enabled: Boolean(user),
+    }
+  );
 
-          const applyReadState = (currentConversations) =>
-            currentConversations.map((conversation) =>
-              Number(conversation.id) === Number(readEvent.conversationId)
-                ? {
-                    ...conversation,
-                    peerLastReadMessageId: readEvent.lastReadMessageId,
-                  }
-                : conversation
-            );
-
-          setConversations(applyReadState);
-          setMessageRequests(applyReadState);
-        },
-        reaction: (event) => {
-          const reactionEvent = JSON.parse(event.data);
-
-          if (
-            Number(reactionEvent.conversationId) !== Number(activeConversationId)
-          ) {
-            return;
-          }
-
-          setMessages((currentMessages) =>
-            applyMessageReaction(currentMessages, reactionEvent, user.id)
-          );
-        },
-        presence: (event) => {
-          const presenceEvent = JSON.parse(event.data);
-          updateConversationPresence(
-            presenceEvent.userId,
-            Boolean(presenceEvent.isOnline)
-          );
-        },
-      },
-    });
-
-    return () => {
-      connection.close();
-    };
-  }, [activeConversationId, scheduleRefreshConversationLists, user]);
+  useRealtimeSubscription(
+    "messages",
+    "presence",
+    (event) => {
+      const presenceEvent = JSON.parse(event.data);
+      updateConversationPresence(
+        presenceEvent.userId,
+        Boolean(presenceEvent.isOnline)
+      );
+    },
+    {
+      enabled: Boolean(user),
+    }
+  );
 
   useEffect(() => {
     return () => {
@@ -784,6 +849,11 @@ export default function Messages() {
   }, [selectedMediaPreview]);
 
   useEffect(() => {
+    if (preserveThreadScrollRef.current) {
+      preserveThreadScrollRef.current = false;
+      return;
+    }
+
     bottomRef.current?.scrollIntoView({
       block: "end",
     });
@@ -801,6 +871,10 @@ export default function Messages() {
 
   function handleSelectConversation(conversation) {
     setActiveConversation(conversation);
+    setMessages([]);
+    setMessagePage(1);
+    setMessageTotalPages(1);
+    setOlderMessagesError("");
     setReactionPickerMessageId(null);
     setMessageMenuId(null);
     setEditingMessageId(null);
@@ -812,6 +886,60 @@ export default function Messages() {
     setSearchParams({
       conversationId: String(conversation.id),
     });
+  }
+
+  async function loadOlderMessages() {
+    if (
+      !activeConversationId ||
+      loadingOlderMessages ||
+      messagePage >= messageTotalPages
+    ) {
+      return;
+    }
+
+    const nextPage = messagePage + 1;
+    const thread = threadRef.current;
+    const previousScrollHeight = thread?.scrollHeight || 0;
+
+    try {
+      setLoadingOlderMessages(true);
+      setOlderMessagesError("");
+
+      const data = await getConversationMessages({
+        conversationId: activeConversationId,
+        page: nextPage,
+        limit: OLDER_MESSAGE_LIMIT,
+      });
+
+      preserveThreadScrollRef.current = true;
+      setMessages((currentMessages) => {
+        const existingMessageIds = new Set(
+          currentMessages.map((message) => Number(message.id))
+        );
+        const olderMessages = (data.messages || []).filter(
+          (message) => !existingMessageIds.has(Number(message.id))
+        );
+
+        return [...olderMessages, ...currentMessages].sort(
+          (firstMessage, secondMessage) =>
+            Number(firstMessage.id) - Number(secondMessage.id)
+        );
+      });
+      setMessagePage(data.page || nextPage);
+      setMessageTotalPages(data.totalPages || messageTotalPages);
+
+      window.requestAnimationFrame(() => {
+        if (!thread) {
+          return;
+        }
+
+        thread.scrollTop += Math.max(0, thread.scrollHeight - previousScrollHeight);
+      });
+    } catch (error) {
+      setOlderMessagesError(error.message);
+    } finally {
+      setLoadingOlderMessages(false);
+    }
   }
 
   function handleEditNickname() {
@@ -1265,7 +1393,7 @@ export default function Messages() {
               </div>
             </header>
 
-            <div className="message-thread">
+            <div className="message-thread" ref={threadRef}>
               {error && <p className="error messages-error">{error}</p>}
 
               {loadingMessages ? (
@@ -1287,22 +1415,46 @@ export default function Messages() {
                   <p>Hãy gửi tin nhắn đầu tiên.</p>
                 </div>
               ) : (
-                messages.map((message, index) => {
+                <>
+                  {messagePage < messageTotalPages && (
+                    <button
+                      className="load-older-messages"
+                      type="button"
+                      onClick={loadOlderMessages}
+                      disabled={loadingOlderMessages}
+                    >
+                      {loadingOlderMessages
+                        ? "Đang tải tin cũ..."
+                        : "Tải tin nhắn cũ hơn"}
+                    </button>
+                  )}
+
+                  {olderMessagesError && (
+                    <p className="error messages-error">{olderMessagesError}</p>
+                  )}
+
+                  {hiddenRenderedMessageCount > 0 && (
+                    <p className="messages-render-limit-note">
+                      Đang ẩn {hiddenRenderedMessageCount} tin cũ để giữ đoạn chat mượt hơn.
+                    </p>
+                  )}
+
+                  {renderedMessages.map((message, index) => {
                   const isMine = Number(message.senderId) === Number(user.id);
                   const isDeleted = Boolean(message.deletedAt);
                   const isEditing =
                     Number(editingMessageId) === Number(message.id);
-                  const previousMessage = messages[index - 1];
-                  const nextMessage = messages[index + 1];
+                  const previousMessage = renderedMessages[index - 1];
+                  const nextMessage = renderedMessages[index + 1];
                   const previousSameSender =
                     previousMessage &&
                     Number(previousMessage.senderId) ===
                       Number(message.senderId) &&
-                    !shouldShowTimeSeparator(messages, index);
+                    !shouldShowTimeSeparator(renderedMessages, index);
                   const nextSameSender =
                     nextMessage &&
                     Number(nextMessage.senderId) === Number(message.senderId) &&
-                    !shouldShowTimeSeparator(messages, index + 1);
+                    !shouldShowTimeSeparator(renderedMessages, index + 1);
                   const showPeerAvatar =
                     !isMine && !isDeleted && !nextSameSender;
                   const rowClassName = [
@@ -1327,7 +1479,7 @@ export default function Messages() {
                       id={`message-${message.id}`}
                       className="message-block"
                     >
-                      {shouldShowTimeSeparator(messages, index) && (
+                    {shouldShowTimeSeparator(renderedMessages, index) && (
                         <div className="message-time-separator">
                           {formatClockTime(message.createdAt)}
                         </div>
@@ -1561,7 +1713,8 @@ export default function Messages() {
                       </div>
                     </div>
                   );
-                })
+                  })}
+                </>
               )}
               {activePeerTyping && (
                 <div className="message-row">

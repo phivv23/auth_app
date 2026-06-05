@@ -1,5 +1,6 @@
-export const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const viteEnv = import.meta.env || {};
+
+export const API_URL = viteEnv.VITE_API_URL || "http://localhost:5000/api";
 
 export const API_ORIGIN = API_URL.replace(/\/api\/?$/, "");
 
@@ -11,6 +12,63 @@ export function getFileUrl(filePath) {
   }
 
   return `${API_ORIGIN}${filePath}`;
+}
+
+export class ApiRequestError extends Error {
+  constructor(message, { name = "ApiRequestError", status = 0, code = "", requestId = "", fields = null, cause = null } = {}) {
+    super(message);
+    this.name = name;
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+    this.fields = fields;
+    this.cause = cause;
+  }
+}
+
+function createTimeoutError() {
+  return new ApiRequestError("Kết nối quá lâu. Vui lòng thử lại.", {
+    name: "TimeoutError",
+    code: "REQUEST_TIMEOUT",
+  });
+}
+
+function createAbortError() {
+  return new ApiRequestError("Yêu cầu đã bị hủy.", {
+    name: "AbortError",
+    code: "REQUEST_ABORTED",
+  });
+}
+
+function createNetworkError(error) {
+  return new ApiRequestError(
+    "Không thể kết nối server. Vui lòng kiểm tra mạng và thử lại.",
+    {
+      name: "NetworkError",
+      code: "NETWORK_ERROR",
+      cause: error,
+    }
+  );
+}
+
+function createHttpError(response, data) {
+  const requestId =
+    response.headers?.get?.("X-Request-Id") || data?.requestId || "";
+
+  return new ApiRequestError(data?.message || "Có lỗi xảy ra", {
+    status: response.status,
+    code: data?.code || "HTTP_ERROR",
+    requestId,
+    fields: data?.fields || null,
+  });
+}
+
+export function isRetryableApiError(error) {
+  return (
+    error?.name === "TimeoutError" ||
+    error?.name === "NetworkError" ||
+    Number(error?.status || 0) >= 500
+  );
 }
 
 export async function apiFetch(path, options = {}) {
@@ -62,21 +120,26 @@ export async function apiFetch(path, options = {}) {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(data?.message || "Có lỗi xảy ra");
+      throw createHttpError(response, data);
     }
 
     return data;
   } catch (error) {
     if (controller.signal.aborted) {
       const isTimeout = abortReason === "timeout";
-      const abortError = new Error(
-        isTimeout
-          ? "Kết nối quá lâu. Vui lòng thử lại."
-          : "Yêu cầu đã bị hủy."
-      );
+      throw isTimeout ? createTimeoutError() : createAbortError();
+    }
 
-      abortError.name = isTimeout ? "TimeoutError" : "AbortError";
-      throw abortError;
+    if (error instanceof ApiRequestError) {
+      throw error;
+    }
+
+    if (error instanceof TypeError) {
+      throw createNetworkError(error);
+    }
+
+    if (!error?.status && !error?.code) {
+      throw createNetworkError(error);
     }
 
     throw error;

@@ -14,11 +14,13 @@ import messageRoutes from "./routes/message.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storyRoutes from "./routes/story.routes.js";
+import { createHealthRouter } from "./health.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
+import { createRequestLogger } from "./middleware/requestLogger.js";
 import { applySecurityMiddleware } from "./middleware/security.js";
 import { sendError } from "./utils/http.js";
 
-const app = express();
+export const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsRoot = path.resolve(__dirname, "../uploads");
@@ -27,6 +29,8 @@ applySecurityMiddleware(app, {
   isProduction: env.nodeEnv === "production",
   trustProxy: env.trustProxy,
 });
+
+app.use(createRequestLogger());
 
 // Cho phép frontend truy cập ảnh qua URL:
 // http://localhost:5000/uploads/avatars/ten-file.png
@@ -54,12 +58,7 @@ app.use(cookieParser());
 app.use(requireTrustedOrigin);
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    ok: true,
-    message: "Backend is running.",
-  });
-});
+app.use("/api/health", createHealthRouter());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -80,7 +79,18 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  const errorDetails = {
+    requestId: req.requestId || res.locals.requestId,
+    method: req.method,
+    path: req.originalUrl || req.url,
+    message: err.message,
+  };
+
+  if (env.nodeEnv === "production") {
+    console.error("Unhandled request error", errorDetails);
+  } else {
+    console.error(err);
+  }
 
   if (err.type === "entity.parse.failed") {
     return sendError(res, 400, "JSON không hợp lệ.", "INVALID_JSON");
@@ -93,8 +103,8 @@ app.use((err, req, res, next) => {
   return sendError(res, 500, "Lỗi server.", "INTERNAL_SERVER_ERROR");
 });
 
-
-
-app.listen(env.port, () => {
-  console.log(`Backend running at http://localhost:${env.port}`);
-});
+if (env.nodeEnv !== "test") {
+  app.listen(env.port, () => {
+    console.log(`Backend running at http://localhost:${env.port}`);
+  });
+}

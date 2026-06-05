@@ -4,6 +4,10 @@ export function sendError(res, status, message, code = "ERROR", fields = null) {
     code,
   };
 
+  if (res.locals?.requestId) {
+    payload.requestId = res.locals.requestId;
+  }
+
   if (fields) {
     payload.fields = fields;
   }

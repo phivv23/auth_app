@@ -639,6 +639,8 @@ Health check:
 
 ```text
 http://localhost:5000/api/health
+http://localhost:5000/api/health/live
+http://localhost:5000/api/health/ready
 ```
 
 ### 4. Cau hinh frontend env

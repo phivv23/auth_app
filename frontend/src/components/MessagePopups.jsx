@@ -4,15 +4,14 @@ import { Link, useLocation } from "react-router";
 import { getFileUrl } from "../api/client.js";
 import {
   getConversationMessages,
-  getMessageStreamUrl,
   markConversationRead,
   reactToMessage,
   sendMessage,
   startConversation,
 } from "../api/message.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import LinkifiedText from "../utils/linkify.jsx";
-import { connectReconnectingEventSource } from "../utils/reconnectingEventSource.js";
 import { stripSharedPostUrl } from "../utils/sharedPostMessage.js";
 import { formatRelativeTime } from "../utils/time.js";
 import SharedPostMessagePreview from "./SharedPostMessagePreview.jsx";
@@ -292,96 +291,111 @@ export default function MessagePopups() {
     };
   }, [user]);
 
-  useEffect(() => {
-    if (!user || isMessagesPage) {
-      return;
+  useRealtimeSubscription(
+    "messages",
+    "message",
+    async (event) => {
+      if (!user) {
+        return;
+      }
+
+      const nextMessage = JSON.parse(event.data);
+      const isMine = Number(nextMessage.senderId) === Number(user.id);
+
+      if (isMine || isMessagesPage) {
+        return;
+      }
+
+      setPopup((currentPopup) => {
+        if (
+          currentPopup?.conversation?.id === Number(nextMessage.conversationId)
+        ) {
+          return {
+            ...currentPopup,
+            messages: upsertMessage(currentPopup.messages, nextMessage),
+            minimized: false,
+            unreadCount: currentPopup.minimized
+              ? currentPopup.unreadCount + 1
+              : 0,
+          };
+        }
+
+        return currentPopup;
+      });
+
+      if (popup?.conversation?.id === Number(nextMessage.conversationId)) {
+        await markConversationRead(nextMessage.conversationId);
+        return;
+      }
+
+      try {
+        const data = await loadConversation(nextMessage.conversationId);
+        await openConversation(data.conversation, data.messages || []);
+      } catch {
+        // Ignore transient popup loading errors; the full messages page still works.
+      }
+    },
+    {
+      enabled: Boolean(user) && !isMessagesPage,
     }
+  );
 
-    const connection = connectReconnectingEventSource(getMessageStreamUrl(), {
-      listeners: {
-        message: async (event) => {
-          const nextMessage = JSON.parse(event.data);
-          const isMine = Number(nextMessage.senderId) === Number(user.id);
+  useRealtimeSubscription(
+    "messages",
+    "messageUpdate",
+    (event) => {
+      const nextMessage = JSON.parse(event.data);
 
-          if (isMine || isMessagesPage) {
-            return;
-          }
+      setPopup((currentPopup) => {
+        if (
+          currentPopup?.conversation?.id !== Number(nextMessage.conversationId)
+        ) {
+          return currentPopup;
+        }
 
-          setPopup((currentPopup) => {
-            if (
-              currentPopup?.conversation?.id ===
-              Number(nextMessage.conversationId)
-            ) {
-              return {
-                ...currentPopup,
-                messages: upsertMessage(currentPopup.messages, nextMessage),
-                minimized: false,
-                unreadCount: currentPopup.minimized
-                  ? currentPopup.unreadCount + 1
-                  : 0,
-              };
-            }
+        return {
+          ...currentPopup,
+          messages: upsertMessage(currentPopup.messages, nextMessage),
+        };
+      });
+    },
+    {
+      enabled: Boolean(user) && !isMessagesPage,
+    }
+  );
 
-            return currentPopup;
-          });
+  useRealtimeSubscription(
+    "messages",
+    "reaction",
+    (event) => {
+      if (!user) {
+        return;
+      }
 
-          if (popup?.conversation?.id === Number(nextMessage.conversationId)) {
-            await markConversationRead(nextMessage.conversationId);
-            return;
-          }
+      const reactionEvent = JSON.parse(event.data);
 
-          try {
-            const data = await loadConversation(nextMessage.conversationId);
-            await openConversation(data.conversation, data.messages || []);
-          } catch {
-            // Ignore transient popup loading errors; the full messages page still works.
-          }
-        },
-        messageUpdate: (event) => {
-          const nextMessage = JSON.parse(event.data);
+      setPopup((currentPopup) => {
+        if (
+          currentPopup?.conversation?.id !==
+          Number(reactionEvent.conversationId)
+        ) {
+          return currentPopup;
+        }
 
-          setPopup((currentPopup) => {
-            if (
-              currentPopup?.conversation?.id !==
-              Number(nextMessage.conversationId)
-            ) {
-              return currentPopup;
-            }
-
-            return {
-              ...currentPopup,
-              messages: upsertMessage(currentPopup.messages, nextMessage),
-            };
-          });
-        },
-        reaction: (event) => {
-          const reactionEvent = JSON.parse(event.data);
-
-          setPopup((currentPopup) => {
-            if (
-              currentPopup?.conversation?.id !==
-              Number(reactionEvent.conversationId)
-            ) {
-              return currentPopup;
-            }
-
-            return {
-              ...currentPopup,
-              messages: applyMessageReaction(
-                currentPopup.messages,
-                reactionEvent,
-                user.id
-              ),
-            };
-          });
-        },
-      },
-    });
-
-    return () => {
-      connection.close();
-    };
-  }, [isMessagesPage, popup?.conversation?.id, user]);
+        return {
+          ...currentPopup,
+          messages: applyMessageReaction(
+            currentPopup.messages,
+            reactionEvent,
+            user.id
+          ),
+        };
+      });
+    },
+    {
+      enabled: Boolean(user) && !isMessagesPage,
+    }
+  );
 
   useEffect(() => {
     if (!popup || popup.minimized) {
