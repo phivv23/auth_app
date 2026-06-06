@@ -158,6 +158,29 @@ function withMessageReactions(message, reactions = [], currentUserId) {
   };
 }
 
+export function getMessagePaginationMetadata({
+  messages,
+  page = null,
+  limit,
+  total = null,
+  hasMore = null,
+}) {
+  const normalizedTotal = total === null ? null : Number(total || 0);
+  const totalPages =
+    normalizedTotal === null ? null : Math.ceil(normalizedTotal / limit);
+
+  return {
+    page,
+    total: normalizedTotal,
+    totalPages,
+    hasMore:
+      hasMore === null
+        ? Boolean(page && totalPages && Number(page) < Number(totalPages))
+        : Boolean(hasMore),
+    oldestMessageId: messages[0]?.id || null,
+  };
+}
+
 async function findReactionsByMessageIds(messageIds) {
   const ids = [...new Set(messageIds.map(Number).filter(Boolean))];
 
@@ -747,6 +770,7 @@ export async function findMessagesByConversationId({
   currentUserId,
   page = 1,
   limit = 30,
+  beforeMessageId = null,
 }) {
   const conversation = await findConversationById(conversationId, currentUserId);
 
@@ -762,7 +786,18 @@ export async function findMessagesByConversationId({
     Number.isInteger(normalizedLimit) && normalizedLimit > 0
       ? Math.min(normalizedLimit, 100)
       : 30;
+  const normalizedBeforeMessageId = Number(beforeMessageId);
+  const safeBeforeMessageId =
+    Number.isInteger(normalizedBeforeMessageId) && normalizedBeforeMessageId > 0
+      ? normalizedBeforeMessageId
+      : null;
   const offset = (safePage - 1) * safeLimit;
+  const queryLimit = safeBeforeMessageId ? safeLimit + 1 : safeLimit;
+  const cursorFilter = safeBeforeMessageId ? "AND m.id < ?" : "";
+  const queryParams = safeBeforeMessageId
+    ? [conversationId, safeBeforeMessageId]
+    : [conversationId];
+  const offsetClause = safeBeforeMessageId ? "" : ` OFFSET ${offset}`;
 
   const messages = await query(
     `
@@ -791,11 +826,36 @@ export async function findMessagesByConversationId({
     LEFT JOIN messages reply_message ON reply_message.id = m.reply_to_message_id
     LEFT JOIN users reply_sender ON reply_sender.id = reply_message.sender_id
     WHERE m.conversation_id = ?
+      ${cursorFilter}
     ORDER BY m.id DESC
-    LIMIT ${safeLimit} OFFSET ${offset}
+    LIMIT ${queryLimit}${offsetClause}
     `,
-    [conversationId]
+    queryParams
   );
+
+  const selectedMessages = safeBeforeMessageId
+    ? messages.slice(0, safeLimit)
+    : messages;
+  const normalizedMessages = selectedMessages.map(normalizeMessage).reverse();
+  const messagesWithReactions = await attachReactionsToMessages(
+    normalizedMessages,
+    currentUserId
+  );
+
+  if (safeBeforeMessageId) {
+    const pagination = getMessagePaginationMetadata({
+      messages: messagesWithReactions,
+      limit: safeLimit,
+      hasMore: messages.length > safeLimit,
+    });
+
+    return {
+      conversation,
+      messages: messagesWithReactions,
+      limit: safeLimit,
+      ...pagination,
+    };
+  }
 
   const countRows = await query(
     `
@@ -807,19 +867,18 @@ export async function findMessagesByConversationId({
   );
 
   const total = Number(countRows[0]?.total || 0);
-  const normalizedMessages = messages.map(normalizeMessage).reverse();
-  const messagesWithReactions = await attachReactionsToMessages(
-    normalizedMessages,
-    currentUserId
-  );
-
-  return {
-    conversation,
+  const pagination = getMessagePaginationMetadata({
     messages: messagesWithReactions,
     page: safePage,
     limit: safeLimit,
     total,
-    totalPages: Math.ceil(total / safeLimit),
+  });
+
+  return {
+    conversation,
+    messages: messagesWithReactions,
+    limit: safeLimit,
+    ...pagination,
   };
 }
 

@@ -254,8 +254,8 @@ export default function Messages() {
   const [messageRequests, setMessageRequests] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [messagePage, setMessagePage] = useState(1);
-  const [messageTotalPages, setMessageTotalPages] = useState(1);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [oldestMessageId, setOldestMessageId] = useState(null);
   const [messageInput, setMessageInput] = useState("");
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [selectedMediaPreview, setSelectedMediaPreview] = useState("");
@@ -652,8 +652,8 @@ export default function Messages() {
 
         setActiveConversation(data.conversation);
         setMessages(data.messages || []);
-        setMessagePage(data.page || 1);
-        setMessageTotalPages(data.totalPages || 1);
+        setHasMoreMessages(Boolean(data.hasMore));
+        setOldestMessageId(data.oldestMessageId || null);
         setOlderMessagesError("");
         await markConversationRead(activeConversationId);
         setConversations((currentConversations) =>
@@ -878,8 +878,8 @@ export default function Messages() {
   function handleSelectConversation(conversation) {
     setActiveConversation(conversation);
     setMessages([]);
-    setMessagePage(1);
-    setMessageTotalPages(1);
+    setHasMoreMessages(false);
+    setOldestMessageId(null);
     setOlderMessagesError("");
     setReactionPickerMessageId(null);
     setMessageMenuId(null);
@@ -898,12 +898,12 @@ export default function Messages() {
     if (
       !activeConversationId ||
       loadingOlderMessages ||
-      messagePage >= messageTotalPages
+      !hasMoreMessages ||
+      !oldestMessageId
     ) {
       return;
     }
 
-    const nextPage = messagePage + 1;
     const thread = threadRef.current;
     const previousScrollHeight = thread?.scrollHeight || 0;
 
@@ -913,8 +913,8 @@ export default function Messages() {
 
       const data = await getConversationMessages({
         conversationId: activeConversationId,
-        page: nextPage,
         limit: OLDER_MESSAGE_LIMIT,
+        beforeMessageId: oldestMessageId,
       });
 
       preserveThreadScrollRef.current = true;
@@ -931,8 +931,8 @@ export default function Messages() {
             Number(firstMessage.id) - Number(secondMessage.id)
         );
       });
-      setMessagePage(data.page || nextPage);
-      setMessageTotalPages(data.totalPages || messageTotalPages);
+      setHasMoreMessages(Boolean(data.hasMore));
+      setOldestMessageId(data.oldestMessageId || oldestMessageId);
 
       window.requestAnimationFrame(() => {
         if (!thread) {
@@ -1422,7 +1422,7 @@ export default function Messages() {
                 </div>
               ) : (
                 <>
-                  {messagePage < messageTotalPages && (
+                  {hasMoreMessages && (
                     <button
                       className="load-older-messages"
                       type="button"

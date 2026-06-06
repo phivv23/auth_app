@@ -66,9 +66,13 @@ jobs:
       - name: Syntax check changed runtime modules
         run: |
           node --check src/models/message.model.js
+          node --check src/realtime/broker.js
           node --check src/routes/message.routes.js
+          node --check src/routes/messageMedia.routes.js
+          node --check src/routes/realtime.routes.js
           node --check src/routes/story.routes.js
           node --check src/routes/report.routes.js
+          node --check src/config/upload.js
           node --check src/middleware/security.js
           node --check src/config/env.js
           node --check src/server.js

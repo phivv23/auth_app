@@ -309,11 +309,22 @@ router.get(
       const page = normalizePositiveInt(req.query.page, 1);
       const requestedLimit = normalizePositiveInt(req.query.limit, 30);
       const limit = Math.min(requestedLimit, 100);
+      const beforeMessageId = req.query.beforeMessageId
+        ? parsePositiveInt(req.query.beforeMessageId)
+        : null;
+
+      if (req.query.beforeMessageId && !beforeMessageId) {
+        return res.status(400).json({
+          message: "Cursor tin nhắn không hợp lệ.",
+        });
+      }
+
       const result = await findMessagesByConversationId({
         conversationId,
         currentUserId: req.user.id,
         page,
         limit,
+        beforeMessageId,
       });
 
       if (!result) {

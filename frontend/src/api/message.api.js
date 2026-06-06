@@ -48,11 +48,17 @@ export function getConversationMessages({
   conversationId,
   page = 1,
   limit = 30,
+  beforeMessageId = null,
 }) {
   const params = new URLSearchParams();
 
-  params.set("page", page);
   params.set("limit", limit);
+
+  if (beforeMessageId) {
+    params.set("beforeMessageId", beforeMessageId);
+  } else {
+    params.set("page", page);
+  }
 
   return apiFetch(
     `/messages/conversations/${conversationId}/messages?${params.toString()}`

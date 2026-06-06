@@ -15,6 +15,7 @@ import messageMediaRoutes from "./routes/messageMedia.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storyRoutes from "./routes/story.routes.js";
+import realtimeRoutes from "./routes/realtime.routes.js";
 import { createHealthRouter } from "./health.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { createRequestLogger } from "./middleware/requestLogger.js";
@@ -47,6 +48,7 @@ export function createApp({
   notificationRouter = notificationRoutes,
   postRouter = postRoutes,
   protectedRouter = protectedRoutes,
+  realtimeRouter = realtimeRoutes,
   reportRouter = reportRoutes,
   requestLogger = createRequestLogger(),
   storyRouter = storyRoutes,
@@ -84,6 +86,7 @@ export function createApp({
   app.use(express.json({ limit: "1mb" }));
 
   app.use("/api/health", healthRouter);
+  app.use("/api/realtime", realtimeRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/users", userRouter);
   app.use("/api/posts", postRouter);
