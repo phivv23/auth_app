@@ -124,13 +124,19 @@ export function togglePostBookmark(postId) {
 export function getFeedPosts({
   page = 1,
   limit = 10,
+  cursor = null,
   signal,
   timeoutMs,
 } = {}) {
   const params = new URLSearchParams();
 
-  params.set("page", page);
   params.set("limit", limit);
+
+  if (cursor !== null && cursor !== undefined) {
+    params.set("cursor", cursor);
+  } else {
+    params.set("page", page);
+  }
 
   return apiFetch(`/posts/feed?${params.toString()}`, {
     signal,
@@ -138,11 +144,21 @@ export function getFeedPosts({
   });
 }
 
-export function getVideoPosts({ page = 1, limit = 10, signal } = {}) {
+export function getVideoPosts({
+  page = 1,
+  limit = 10,
+  cursor = null,
+  signal,
+} = {}) {
   const params = new URLSearchParams();
 
-  params.set("page", page);
   params.set("limit", limit);
+
+  if (cursor !== null && cursor !== undefined) {
+    params.set("cursor", cursor);
+  } else {
+    params.set("page", page);
+  }
 
   return apiFetch(`/posts/videos?${params.toString()}`, { signal });
 }

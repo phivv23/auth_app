@@ -5,6 +5,7 @@ import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import {
   createPost,
+  decodePostCursor,
   deletePost,
   findBookmarkedPosts,
   findFeedPosts,
@@ -258,11 +259,20 @@ router.get("/feed", requireAuth, async (req, res, next) => {
     const page = normalizePositiveInt(req.query.page, 1);
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
+    const cursor =
+      req.query.cursor === undefined ? null : String(req.query.cursor || "");
+
+    if (cursor && !decodePostCursor(cursor)) {
+      return res.status(400).json({
+        message: "Cursor feed không hợp lệ.",
+      });
+    }
 
     const result = await findFeedPosts({
       page,
       limit,
       currentUserId: req.user.id,
+      cursor,
     });
 
     res.json(result);
@@ -276,11 +286,20 @@ router.get("/videos", requireAuth, async (req, res, next) => {
     const page = normalizePositiveInt(req.query.page, 1);
     const requestedLimit = normalizePositiveInt(req.query.limit, 10);
     const limit = Math.min(requestedLimit, 50);
+    const cursor =
+      req.query.cursor === undefined ? null : String(req.query.cursor || "");
+
+    if (cursor && !decodePostCursor(cursor)) {
+      return res.status(400).json({
+        message: "Cursor video không hợp lệ.",
+      });
+    }
 
     const result = await findVideoPosts({
       page,
       limit,
       currentUserId: req.user.id,
+      cursor,
     });
 
     return res.json(result);

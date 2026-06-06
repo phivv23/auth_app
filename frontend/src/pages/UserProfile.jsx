@@ -23,11 +23,13 @@ import {
   unfollowUser,
 } from "../api/user.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 
 export default function UserProfile({ profileUserId }) {
   const { id: routeUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { actionDialog, confirmAction } = useActionDialog();
   const id = String(profileUserId || routeUserId);
   const moreMenuRef = useRef(null);
 
@@ -301,13 +303,18 @@ export default function UserProfile({ profileUserId }) {
       return;
     }
 
-    if (
-      !profile.blockedByMe &&
-      !window.confirm(
-        "Block user này? Bạn sẽ hủy follow/kết bạn và hai bên sẽ không thấy nội dung hay nhắn tin với nhau."
-      )
-    ) {
-      return;
+    if (!profile.blockedByMe) {
+      const confirmed = await confirmAction({
+        title: "Block người dùng?",
+        message:
+          "Bạn sẽ hủy follow/kết bạn và hai bên sẽ không thấy nội dung hay nhắn tin với nhau.",
+        confirmLabel: "Block",
+        danger: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
     }
 
     try {
@@ -676,6 +683,7 @@ export default function UserProfile({ profileUserId }) {
         title={`Báo cáo ${profile.name}`}
         onClose={() => setReportOpen(false)}
       />
+      {actionDialog}
     </div>
   );
 }

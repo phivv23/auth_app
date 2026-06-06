@@ -1,14 +1,57 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createPost } from "../api/post.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
 import {
   createPostMediaPreviews,
+  getPostMediaFileErrors,
   postMediaAccept,
   postMediaMaxFiles,
-  validatePostMediaFiles,
 } from "../utils/postMedia.js";
+
+const draftStoragePrefix = "phivv:post-composer-draft:";
+
+function getDraftStorageKey(userId) {
+  return userId ? `${draftStoragePrefix}${userId}` : "";
+}
+
+function readPostDraft(storageKey) {
+  if (!storageKey || typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawDraft = window.localStorage.getItem(storageKey);
+    return rawDraft ? JSON.parse(rawDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePostDraft(storageKey, draft) {
+  if (!storageKey || typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(draft));
+  } catch {
+    // localStorage can be full or unavailable in private mode.
+  }
+}
+
+function removePostDraft(storageKey) {
+  if (!storageKey || typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(storageKey);
+  } catch {
+    // localStorage can be unavailable in private mode.
+  }
+}
 
 function formatFileSize(size) {
   if (!Number.isFinite(size)) {
@@ -47,21 +90,80 @@ export default function PostComposer({
   const [privacy, setPrivacy] = useState("public");
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const [fileErrors, setFileErrors] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [draggingMedia, setDraggingMedia] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
 
   const avatarUrl = getFileUrl(user?.avatarUrl);
+  const draftStorageKey = getDraftStorageKey(user?.id);
   const hasMedia = previews.length > 0;
   const selectedMediaSize = files.reduce((total, file) => total + file.size, 0);
   const canSubmit =
     (content.trim().length > 0 || files.length > 0) && !submitting;
+
+  const persistCurrentDraft = useCallback(() => {
+    if (!draftStorageKey) {
+      return;
+    }
+
+    const hasDraftContent = content.trim().length > 0 || privacy !== "public";
+
+    if (!hasDraftContent) {
+      removePostDraft(draftStorageKey);
+      setDraftSavedAt(null);
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    writePostDraft(draftStorageKey, {
+      content,
+      privacy,
+      updatedAt,
+    });
+    setDraftSavedAt(updatedAt);
+  }, [content, draftStorageKey, privacy]);
+
+  const closeComposer = useCallback(() => {
+    if (!submitting) {
+      persistCurrentDraft();
+      setOpen(false);
+    }
+  }, [persistCurrentDraft, submitting]);
 
   useEffect(() => {
     return () => {
       previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     };
   }, [previews]);
+
+  useEffect(() => {
+    if (!open || !draftStorageKey || submitting) {
+      return undefined;
+    }
+
+    const hasDraftContent = content.trim().length > 0 || privacy !== "public";
+
+    if (!hasDraftContent) {
+      removePostDraft(draftStorageKey);
+      return undefined;
+    }
+
+    const saveDraftTimeout = window.setTimeout(() => {
+      const updatedAt = new Date().toISOString();
+      writePostDraft(draftStorageKey, {
+        content,
+        privacy,
+        updatedAt,
+      });
+      setDraftSavedAt(updatedAt);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(saveDraftTimeout);
+    };
+  }, [open, draftStorageKey, content, privacy, submitting]);
 
   useEffect(() => {
     if (!open) {
@@ -73,7 +175,7 @@ export default function PostComposer({
 
     function handleKeyDown(event) {
       if (event.key === "Escape" && !submitting) {
-        setOpen(false);
+        closeComposer();
       }
     }
 
@@ -83,12 +185,13 @@ export default function PostComposer({
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, submitting]);
+  }, [closeComposer, open, submitting]);
 
   function clearFiles() {
     previews.forEach((preview) => URL.revokeObjectURL(preview.url));
     setFiles([]);
     setPreviews([]);
+    setFileErrors([]);
     setDraggingMedia(false);
 
     if (fileInputRef.current) {
@@ -121,16 +224,18 @@ export default function PostComposer({
     const nextFiles = append ? [...files, ...selectedFiles] : selectedFiles;
 
     setError("");
+    setFileErrors([]);
 
     if (nextFiles.length === 0) {
       clearFiles();
       return false;
     }
 
-    const validationError = validatePostMediaFiles(nextFiles);
+    const validationErrors = getPostMediaFileErrors(nextFiles);
 
-    if (validationError) {
-      setError(validationError);
+    if (validationErrors.length > 0) {
+      setFileErrors(validationErrors);
+      setError("Một số file chưa hợp lệ.");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -232,12 +337,51 @@ export default function PostComposer({
       setContent("");
       clearFiles();
       setPrivacy("public");
+      removePostDraft(draftStorageKey);
+      setDraftSavedAt(null);
       setOpen(false);
       onCreated?.(data.post);
     } catch (error) {
       setError(error.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function openComposer() {
+    setError("");
+    setFileErrors([]);
+
+    if (!content && files.length === 0) {
+      const draft = readPostDraft(draftStorageKey);
+
+      if (draft?.content || draft?.privacy) {
+        setContent(String(draft.content || ""));
+        setPrivacy(draft.privacy || "public");
+        setDraftSavedAt(draft.updatedAt || null);
+      } else {
+        setDraftSavedAt(null);
+      }
+    }
+
+    setOpen(true);
+  }
+
+  function handleContentChange(event) {
+    const nextContent = event.target.value;
+    setContent(nextContent);
+
+    if (!nextContent.trim() && privacy === "public") {
+      setDraftSavedAt(null);
+    }
+  }
+
+  function handlePrivacyChange(event) {
+    const nextPrivacy = event.target.value;
+    setPrivacy(nextPrivacy);
+
+    if (!content.trim() && nextPrivacy === "public") {
+      setDraftSavedAt(null);
     }
   }
 
@@ -257,10 +401,7 @@ export default function PostComposer({
         <button
           className="social-composer-prompt"
           type="button"
-          onClick={() => {
-            setError("");
-            setOpen(true);
-          }}
+          onClick={openComposer}
         >
           {placeholder}
         </button>
@@ -277,14 +418,16 @@ export default function PostComposer({
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !submitting) {
-              setOpen(false);
+              closeComposer();
             }
           }}
         >
           <form
             className={`post-composer-modal ${
               hasMedia ? "has-media" : ""
-            } ${draggingMedia ? "is-dragging-media" : ""}`.trim()}
+            } ${draggingMedia ? "is-dragging-media" : ""} ${
+              submitting ? "is-submitting" : ""
+            }`.trim()}
             onSubmit={handleSubmit}
             role="dialog"
             aria-modal="true"
@@ -301,7 +444,7 @@ export default function PostComposer({
               <button
                 type="button"
                 aria-label="Đóng"
-                onClick={() => setOpen(false)}
+                onClick={closeComposer}
                 disabled={submitting}
               >
                 ×
@@ -326,8 +469,9 @@ export default function PostComposer({
                   <strong>{user?.name || "Tài khoản của bạn"}</strong>
                   <select
                     value={privacy}
-                    onChange={(event) => setPrivacy(event.target.value)}
+                    onChange={handlePrivacyChange}
                     aria-label="Quyền xem bài viết"
+                    disabled={submitting}
                   >
                     <option value="public">Công khai</option>
                     <option value="followers">Người theo dõi</option>
@@ -340,11 +484,18 @@ export default function PostComposer({
               <textarea
                 className="post-composer-modal-textarea"
                 value={content}
-                onChange={(event) => setContent(event.target.value)}
+                onChange={handleContentChange}
                 placeholder={placeholder}
                 rows={hasMedia ? 3 : 5}
+                disabled={submitting}
                 autoFocus
               />
+
+              {draftSavedAt && !submitting && (
+                <p className="post-composer-draft-status">
+                  Đã lưu nháp tự động
+                </p>
+              )}
 
               {hasMedia ? (
                 <section
@@ -417,6 +568,25 @@ export default function PostComposer({
                 </p>
               )}
 
+              {fileErrors.length > 0 && (
+                <ul className="post-composer-file-errors">
+                  {fileErrors.map((fileError, index) => (
+                    <li key={`${fileError.name}-${index}`}>
+                      <strong>{fileError.name}</strong>
+                      <span>{fileError.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {submitting && (
+                <p className="post-composer-upload-status" role="status">
+                  {files.length > 0
+                    ? "Đang tải media và đăng bài viết..."
+                    : "Đang đăng bài viết..."}
+                </p>
+              )}
+
               {error && <p className="error">{error}</p>}
             </div>
 
@@ -431,6 +601,7 @@ export default function PostComposer({
                     type="file"
                     accept={postMediaAccept}
                     multiple
+                    disabled={submitting}
                     onChange={handleMediaChange}
                   />
                 </label>
@@ -457,7 +628,11 @@ export default function PostComposer({
                 type="submit"
                 disabled={!canSubmit}
               >
-                {submitting ? "Đang đăng..." : "Đăng"}
+                {submitting
+                  ? files.length > 0
+                    ? "Đang tải media..."
+                    : "Đang đăng..."
+                  : "Đăng"}
               </button>
             </footer>
           </form>

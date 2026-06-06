@@ -12,6 +12,85 @@ export const POST_PRIVACY_VALUES = [
   ONLY_ME_PRIVACY,
 ];
 
+export function createPostCursor(post) {
+  if (!post?.createdAt || !post?.id) {
+    return null;
+  }
+
+  const createdAt = new Date(post.createdAt);
+  const postId = Number(post.id);
+
+  if (Number.isNaN(createdAt.getTime()) || !Number.isInteger(postId)) {
+    return null;
+  }
+
+  return Buffer.from(
+    JSON.stringify({
+      createdAt: createdAt.toISOString(),
+      id: postId,
+    })
+  ).toString("base64url");
+}
+
+export function decodePostCursor(cursor) {
+  const normalizedCursor = String(cursor || "").trim();
+
+  if (!normalizedCursor) {
+    return null;
+  }
+
+  try {
+    const parsedCursor = JSON.parse(
+      Buffer.from(normalizedCursor, "base64url").toString("utf8")
+    );
+    const createdAt = new Date(parsedCursor.createdAt);
+    const postId = Number(parsedCursor.id);
+
+    if (Number.isNaN(createdAt.getTime()) || !Number.isInteger(postId) || postId <= 0) {
+      return null;
+    }
+
+    return {
+      createdAt,
+      id: postId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatCursorDateForSql(value) {
+  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+}
+
+function getPostPageMetadata({
+  posts,
+  limit,
+  page = null,
+  total = null,
+  hasMore = null,
+}) {
+  const normalizedTotal = total === null ? null : Number(total || 0);
+  const totalPages =
+    normalizedTotal === null ? null : Math.ceil(normalizedTotal / limit);
+  const resolvedHasMore =
+    hasMore === null
+      ? Boolean(page && totalPages && Number(page) < Number(totalPages))
+      : Boolean(hasMore);
+  const nextCursor =
+    resolvedHasMore && posts.length > 0
+      ? createPostCursor(posts[posts.length - 1])
+      : null;
+
+  return {
+    page,
+    total: normalizedTotal,
+    totalPages,
+    hasMore: resolvedHasMore,
+    nextCursor,
+  };
+}
+
 function normalizePost(row) {
   return {
     ...row,
@@ -748,7 +827,12 @@ export async function findBookmarkedPosts({
   };
 }
 
-export async function findVideoPosts({ page = 1, limit = 10, currentUserId }) {
+export async function findVideoPosts({
+  page = 1,
+  limit = 10,
+  currentUserId,
+  cursor = null,
+}) {
   const normalizedPage = Number(page);
   const normalizedLimit = Number(limit);
   const safePage =
@@ -757,7 +841,21 @@ export async function findVideoPosts({ page = 1, limit = 10, currentUserId }) {
     Number.isInteger(normalizedLimit) && normalizedLimit > 0
       ? Math.min(normalizedLimit, 50)
       : 10;
+  const cursorData = decodePostCursor(cursor);
+  const cursorMode = cursor !== null && cursor !== undefined;
+  const cursorFilter = cursorData
+    ? "AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+    : "";
+  const cursorParams = cursorData
+    ? [
+        formatCursorDateForSql(cursorData.createdAt),
+        formatCursorDateForSql(cursorData.createdAt),
+        cursorData.id,
+      ]
+    : [];
+  const queryLimit = cursorMode ? safeLimit + 1 : safeLimit;
   const offset = (safePage - 1) * safeLimit;
+  const offsetClause = cursorMode ? "" : ` OFFSET ${offset}`;
   const visibility = buildVisibilitySql({
     currentUserId,
     postAlias: "p",
@@ -825,12 +923,34 @@ export async function findVideoPosts({ page = 1, limit = 10, currentUserId }) {
         WHERE video_media.post_id = p.id
           AND video_media.media_type = 'video'
       )
+      ${cursorFilter}
     GROUP BY p.id
-    ORDER BY p.created_at DESC
-    LIMIT ${safeLimit} OFFSET ${offset}
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ${queryLimit}${offsetClause}
     `,
-    [currentUserId, currentUserId, currentUserId, ...visibility.params]
+    [
+      currentUserId,
+      currentUserId,
+      currentUserId,
+      ...visibility.params,
+      ...cursorParams,
+    ]
   );
+
+  const selectedPosts = cursorMode ? posts.slice(0, safeLimit) : posts;
+  const normalizedPosts = await attachPostExtras(selectedPosts, currentUserId);
+
+  if (cursorMode) {
+    return {
+      posts: normalizedPosts,
+      limit: safeLimit,
+      ...getPostPageMetadata({
+        posts: normalizedPosts,
+        limit: safeLimit,
+        hasMore: posts.length > safeLimit,
+      }),
+    };
+  }
 
   const countRows = await query(
     `
@@ -848,17 +968,26 @@ export async function findVideoPosts({ page = 1, limit = 10, currentUserId }) {
   );
 
   const total = Number(countRows[0]?.total || 0);
-
-  return {
-    posts: await attachPostExtras(posts, currentUserId),
+  const metadata = getPostPageMetadata({
+    posts: normalizedPosts,
     page: safePage,
     limit: safeLimit,
     total,
-    totalPages: Math.ceil(total / safeLimit),
+  });
+
+  return {
+    posts: normalizedPosts,
+    limit: safeLimit,
+    ...metadata,
   };
 }
 
-export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
+export async function findFeedPosts({
+  page = 1,
+  limit = 10,
+  currentUserId,
+  cursor = null,
+}) {
   const normalizedPage = Number(page);
   const normalizedLimit = Number(limit);
   const safePage =
@@ -867,7 +996,21 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
     Number.isInteger(normalizedLimit) && normalizedLimit > 0
       ? Math.min(normalizedLimit, 50)
       : 10;
+  const cursorData = decodePostCursor(cursor);
+  const cursorMode = cursor !== null && cursor !== undefined;
+  const cursorFilter = cursorData
+    ? "AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+    : "";
+  const cursorParams = cursorData
+    ? [
+        formatCursorDateForSql(cursorData.createdAt),
+        formatCursorDateForSql(cursorData.createdAt),
+        cursorData.id,
+      ]
+    : [];
+  const queryLimit = cursorMode ? safeLimit + 1 : safeLimit;
   const offset = (safePage - 1) * safeLimit;
+  const offsetClause = cursorMode ? "" : ` OFFSET ${offset}`;
 
   const posts = await query(
     `
@@ -960,10 +1103,11 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
           AND feed_block.blocker_id = p.user_id
         )
       )
+      ${cursorFilter}
 
     GROUP BY p.id
-    ORDER BY p.created_at DESC
-    LIMIT ${safeLimit} OFFSET ${offset}
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ${queryLimit}${offsetClause}
     `,
     [
       currentUserId,
@@ -980,8 +1124,24 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
       FRIENDS_PRIVACY,
       currentUserId,
       currentUserId,
+      ...cursorParams,
     ]
   );
+
+  const selectedPosts = cursorMode ? posts.slice(0, safeLimit) : posts;
+  const normalizedPosts = await attachPostExtras(selectedPosts, currentUserId);
+
+  if (cursorMode) {
+    return {
+      posts: normalizedPosts,
+      limit: safeLimit,
+      ...getPostPageMetadata({
+        posts: normalizedPosts,
+        limit: safeLimit,
+        hasMore: posts.length > safeLimit,
+      }),
+    };
+  }
 
   const countRows = await query(
     `
@@ -1039,12 +1199,16 @@ export async function findFeedPosts({ page = 1, limit = 10, currentUserId }) {
   );
 
   const total = Number(countRows[0]?.total || 0);
-
-  return {
-    posts: await attachPostExtras(posts, currentUserId),
+  const metadata = getPostPageMetadata({
+    posts: normalizedPosts,
     page: safePage,
     limit: safeLimit,
     total,
-    totalPages: Math.ceil(total / safeLimit),
+  });
+
+  return {
+    posts: normalizedPosts,
+    limit: safeLimit,
+    ...metadata,
   };
 }

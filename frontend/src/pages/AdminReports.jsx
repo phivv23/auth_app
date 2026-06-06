@@ -9,6 +9,7 @@ import {
 } from "../api/report.api.js";
 import { useAuth } from "../context/useAuth.js";
 import { useRealtimeSubscription } from "../context/useRealtime.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import {
   canAccessReports,
   canManageAdminArea,
@@ -113,6 +114,7 @@ function prependUniqueReport(reports, report, limit) {
 
 export default function AdminReports() {
   const { user, loading: authLoading } = useAuth();
+  const { actionDialog, confirmAction } = useActionDialog();
   const [searchParams] = useSearchParams();
   const highlightedReportRef = useRef(null);
   const focusedReportId = searchParams.get("reportId");
@@ -347,9 +349,12 @@ export default function AdminReports() {
 
   async function handleModerationAction(report, action) {
     if (action === "remove") {
-      const confirmed = window.confirm(
-        "Bạn chắc chắn muốn gỡ bỏ nội dung bị báo cáo? Thao tác này không thể hoàn tác."
-      );
+      const confirmed = await confirmAction({
+        title: "Gỡ nội dung bị báo cáo?",
+        message: "Thao tác này sẽ gỡ nội dung vi phạm và không thể hoàn tác.",
+        confirmLabel: "Gỡ bỏ",
+        danger: true,
+      });
 
       if (!confirmed) {
         return;
@@ -642,6 +647,7 @@ export default function AdminReports() {
           </button>
         </div>
       )}
+      {actionDialog}
     </div>
   );
 }

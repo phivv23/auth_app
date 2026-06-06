@@ -9,6 +9,7 @@ import {
 } from "../api/admin.api.js";
 import { getFileUrl } from "../api/client.js";
 import { useAuth } from "../context/useAuth.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import {
   canManageAdminArea,
   canManageRoles,
@@ -28,6 +29,7 @@ const statusOptions = [
 
 export default function AdminUsers() {
   const { user, loading: authLoading } = useAuth();
+  const { actionDialog, confirmAction, promptAction } = useActionDialog();
 
   const [users, setUsers] = useState([]);
   const [page, setPage] = useState(1);
@@ -135,10 +137,18 @@ export default function AdminUsers() {
 
     if (
       targetUser.role === "admin" &&
-      nextRole === "user" &&
-      !window.confirm(`Hạ quyền admin của ${targetUser.name}?`)
+      nextRole === "user"
     ) {
-      return;
+      const confirmed = await confirmAction({
+        title: "Hạ quyền admin?",
+        message: `${targetUser.name} sẽ mất quyền quản trị sau thao tác này.`,
+        confirmLabel: "Hạ quyền",
+        danger: true,
+      });
+
+      if (!confirmed) {
+        return;
+      }
     }
 
     try {
@@ -162,31 +172,35 @@ export default function AdminUsers() {
   }
 
   async function handleDeleteUser(targetUser) {
-    const confirmed = window.confirm(
-      `Xóa tài khoản ${targetUser.name}? Toàn bộ bài viết, bình luận và dữ liệu liên quan sẽ bị xóa.`
-    );
+    await confirmAction({
+      title: "Xóa tài khoản?",
+      message: `Toàn bộ bài viết, bình luận và dữ liệu liên quan của ${targetUser.name} sẽ bị xóa.`,
+      confirmLabel: "Xóa tài khoản",
+      loadingLabel: "Đang xóa...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setMutatingUserId(targetUser.id);
+          setError("");
+          setNotice("");
 
-    if (!confirmed) {
-      return;
-    }
+          await deleteAdminUser(targetUser.id);
 
-    try {
-      setMutatingUserId(targetUser.id);
-      setError("");
-      setNotice("");
-
-      await deleteAdminUser(targetUser.id);
-
-      setUsers((currentUsers) =>
-        currentUsers.filter((currentUser) => currentUser.id !== targetUser.id)
-      );
-      setTotal((currentTotal) => Math.max(0, currentTotal - 1));
-      setNotice(`Đã xóa tài khoản ${targetUser.name}.`);
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setMutatingUserId(null);
-    }
+          setUsers((currentUsers) =>
+            currentUsers.filter(
+              (currentUser) => currentUser.id !== targetUser.id
+            )
+          );
+          setTotal((currentTotal) => Math.max(0, currentTotal - 1));
+          setNotice(`Đã xóa tài khoản ${targetUser.name}.`);
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        } finally {
+          setMutatingUserId(null);
+        }
+      },
+    });
   }
 
   async function handleStatusChange(targetUser, nextStatus) {
@@ -194,36 +208,38 @@ export default function AdminUsers() {
       return;
     }
 
-    const reason = window.prompt(
-      `Lý do đổi trạng thái ${targetUser.name} sang ${nextStatus}:`,
-      ""
-    );
+    await promptAction({
+      title: "Đổi trạng thái tài khoản",
+      message: `Nhập lý do đổi trạng thái ${targetUser.name} sang ${nextStatus}.`,
+      inputLabel: "Lý do",
+      placeholder: "Ví dụ: Vi phạm tiêu chuẩn cộng đồng.",
+      confirmLabel: "Cập nhật",
+      loadingLabel: "Đang cập nhật...",
+      onConfirm: async (reason) => {
+        try {
+          setMutatingUserId(targetUser.id);
+          setError("");
+          setNotice("");
 
-    if (reason === null) {
-      return;
-    }
+          const data = await updateAdminUserStatus(targetUser.id, {
+            accountStatus: nextStatus,
+            reason,
+          });
 
-    try {
-      setMutatingUserId(targetUser.id);
-      setError("");
-      setNotice("");
-
-      const data = await updateAdminUserStatus(targetUser.id, {
-        accountStatus: nextStatus,
-        reason,
-      });
-
-      setUsers((currentUsers) =>
-        currentUsers.map((currentUser) =>
-          currentUser.id === targetUser.id ? data.user : currentUser
-        )
-      );
-      setNotice(`Đã cập nhật trạng thái cho ${data.user.name}.`);
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setMutatingUserId(null);
-    }
+          setUsers((currentUsers) =>
+            currentUsers.map((currentUser) =>
+              currentUser.id === targetUser.id ? data.user : currentUser
+            )
+          );
+          setNotice(`Đã cập nhật trạng thái cho ${data.user.name}.`);
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        } finally {
+          setMutatingUserId(null);
+        }
+      },
+    });
   }
 
   return (
@@ -434,6 +450,7 @@ export default function AdminUsers() {
           </button>
         </div>
       )}
+      {actionDialog}
     </div>
   );
 }

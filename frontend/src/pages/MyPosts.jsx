@@ -3,8 +3,10 @@ import { Link } from "react-router";
 import { deletePost, getMyPosts } from "../api/post.api.js";
 import PostCard from "../components/PostCard.jsx";
 import { PostListSkeleton } from "../components/Skeleton.jsx";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 
 export default function MyPosts() {
+  const { actionDialog, confirmAction } = useActionDialog();
   const [posts, setPosts] = useState([]);
   const [pagination, setPagination] = useState(null);
 
@@ -73,24 +75,25 @@ export default function MyPosts() {
   }
 
   async function handleDeletePost(postId) {
-    const confirmed = window.confirm("Bạn chắc chắn muốn xóa bài viết này?");
+    await confirmAction({
+      title: "Xóa bài viết?",
+      message: "Bài viết này sẽ bị xóa khỏi trang cá nhân của bạn.",
+      confirmLabel: "Xóa bài viết",
+      loadingLabel: "Đang xóa...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await deletePost(postId);
 
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await deletePost(postId);
-
-      /**
-       * Sau khi xóa, remove post khỏi state để UI cập nhật ngay.
-       */
-      setPosts((currentPosts) =>
-        currentPosts.filter((post) => post.id !== postId)
-      );
-    } catch (error) {
-      setError(error.message);
-    }
+          setPosts((currentPosts) =>
+            currentPosts.filter((post) => post.id !== postId)
+          );
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        }
+      },
+    });
   }
 
   return (
@@ -199,6 +202,7 @@ export default function MyPosts() {
           )}
         </>
       )}
+      {actionDialog}
     </section>
   );
 }

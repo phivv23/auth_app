@@ -27,21 +27,40 @@ export function isVideoMedia(media) {
 }
 
 export function validatePostMediaFiles(files) {
+  return getPostMediaFileErrors(files).length > 0 ? postMediaErrorMessage : "";
+}
+
+export function getPostMediaFileErrors(files) {
+  const errors = [];
+
   if (files.length > postMediaMaxFiles) {
-    return postMediaErrorMessage;
+    errors.push({
+      name: "Số lượng file",
+      message: `Chỉ được chọn tối đa ${postMediaMaxFiles} file.`,
+    });
   }
 
-  const invalidFile = files.find((file) => {
+  files.forEach((file) => {
     if (!allowedPostMediaTypes.includes(file.type)) {
-      return true;
+      errors.push({
+        name: file.name || "File không tên",
+        message: "Định dạng này chưa được hỗ trợ.",
+      });
+      return;
     }
 
-    const maxSize = file.type.startsWith("video/") ? videoMaxSize : imageMaxSize;
+    const isVideo = file.type.startsWith("video/");
+    const maxSize = isVideo ? videoMaxSize : imageMaxSize;
 
-    return file.size > maxSize;
+    if (file.size > maxSize) {
+      errors.push({
+        name: file.name || "File không tên",
+        message: `Dung lượng vượt giới hạn ${isVideo ? "50MB" : "5MB"}.`,
+      });
+    }
   });
 
-  return invalidFile ? postMediaErrorMessage : "";
+  return errors;
 }
 
 export function createPostMediaPreviews(files) {

@@ -20,6 +20,7 @@ import MediaViewer from "./MediaViewer.jsx";
 import ReportDialog from "./ReportDialog.jsx";
 import { CommentListSkeleton } from "./Skeleton.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import { isVideoMedia } from "../utils/postMedia.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
@@ -287,6 +288,7 @@ export default function SocialPostCard({
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { actionDialog, confirmAction } = useActionDialog();
   const highlightedCommentRef = useRef(null);
   const commentsRequestRef = useRef(null);
   const reactionsRequestRef = useRef(null);
@@ -801,53 +803,59 @@ export default function SocialPostCard({
       return;
     }
 
-    const confirmed = window.confirm("Bạn chắc chắn muốn xóa bình luận này?");
+    await confirmAction({
+      title: "Xóa bình luận?",
+      message: "Bình luận này sẽ bị xóa khỏi bài viết.",
+      confirmLabel: "Xóa bình luận",
+      loadingLabel: "Đang xóa...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeletingCommentId(comment.id);
+          setError("");
+          setCommentActionError("");
+          setNotice("");
 
-    if (!confirmed) {
-      return;
-    }
+          const data = await deleteComment(comment.id);
 
-    try {
-      setDeletingCommentId(comment.id);
-      setError("");
-      setCommentActionError("");
-      setNotice("");
+          setComments((currentComments) =>
+            removeCommentFromTree(currentComments, comment.id)
+          );
 
-      const data = await deleteComment(comment.id);
+          if (editingCommentId === comment.id) {
+            setEditingCommentId(null);
+            setCommentEditInput("");
+          }
 
-      setComments((currentComments) =>
-        removeCommentFromTree(currentComments, comment.id)
-      );
+          if (
+            replyingToCommentId === comment.id ||
+            getCommentReplies(comment).some(
+              (reply) => Number(reply.id) === Number(replyingToCommentId)
+            )
+          ) {
+            setReplyingToCommentId(null);
+          }
 
-      if (editingCommentId === comment.id) {
-        setEditingCommentId(null);
-        setCommentEditInput("");
-      }
+          const deletedCount = Number(
+            data.deletedCount || getThreadCommentCount(comment)
+          );
 
-      if (
-        replyingToCommentId === comment.id ||
-        getCommentReplies(comment).some(
-          (reply) => Number(reply.id) === Number(replyingToCommentId)
-        )
-      ) {
-        setReplyingToCommentId(null);
-      }
-
-      const deletedCount = Number(data.deletedCount || getThreadCommentCount(comment));
-
-      onPostUpdated?.({
-        ...post,
-        commentCount: Math.max(
-          0,
-          Number(post.commentCount || comments.length || 0) - deletedCount
-        ),
-      });
-      setNotice("Đã xóa bình luận.");
-    } catch (error) {
-      setCommentActionError(error.message);
-    } finally {
-      setDeletingCommentId(null);
-    }
+          onPostUpdated?.({
+            ...post,
+            commentCount: Math.max(
+              0,
+              Number(post.commentCount || comments.length || 0) - deletedCount
+            ),
+          });
+          setNotice("Đã xóa bình luận.");
+        } catch (error) {
+          setCommentActionError(error.message);
+          throw error;
+        } finally {
+          setDeletingCommentId(null);
+        }
+      },
+    });
   }
 
   async function handleCommentReaction(comment, reactionType) {
@@ -884,19 +892,23 @@ export default function SocialPostCard({
   }
 
   async function handleDeletePost() {
-    const confirmed = window.confirm("Bạn chắc chắn muốn xóa bài viết này?");
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setError("");
-      await deletePost(post.id);
-      onPostDeleted?.(post.id);
-    } catch (error) {
-      setError(error.message);
-    }
+    await confirmAction({
+      title: "Xóa bài viết?",
+      message: "Bài viết sẽ bị xóa khỏi bảng tin của bạn.",
+      confirmLabel: "Xóa bài viết",
+      loadingLabel: "Đang xóa...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setError("");
+          await deletePost(post.id);
+          onPostDeleted?.(post.id);
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        }
+      },
+    });
   }
 
   function handleToggleSharePanel() {
@@ -2210,6 +2222,7 @@ export default function SocialPostCard({
         onClose={() => setReportTarget(null)}
         onReported={() => setNotice("Đã gửi báo cáo.")}
       />
+      {actionDialog}
     </article>
   );
 }

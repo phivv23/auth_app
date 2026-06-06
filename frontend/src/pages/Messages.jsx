@@ -18,6 +18,7 @@ import ReportDialog from "../components/ReportDialog.jsx";
 import SharedPostMessagePreview from "../components/SharedPostMessagePreview.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useRealtimeSubscription } from "../context/useRealtime.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import LinkifiedText from "../utils/linkify.jsx";
 import { stripSharedPostUrl } from "../utils/sharedPostMessage.js";
 import { formatRelativeTime } from "../utils/time.js";
@@ -238,6 +239,7 @@ function shouldShowTimeSeparator(messages, index) {
 
 export default function Messages() {
   const { user } = useAuth();
+  const { actionDialog, confirmAction, promptAction } = useActionDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const bottomRef = useRef(null);
   const threadRef = useRef(null);
@@ -960,26 +962,26 @@ export default function Messages() {
     loadOlderMessages();
   }
 
-  function handleEditNickname() {
+  async function handleEditNickname() {
     if (!activeOtherUser) {
       return;
     }
 
-    const nextNickname = window.prompt(
-      "Nhập biệt danh cho đoạn chat này",
-      activePeerName
-    );
+    await promptAction({
+      title: "Chỉnh sửa biệt danh",
+      message: "Biệt danh chỉ hiển thị trong đoạn chat này.",
+      inputLabel: "Biệt danh",
+      initialValue: activePeerName,
+      confirmLabel: "Lưu biệt danh",
+      onConfirm: async (nextNickname) => {
+        const normalizedNickname = nextNickname.trim();
 
-    if (nextNickname === null) {
-      return;
-    }
-
-    const normalizedNickname = nextNickname.trim();
-
-    setNicknames((currentNicknames) => ({
-      ...currentNicknames,
-      [activeOtherUser.id]: normalizedNickname || activeOtherUser.name,
-    }));
+        setNicknames((currentNicknames) => ({
+          ...currentNicknames,
+          [activeOtherUser.id]: normalizedNickname || activeOtherUser.name,
+        }));
+      },
+    });
   }
 
   function scrollToMessage(messageId) {
@@ -1141,26 +1143,30 @@ export default function Messages() {
       return;
     }
 
-    const confirmed = window.confirm("Thu hồi tin nhắn này với mọi người?");
+    await confirmAction({
+      title: "Thu hồi tin nhắn?",
+      message: "Tin nhắn này sẽ được thu hồi với mọi người trong đoạn chat.",
+      confirmLabel: "Thu hồi",
+      loadingLabel: "Đang thu hồi...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setError("");
+          setMessageMenuId(null);
+          setReactionPickerMessageId(null);
 
-    if (!confirmed) {
-      return;
-    }
+          const data = await deleteMessage(activeConversationId, message.id);
 
-    try {
-      setError("");
-      setMessageMenuId(null);
-      setReactionPickerMessageId(null);
-
-      const data = await deleteMessage(activeConversationId, message.id);
-
-      setMessages((currentMessages) =>
-        upsertMessage(currentMessages, data.message)
-      );
-      await refreshConversationLists();
-    } catch (error) {
-      setError(error.message);
-    }
+          setMessages((currentMessages) =>
+            upsertMessage(currentMessages, data.message)
+          );
+          await refreshConversationLists();
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        }
+      },
+    });
   }
 
   function handleSendMessage(event) {
@@ -2177,6 +2183,7 @@ export default function Messages() {
         title="Báo cáo tin nhắn"
         onClose={() => setReportMessage(null)}
       />
+      {actionDialog}
     </div>
   );
 }

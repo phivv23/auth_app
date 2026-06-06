@@ -8,10 +8,11 @@ export default function Watch() {
   const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(1);
   const [limit] = useState(8);
+  const [cursor, setCursor] = useState("");
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -19,7 +20,6 @@ export default function Watch() {
   const [loadMoreError, setLoadMoreError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const hasMore = page < totalPages;
   const isFetching = loading || loadingMore;
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function Watch() {
     const controller = new AbortController();
 
     async function loadVideos() {
-      const isFirstPage = page === 1;
+      const isFirstPage = cursor === "";
 
       try {
         if (isFirstPage) {
@@ -40,8 +40,8 @@ export default function Watch() {
         setLoadMoreError("");
 
         const data = await getVideoPosts({
-          page,
           limit,
+          cursor,
           signal: controller.signal,
         });
 
@@ -63,8 +63,11 @@ export default function Watch() {
             ...nextPosts.filter((post) => !currentIds.has(post.id)),
           ];
         });
-        setTotal(data.total || 0);
-        setTotalPages(data.totalPages || 1);
+        setHasMore(Boolean(data.hasMore));
+        setNextCursor(data.nextCursor || null);
+        setTotal((currentTotal) =>
+          isFirstPage ? nextPosts.length : currentTotal + nextPosts.length
+        );
       } catch (error) {
         if (!isActive || error.name === "AbortError") {
           return;
@@ -89,12 +92,12 @@ export default function Watch() {
       isActive = false;
       controller.abort();
     };
-  }, [page, limit, loadAttempt]);
+  }, [cursor, limit, loadAttempt]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
 
-    if (!node || !hasMore || isFetching || error || loadMoreError) {
+    if (!node || !hasMore || !nextCursor || isFetching || error || loadMoreError) {
       return;
     }
 
@@ -102,9 +105,7 @@ export default function Watch() {
       ([entry]) => {
         if (entry.isIntersecting) {
           observer.disconnect();
-          setPage((currentPage) =>
-            currentPage < totalPages ? currentPage + 1 : currentPage
-          );
+          setCursor(nextCursor);
         }
       },
       {
@@ -117,10 +118,12 @@ export default function Watch() {
     return () => {
       observer.disconnect();
     };
-  }, [error, hasMore, isFetching, loadMoreError, totalPages]);
+  }, [error, hasMore, isFetching, loadMoreError, nextCursor]);
 
   function refreshVideos() {
-    setPage(1);
+    setCursor("");
+    setNextCursor(null);
+    setHasMore(false);
     setLoadMoreError("");
     setNotice("");
     setLoadAttempt((currentAttempt) => currentAttempt + 1);
@@ -212,7 +215,7 @@ export default function Watch() {
           ) : hasMore ? (
             <span>Kéo xuống để tải thêm video</span>
           ) : (
-            <span>Đã hiển thị tất cả {total} video</span>
+            <span>Đã hiển thị tất cả {total} video đã tải</span>
           )}
         </div>
       )}

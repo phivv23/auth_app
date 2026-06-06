@@ -12,6 +12,7 @@ import {
 } from "../api/story.api.js";
 import ReportDialog from "../components/ReportDialog.jsx";
 import { useAuth } from "../context/useAuth.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const reactionOptions = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
@@ -105,6 +106,7 @@ function clampStoryDuration(durationMs) {
 
 export default function StoryViewer() {
   const { user } = useAuth();
+  const { actionDialog, confirmAction } = useActionDialog();
   const { storyId } = useParams();
   const navigate = useNavigate();
   const viewedStoryIdsRef = useRef(new Set());
@@ -559,33 +561,39 @@ export default function StoryViewer() {
       return;
     }
 
-    if (!window.confirm("Xóa story này?")) {
-      return;
-    }
-
     const nextStory = stories[activeIndex + 1] || stories[activeIndex - 1];
 
-    try {
-      setDeleting(true);
-      setError("");
-      setNotice("");
+    await confirmAction({
+      title: "Xóa tin?",
+      message: "Tin này sẽ bị xóa khỏi kho story của bạn.",
+      confirmLabel: "Xóa tin",
+      loadingLabel: "Đang xóa...",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          setDeleting(true);
+          setError("");
+          setNotice("");
 
-      await deleteStory(activeStory.id);
+          await deleteStory(activeStory.id);
 
-      setStories((currentStories) =>
-        currentStories.filter((story) => story.id !== activeStory.id)
-      );
+          setStories((currentStories) =>
+            currentStories.filter((story) => story.id !== activeStory.id)
+          );
 
-      if (nextStory) {
-        selectStory(nextStory.id, { replace: true });
-      } else {
-        navigate("/feed");
-      }
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setDeleting(false);
-    }
+          if (nextStory) {
+            selectStory(nextStory.id, { replace: true });
+          } else {
+            navigate("/feed");
+          }
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
   }
 
   return (
@@ -932,6 +940,7 @@ export default function StoryViewer() {
           showToast("Đã gửi báo cáo story.", "success");
         }}
       />
+      {actionDialog}
     </div>
   );
 }

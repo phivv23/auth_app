@@ -8,6 +8,7 @@ import {
   getAdminPosts,
 } from "../api/admin.api.js";
 import { useAuth } from "../context/useAuth.js";
+import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import { canManageAdminArea } from "../utils/adminPermissions.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
@@ -28,6 +29,7 @@ function previewText(value, fallback = "Không có nội dung") {
 
 export default function AdminContent() {
   const { user, loading: authLoading } = useAuth();
+  const { actionDialog, promptAction } = useActionDialog();
 
   const [tab, setTab] = useState("posts");
   const [items, setItems] = useState([]);
@@ -142,81 +144,73 @@ export default function AdminContent() {
   }
 
   async function handleDeletePost(post) {
-    const reason = window.prompt(
-      `Lý do gỡ bài viết #${post.id}:`,
-      "Vi phạm quy định cộng đồng."
-    );
+    await promptAction({
+      title: "Gỡ bài viết?",
+      message: `Bài viết #${post.id} của ${post.authorName} sẽ bị gỡ và tác giả sẽ nhận thông báo.`,
+      inputLabel: "Lý do gỡ",
+      initialValue: "Vi phạm quy định cộng đồng.",
+      confirmLabel: "Gỡ bài viết",
+      loadingLabel: "Đang gỡ...",
+      required: true,
+      danger: true,
+      onConfirm: async (reason) => {
+        try {
+          setDeletingId(post.id);
+          setError("");
+          setNotice("");
 
-    if (reason === null) {
-      return;
-    }
+          await deleteAdminPost(post.id, {
+            reason,
+          });
 
-    const confirmed = window.confirm(
-      `Gỡ bài viết #${post.id} của ${post.authorName}? Tác giả sẽ nhận thông báo.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(post.id);
-      setError("");
-      setNotice("");
-
-      await deleteAdminPost(post.id, {
-        reason,
-      });
-
-      setItems((currentItems) =>
-        currentItems.filter((currentItem) => currentItem.id !== post.id)
-      );
-      setTotal((currentTotal) => Math.max(0, currentTotal - 1));
-      setNotice("Đã gỡ bài viết và thông báo cho người dùng.");
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setDeletingId(null);
-    }
+          setItems((currentItems) =>
+            currentItems.filter((currentItem) => currentItem.id !== post.id)
+          );
+          setTotal((currentTotal) => Math.max(0, currentTotal - 1));
+          setNotice("Đã gỡ bài viết và thông báo cho người dùng.");
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   }
 
   async function handleDeleteComment(comment) {
-    const reason = window.prompt(
-      `Lý do gỡ bình luận #${comment.id}:`,
-      "Vi phạm quy định cộng đồng."
-    );
+    await promptAction({
+      title: "Gỡ bình luận?",
+      message: `Bình luận #${comment.id} của ${comment.authorName} sẽ bị gỡ và tác giả sẽ nhận thông báo.`,
+      inputLabel: "Lý do gỡ",
+      initialValue: "Vi phạm quy định cộng đồng.",
+      confirmLabel: "Gỡ bình luận",
+      loadingLabel: "Đang gỡ...",
+      required: true,
+      danger: true,
+      onConfirm: async (reason) => {
+        try {
+          setDeletingId(comment.id);
+          setError("");
+          setNotice("");
 
-    if (reason === null) {
-      return;
-    }
+          await deleteAdminComment(comment.id, {
+            reason,
+          });
 
-    const confirmed = window.confirm(
-      `Gỡ bình luận #${comment.id} của ${comment.authorName}? Tác giả sẽ nhận thông báo.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(comment.id);
-      setError("");
-      setNotice("");
-
-      await deleteAdminComment(comment.id, {
-        reason,
-      });
-
-      setItems((currentItems) =>
-        currentItems.filter((currentItem) => currentItem.id !== comment.id)
-      );
-      setTotal((currentTotal) => Math.max(0, currentTotal - 1));
-      setNotice("Đã gỡ bình luận và thông báo cho người dùng.");
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setDeletingId(null);
-    }
+          setItems((currentItems) =>
+            currentItems.filter((currentItem) => currentItem.id !== comment.id)
+          );
+          setTotal((currentTotal) => Math.max(0, currentTotal - 1));
+          setNotice("Đã gỡ bình luận và thông báo cho người dùng.");
+        } catch (error) {
+          setError(error.message);
+          throw error;
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   }
 
   return (
@@ -489,6 +483,7 @@ export default function AdminContent() {
           </button>
         </div>
       )}
+      {actionDialog}
     </div>
   );
 }

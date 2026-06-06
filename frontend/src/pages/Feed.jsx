@@ -12,11 +12,11 @@ export default function Feed() {
   const loadMoreRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(1);
   const [limit] = useState(10);
+  const [cursor, setCursor] = useState("");
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-
-  const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,6 @@ export default function Feed() {
   const [loadMoreError, setLoadMoreError] = useState("");
   const [feedNotice, setFeedNotice] = useState("");
 
-  const hasMore = page < totalPages;
   const isFetchingFeed = loading || loadingMore;
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export default function Feed() {
     const controller = new AbortController();
 
     async function loadFeed() {
-      const isFirstPage = page === 1;
+      const isFirstPage = cursor === "";
 
       try {
         if (isFirstPage) {
@@ -46,8 +45,8 @@ export default function Feed() {
         setLoadMoreError("");
 
         const data = await getFeedPosts({
-          page,
           limit,
+          cursor,
           signal: controller.signal,
           timeoutMs: 12000,
         });
@@ -70,8 +69,11 @@ export default function Feed() {
             ...nextPosts.filter((post) => !existingPostIds.has(post.id)),
           ];
         });
-        setTotal(data.total || 0);
-        setTotalPages(data.totalPages || 1);
+        setHasMore(Boolean(data.hasMore));
+        setNextCursor(data.nextCursor || null);
+        setTotal((currentTotal) =>
+          isFirstPage ? nextPosts.length : currentTotal + nextPosts.length
+        );
       } catch (error) {
         if (!isActive) {
           return;
@@ -96,12 +98,12 @@ export default function Feed() {
       isActive = false;
       controller.abort();
     };
-  }, [page, limit, loadAttempt]);
+  }, [cursor, limit, loadAttempt]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
 
-    if (!node || !hasMore || isFetchingFeed || error || loadMoreError) {
+    if (!node || !hasMore || !nextCursor || isFetchingFeed || error || loadMoreError) {
       return;
     }
 
@@ -109,9 +111,7 @@ export default function Feed() {
       ([entry]) => {
         if (entry.isIntersecting) {
           observer.disconnect();
-          setPage((currentPage) =>
-            currentPage < totalPages ? currentPage + 1 : currentPage
-          );
+          setCursor(nextCursor);
         }
       },
       {
@@ -124,10 +124,12 @@ export default function Feed() {
     return () => {
       observer.disconnect();
     };
-  }, [error, hasMore, isFetchingFeed, loadMoreError, totalPages]);
+  }, [error, hasMore, isFetchingFeed, loadMoreError, nextCursor]);
 
   function refreshFeed() {
-    setPage(1);
+    setCursor("");
+    setNextCursor(null);
+    setHasMore(false);
     setLoadMoreError("");
     setFeedNotice("");
     setLoadAttempt((currentAttempt) => currentAttempt + 1);
@@ -275,7 +277,7 @@ export default function Feed() {
           ) : hasMore ? (
             <span>Kéo xuống để tải thêm bài viết</span>
           ) : (
-            <span>Đã hiển thị tất cả {total} bài viết</span>
+            <span>Đã hiển thị tất cả {total} bài viết đã tải</span>
           )}
         </div>
       )}
