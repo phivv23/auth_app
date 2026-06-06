@@ -550,6 +550,15 @@ export default function StoryViewer() {
     }
   }
 
+  function handleSaveStoryToMoment() {
+    if (!activeStory?.id) {
+      return;
+    }
+
+    setMenuOpen(false);
+    navigate(`/moments?storyId=${activeStory.id}`);
+  }
+
   function handleReportStory() {
     setMenuOpen(false);
     setIsPaused(true);
@@ -791,6 +800,13 @@ export default function StoryViewer() {
                   <div className="story-action-menu" role="menu">
                     <button type="button" role="menuitem" onClick={handleOpenAuthor}>
                       Xem hồ sơ
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleSaveStoryToMoment}
+                    >
+                      Lưu vào khoảnh khắc
                     </button>
                     <button
                       type="button"

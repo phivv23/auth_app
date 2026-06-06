@@ -16,6 +16,7 @@ import reportRoutes from "./routes/report.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import storyRoutes from "./routes/story.routes.js";
 import realtimeRoutes from "./routes/realtime.routes.js";
+import sharedMomentRoutes from "./routes/sharedMoment.routes.js";
 import { createHealthRouter } from "./health.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { createRequestLogger } from "./middleware/requestLogger.js";
@@ -52,6 +53,7 @@ export function createApp({
   reportRouter = reportRoutes,
   requestLogger = createRequestLogger(),
   storyRouter = storyRoutes,
+  sharedMomentRouter = sharedMomentRoutes,
   userRouter = userRoutes,
 } = {}) {
   const app = express();
@@ -98,6 +100,7 @@ export function createApp({
   app.use("/api/reports", reportRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/stories", storyRouter);
+  app.use("/api/moments", sharedMomentRouter);
 
   /**
    * 404 handler.

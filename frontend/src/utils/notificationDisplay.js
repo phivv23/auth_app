@@ -66,6 +66,18 @@ export function getNotificationText(notification) {
     return `${actorName} đã thả ${reaction} vào story của bạn`;
   }
 
+  if (notification.type === "shared_moment_invite") {
+    const title = notification.metadata?.title || "Khoảnh khắc chung";
+
+    return `${actorName} đã mời bạn vào "${title}"`;
+  }
+
+  if (notification.type === "shared_moment_accept") {
+    const title = notification.metadata?.title || "Khoảnh khắc chung";
+
+    return `${actorName} đã tham gia "${title}"`;
+  }
+
   if (notification.type === "report_status_update") {
     return `Báo cáo của bạn ${
       reportStatusLabels[notification.reportStatus] || "đã được cập nhật"
@@ -124,6 +136,14 @@ export function getNotificationTarget(notification) {
     notification.metadata?.storyId
   ) {
     return `/stories/${notification.metadata.storyId}`;
+  }
+
+  if (
+    (notification.type === "shared_moment_invite" ||
+      notification.type === "shared_moment_accept") &&
+    notification.metadata?.momentId
+  ) {
+    return `/moments?momentId=${notification.metadata.momentId}`;
   }
 
   if (notification.type === "report_status_update") {

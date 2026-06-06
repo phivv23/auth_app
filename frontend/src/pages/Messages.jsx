@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
@@ -240,6 +240,7 @@ function shouldShowTimeSeparator(messages, index) {
 export default function Messages() {
   const { user } = useAuth();
   const { actionDialog, confirmAction, promptAction } = useActionDialog();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const bottomRef = useRef(null);
   const threadRef = useRef(null);
@@ -1112,6 +1113,20 @@ export default function Messages() {
     setEditingText("");
   }
 
+  function handleSaveMessageToMoment(message) {
+    const params = new URLSearchParams({
+      messageId: String(message.id),
+    });
+
+    if (activeConversationId) {
+      params.set("conversationId", String(activeConversationId));
+    }
+
+    setMessageMenuId(null);
+    setReactionPickerMessageId(null);
+    navigate(`/moments?${params.toString()}`);
+  }
+
   async function handleSaveMessageEdit(event) {
     event.preventDefault();
 
@@ -1672,6 +1687,18 @@ export default function Messages() {
                             title="Trả lời"
                           >
                             ↩
+                          </button>
+                        )}
+
+                        {!isDeleted && !isEditing && (
+                          <button
+                            className="message-moment-button"
+                            type="button"
+                            onClick={() => handleSaveMessageToMoment(message)}
+                            aria-label="Lưu tin nhắn vào khoảnh khắc"
+                            title="Lưu vào khoảnh khắc"
+                          >
+                            ✦
                           </button>
                         )}
 

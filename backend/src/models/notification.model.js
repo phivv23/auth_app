@@ -14,6 +14,8 @@ const NOTIFICATION_TYPES_WITHOUT_DEDUPE = new Set([
   "report_status_update",
   "story_reply",
   "story_reaction",
+  "shared_moment_invite",
+  "shared_moment_accept",
 ]);
 
 function getDedupeWindowInMinutes(type) {

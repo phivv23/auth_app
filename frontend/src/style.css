@@ -820,7 +820,8 @@
   opacity: 0.62;
 }
 
-.messages-main .message-reply-button {
+.messages-main .message-reply-button,
+.messages-main .message-moment-button {
   width: 30px;
   height: 30px;
   align-self: center;
@@ -835,11 +836,14 @@
 }
 
 .messages-main .message-row:hover .message-reply-button,
-.messages-main .message-reply-button:focus-visible {
+.messages-main .message-row:hover .message-moment-button,
+.messages-main .message-reply-button:focus-visible,
+.messages-main .message-moment-button:focus-visible {
   opacity: 1;
 }
 
-.messages-main .message-reply-button:hover {
+.messages-main .message-reply-button:hover,
+.messages-main .message-moment-button:hover {
   background: #3a3b3c;
   color: #e4e6eb;
 }
@@ -1570,6 +1574,7 @@
 
 .messages-main .message-react-button,
 .messages-main .message-reply-button,
+.messages-main .message-moment-button,
 .messages-main .message-action-button,
 .messages-main .message-report-button {
   width: 28px;
@@ -1589,11 +1594,13 @@
 
 .messages-main .message-row:hover .message-react-button,
 .messages-main .message-row:hover .message-reply-button,
+.messages-main .message-row:hover .message-moment-button,
 .messages-main .message-row:hover .message-action-button,
 .messages-main .message-row:hover .message-report-button,
 .messages-main .message-react-button.active,
 .messages-main .message-react-button:focus-visible,
 .messages-main .message-reply-button:focus-visible,
+.messages-main .message-moment-button:focus-visible,
 .messages-main .message-action-button:focus-visible,
 .messages-main .message-report-button:focus-visible {
   opacity: 1;
@@ -1604,6 +1611,7 @@
 .messages-main .message-react-button:hover,
 .messages-main .message-react-button.active,
 .messages-main .message-reply-button:hover,
+.messages-main .message-moment-button:hover,
 .messages-main .message-action-button:hover,
 .messages-main .message-report-button:hover {
   background: #3a3b3c;
@@ -5142,7 +5150,7 @@ video.shared-post-image {
 
 .feed-action-bar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   padding: 6px 0;
   border-bottom: 1px solid #e5e7eb;
@@ -11626,7 +11634,7 @@ textarea:focus-visible {
 }
 
 .feed-action-bar {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 2px;
   padding: 3px 16px 4px;
   border-bottom-color: #dadde1;
@@ -12529,7 +12537,7 @@ textarea:focus-visible {
 
   .feed-action-bar {
     overflow-x: auto;
-    grid-template-columns: repeat(5, minmax(88px, 1fr));
+    grid-template-columns: repeat(6, minmax(88px, 1fr));
     scrollbar-width: none;
   }
 
@@ -12720,4 +12728,453 @@ textarea:focus-visible {
 .social-sidebar.right .contact-row-content small {
   color: var(--fb-muted, #b0b3b8);
   font-size: 12px;
+}
+
+.moments-page {
+  width: min(100%, 1040px);
+  display: grid;
+  gap: 14px;
+  margin: 0 auto;
+  padding: 18px 0 32px;
+}
+
+.moments-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px;
+}
+
+.moments-hero h1,
+.moments-hero p {
+  margin: 0;
+}
+
+.moments-hero h1 {
+  color: #111827;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.moments-hero p {
+  max-width: 620px;
+  color: #5b6472;
+  line-height: 1.45;
+}
+
+.moments-hero a,
+.moment-source-banner button,
+.moment-invite-actions button,
+.moment-note-form button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #1877f2;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: none;
+  padding: 8px 14px;
+}
+
+.moments-eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #1877f2;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.moment-source-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #bdd7ff;
+  border-radius: 8px;
+  background: #eef6ff;
+  padding: 12px 14px;
+}
+
+.moment-source-banner div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.moment-source-banner span,
+.moments-empty,
+.moments-empty-state p {
+  color: #667085;
+}
+
+.moment-source-banner button:disabled,
+.moments-create-panel .button:disabled,
+.moment-invite-actions button:disabled,
+.moment-note-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.moments-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.moments-left {
+  display: grid;
+  gap: 14px;
+}
+
+.moments-create-panel,
+.moments-list-panel,
+.moments-detail {
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.moments-create-panel,
+.moments-list-panel {
+  padding: 14px;
+}
+
+.moments-create-panel h2,
+.moments-detail h2 {
+  margin: 0;
+  color: #111827;
+}
+
+.moments-create-panel form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.moments-create-panel label {
+  display: grid;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.moments-create-panel input,
+.moments-create-panel textarea,
+.moments-create-panel select,
+.moment-note-form input {
+  width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #101828;
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.moments-create-panel textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.moment-friend-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.moment-friend-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moment-friend-picker button,
+.moment-list-card {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px;
+  text-align: left;
+}
+
+.moment-friend-picker button:hover,
+.moment-list-card:hover,
+.moment-list-card.active {
+  background: #f2f4f7;
+}
+
+.moment-friend-picker button.selected {
+  background: #e7f3ff;
+  color: #1877f2;
+}
+
+.moment-friend-picker img,
+.moment-friend-picker button > span:first-child,
+.moment-cover,
+.moment-cover img,
+.moment-cover > span,
+.moment-participants img,
+.moment-participants > span > span:first-child,
+.moment-item-avatar img,
+.moment-item-avatar > span {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.moment-friend-picker button > span:first-child,
+.moment-cover > span,
+.moment-participants > span > span:first-child,
+.moment-item-avatar > span {
+  background: #e7f0ff;
+  color: #1877f2;
+  font-weight: 900;
+}
+
+.moments-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.moments-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: #f2f4f7;
+  color: #475467;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.moments-tabs button.active {
+  background: #1877f2;
+  color: #fff;
+}
+
+.moment-list {
+  display: grid;
+  gap: 6px;
+}
+
+.moment-list-card strong,
+.moment-list-card small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moment-list-card strong {
+  color: #111827;
+}
+
+.moment-list-card small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.moments-detail {
+  min-height: 520px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.moment-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #eaecf0;
+  padding: 18px;
+}
+
+.moment-detail-header span {
+  color: #1877f2;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.moment-detail-header p {
+  margin: 8px 0;
+  color: #4b5563;
+  line-height: 1.45;
+}
+
+.moment-detail-header small,
+.moment-item-card small {
+  color: #667085;
+}
+
+.moment-invite-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.moment-invite-actions button.secondary {
+  background: #f2f4f7;
+  color: #344054;
+}
+
+.moment-participants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #eaecf0;
+  padding: 12px 18px;
+}
+
+.moment-participants > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #eaecf0;
+  border-radius: 999px;
+  padding: 4px 9px 4px 4px;
+}
+
+.moment-participants small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.moment-note-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border-bottom: 1px solid #eaecf0;
+  padding: 14px 18px;
+}
+
+.moment-timeline {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.moment-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.moment-item-card {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.moment-item-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.moment-item-card header div {
+  display: grid;
+  gap: 2px;
+}
+
+.moment-item-card header a {
+  color: #1877f2;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.moment-item-card p {
+  margin: 10px 0 0;
+  color: #1f2937;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.moment-item-card img,
+.moment-item-card video {
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-top: 10px;
+  background: #111827;
+}
+
+.moments-empty-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 520px;
+  padding: 24px;
+  text-align: center;
+}
+
+.moments-empty {
+  margin: 0;
+  padding: 12px;
+}
+
+.moments-notice,
+.moments-error {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .moments-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .moments-left {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .moments-page {
+    padding: 12px;
+  }
+
+  .moments-hero,
+  .moment-source-banner,
+  .moment-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .moments-left {
+    grid-template-columns: 1fr;
+  }
+
+  .moment-note-form {
+    grid-template-columns: 1fr;
+  }
 }

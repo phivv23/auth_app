@@ -42,6 +42,7 @@ import AdminAuditLogs from "./pages/AdminAuditLogs.jsx";
 import AdminReports from "./pages/AdminReports.jsx";
 import MyReports from "./pages/MyReports.jsx";
 import StoryViewer from "./pages/StoryViewer.jsx";
+import SharedMoments from "./pages/SharedMoments.jsx";
 import { getFileUrl } from "./api/client.js";
 import { getConversations } from "./api/message.api.js";
 import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
@@ -121,6 +122,9 @@ function Navbar({ onDeveloping }) {
             </Link>
             <Link className="nav-icon-link" to="/friends" title="Friends" aria-label="Friends">
               <span aria-hidden="true">👥</span>
+            </Link>
+            <Link className="nav-icon-link" to="/moments" title="Khoảnh khắc" aria-label="Khoảnh khắc">
+              <span aria-hidden="true">✦</span>
             </Link>
             <button
               className="nav-icon-button disabled-feature"
@@ -247,6 +251,11 @@ function SocialLeftSidebar({ user, onDeveloping }) {
       <Link className="social-sidebar-item" to="/watch">
         <span>W</span>
         <strong>Watch</strong>
+      </Link>
+
+      <Link className="social-sidebar-item" to="/moments">
+        <span>✦</span>
+        <strong>Khoảnh khắc</strong>
       </Link>
 
       {developingItems.map((item) => (
@@ -470,7 +479,7 @@ export default function App() {
     Boolean(user) &&
     !isStoryRoute &&
     !isMessagesRoute &&
-    ["/", "/feed", "/saved", "/watch"].includes(location.pathname);
+    ["/", "/feed", "/saved", "/watch", "/moments"].includes(location.pathname);
   const mainClassName = isStoryRoute
     ? "story-main"
     : isMessagesRoute
@@ -522,6 +531,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Notifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/moments"
+              element={
+                <ProtectedRoute>
+                  <SharedMoments />
                 </ProtectedRoute>
               }
             />

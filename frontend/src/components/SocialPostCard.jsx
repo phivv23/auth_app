@@ -1825,6 +1825,10 @@ export default function SocialPostCard({
           Chia sẻ
         </button>
 
+        <Link className="feed-action-button" to={`/moments?postId=${post.id}`}>
+          Khoảnh khắc
+        </Link>
+
         <button
           className={`feed-action-button ${post.bookmarkedByMe ? "active" : ""}`}
           type="button"
