@@ -1,17 +1,27 @@
 export function connectReconnectingEventSource(
   url,
-  { listeners = {}, withCredentials = true, maxDelayMs = 30000 } = {}
+  {
+    listeners = {},
+    withCredentials = true,
+    maxDelayMs = 30000,
+    onStatusChange = null,
+  } = {}
 ) {
   let eventSource = null;
   let closed = false;
   let retryDelayMs = 1000;
   let retryTimeoutId = null;
 
+  function emitStatus(status) {
+    onStatusChange?.(status);
+  }
+
   function connect() {
     if (closed) {
       return;
     }
 
+    emitStatus("connecting");
     eventSource = new EventSource(url, {
       withCredentials,
     });
@@ -22,6 +32,7 @@ export function connectReconnectingEventSource(
 
     eventSource.addEventListener("open", () => {
       retryDelayMs = 1000;
+      emitStatus("open");
     });
 
     eventSource.addEventListener("error", () => {
@@ -31,6 +42,8 @@ export function connectReconnectingEventSource(
         return;
       }
 
+      emitStatus("reconnecting");
+      window.clearTimeout(retryTimeoutId);
       retryTimeoutId = window.setTimeout(() => {
         retryDelayMs = Math.min(retryDelayMs * 2, maxDelayMs);
         connect();
@@ -45,6 +58,7 @@ export function connectReconnectingEventSource(
       closed = true;
       window.clearTimeout(retryTimeoutId);
       eventSource?.close();
+      emitStatus("closed");
     },
   };
 }

@@ -45,6 +45,7 @@ import StoryViewer from "./pages/StoryViewer.jsx";
 import { getFileUrl } from "./api/client.js";
 import { getConversations } from "./api/message.api.js";
 import { canAccessReports, canManageAdminArea } from "./utils/adminPermissions.js";
+import { useRealtime } from "./context/useRealtime.js";
 import { formatRelativeTime } from "./utils/time.js";
 
 const CONTACT_REFRESH_INTERVAL_MS = 60000;
@@ -60,8 +61,14 @@ const developingItems = [
 function Navbar({ onDeveloping }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { connectionStatus } = useRealtime();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
+  const realtimeStatusText = {
+    closed: "Mất kết nối realtime",
+    connecting: "Đang kết nối...",
+    reconnecting: "Đang nối lại...",
+  }[connectionStatus];
 
   async function handleLogout() {
     await logout();
@@ -125,6 +132,15 @@ function Navbar({ onDeveloping }) {
             </button>
             <MessageDropdown />
             <NotificationBell />
+            {realtimeStatusText && (
+              <span
+                className={`realtime-status-badge ${connectionStatus}`}
+                role="status"
+                aria-live="polite"
+              >
+                {realtimeStatusText}
+              </span>
+            )}
 
             <div className="profile-menu-wrapper" ref={profileMenuRef}>
               <button

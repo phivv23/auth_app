@@ -19,12 +19,14 @@ describe("realtime connection helper", () => {
       received.push(`notification:${event.data}`);
     });
 
-    const connection = connectRealtimeStream(registry, (url, options) => {
-      calls.push({ options, url });
+    const connection = connectRealtimeStream(registry, {
+      connect(url, options) {
+        calls.push({ options, url });
 
-      return {
-        close() {},
-      };
+        return {
+          close() {},
+        };
+      },
     });
 
     assert.equal(connection && typeof connection.close, "function");

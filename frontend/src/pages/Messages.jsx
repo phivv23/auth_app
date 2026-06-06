@@ -248,6 +248,7 @@ export default function Messages() {
   const typingStopTimeoutRef = useRef(null);
   const refreshListsTimeoutRef = useRef(null);
   const preserveThreadScrollRef = useRef(false);
+  const loadingOlderMessagesRef = useRef(false);
   const searchParamKey = searchParams.toString();
 
   const [conversations, setConversations] = useState([]);
@@ -898,6 +899,7 @@ export default function Messages() {
     if (
       !activeConversationId ||
       loadingOlderMessages ||
+      loadingOlderMessagesRef.current ||
       !hasMoreMessages ||
       !oldestMessageId
     ) {
@@ -908,6 +910,7 @@ export default function Messages() {
     const previousScrollHeight = thread?.scrollHeight || 0;
 
     try {
+      loadingOlderMessagesRef.current = true;
       setLoadingOlderMessages(true);
       setOlderMessagesError("");
 
@@ -944,8 +947,17 @@ export default function Messages() {
     } catch (error) {
       setOlderMessagesError(error.message);
     } finally {
+      loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
     }
+  }
+
+  function handleThreadScroll(event) {
+    if (event.currentTarget.scrollTop > 72) {
+      return;
+    }
+
+    loadOlderMessages();
   }
 
   function handleEditNickname() {
@@ -1399,7 +1411,11 @@ export default function Messages() {
               </div>
             </header>
 
-            <div className="message-thread" ref={threadRef}>
+            <div
+              className="message-thread"
+              ref={threadRef}
+              onScroll={handleThreadScroll}
+            >
               {error && <p className="error messages-error">{error}</p>}
 
               {loadingMessages ? (

@@ -63,9 +63,13 @@ export function createRealtimeEventListeners(registry) {
 
 export function connectRealtimeStream(
   registry,
-  connect = connectReconnectingEventSource
+  {
+    connect = connectReconnectingEventSource,
+    onStatusChange = null,
+  } = {}
 ) {
   return connect(getRealtimeStreamUrl(), {
     listeners: createRealtimeEventListeners(registry),
+    onStatusChange,
   });
 }
