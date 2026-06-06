@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import PostComposer from "../components/PostComposer.jsx";
 import { PostListSkeleton } from "../components/Skeleton.jsx";
 import SocialPostCard from "../components/SocialPostCard.jsx";
+import SharedMomentsFeedStrip from "../components/SharedMomentsFeedStrip.jsx";
 import SuggestedUsers from "../components/SuggestedUsers.jsx";
 import StoryStrip from "../components/StoryStrip.jsx";
 import { getFeedPosts } from "../api/post.api.js";
@@ -228,6 +229,8 @@ export default function Feed() {
       <PostComposer onCreated={handlePostCreated} />
 
       <StoryStrip onNotice={setFeedNotice} />
+
+      <SharedMomentsFeedStrip onNotice={setFeedNotice} />
 
       <div className="feed-toolbar">
         <span>Bài viết mới nhất</span>

@@ -12730,6 +12730,317 @@ textarea:focus-visible {
   font-size: 12px;
 }
 
+.feed-moments-strip {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.social-main .feed-moments-strip {
+  border-color: #3a3b3c;
+  background: var(--fb-card, #242526);
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-moments-header div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feed-moments-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.social-main .feed-moments-header h2 {
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moments-header span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  background: #e7f3ff;
+  color: #1877f2;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.feed-moments-header a,
+.feed-moment-empty a {
+  color: #1877f2;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.feed-moments-row {
+  display: grid;
+  grid-auto-columns: minmax(176px, 1fr);
+  grid-auto-flow: column;
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.feed-moments-row::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-moment-create-card,
+.feed-moment-card,
+.feed-moment-empty {
+  min-height: 134px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.social-main .feed-moment-create-card,
+.social-main .feed-moment-card,
+.social-main .feed-moment-empty {
+  border-color: #3a3b3c;
+  background: #18191a;
+}
+
+.feed-moment-create-card {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: #1877f2;
+  text-align: center;
+  text-decoration: none;
+  padding: 14px;
+}
+
+.feed-moment-create-card span {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e7f3ff;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.feed-moment-create-card strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.social-main .feed-moment-create-card strong {
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moment-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.feed-moment-card.pending {
+  border-color: #b9d8ff;
+  background: #f4f9ff;
+}
+
+.social-main .feed-moment-card.pending {
+  border-color: rgba(45, 136, 255, 0.5);
+  background: rgba(45, 136, 255, 0.1);
+}
+
+.feed-moment-card-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  padding: 12px;
+}
+
+.feed-moment-cover {
+  width: 58px;
+  height: 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e7f3ff, #dbeafe);
+  color: #1877f2;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.feed-moment-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feed-moment-body {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.feed-moment-body strong,
+.feed-moment-body small,
+.feed-moment-body em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-moment-body strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.social-main .feed-moment-body strong {
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moment-body small {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.feed-moment-body em {
+  color: #667085;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.social-main .feed-moment-body small,
+.social-main .feed-moment-body em {
+  color: var(--fb-muted, #b0b3b8);
+}
+
+.feed-moment-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+
+.feed-moment-actions button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: #1877f2;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.feed-moment-actions button + button {
+  background: #e4e6eb;
+  color: #111827;
+}
+
+.social-main .feed-moment-actions button + button {
+  background: #3a3b3c;
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moment-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.feed-moment-empty {
+  min-width: 280px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  color: #667085;
+  text-align: center;
+  padding: 14px;
+}
+
+.social-main .feed-moment-empty {
+  color: var(--fb-muted, #b0b3b8);
+}
+
+.feed-moment-empty strong {
+  color: #111827;
+}
+
+.social-main .feed-moment-empty strong {
+  color: var(--fb-text, #e4e6eb);
+}
+
+.feed-moment-card.skeleton {
+  border: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent),
+    #eef1f5;
+  background-size: 220% 100%, 100% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.social-main .feed-moment-card.skeleton {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent),
+    #3a3b3c;
+  background-size: 220% 100%, 100% 100%;
+}
+
+.feed-moments-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 8px;
+  background: #fff1f3;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 12px;
+}
+
+.feed-moments-error button {
+  border: 0;
+  border-radius: 7px;
+  background: #b42318;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
 .moments-page {
   width: min(100%, 1040px);
   display: grid;
