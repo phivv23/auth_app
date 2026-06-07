@@ -5,6 +5,7 @@ export function getSharedMoments({
   limit = 20,
   status = "all",
   signal,
+  timeoutMs,
 } = {}) {
   const params = new URLSearchParams();
 
@@ -15,11 +16,11 @@ export function getSharedMoments({
     params.set("status", status);
   }
 
-  return apiFetch(`/moments?${params.toString()}`, { signal });
+  return apiFetch(`/moments?${params.toString()}`, { signal, timeoutMs });
 }
 
-export function getSharedMoment(momentId, { signal } = {}) {
-  return apiFetch(`/moments/${momentId}`, { signal });
+export function getSharedMoment(momentId, { signal, timeoutMs } = {}) {
+  return apiFetch(`/moments/${momentId}`, { signal, timeoutMs });
 }
 
 export function createSharedMoment({
@@ -28,7 +29,7 @@ export function createSharedMoment({
   mood = "",
   participantIds = [],
   initialItem = null,
-}) {
+}, { signal, timeoutMs } = {}) {
   return apiFetch("/moments", {
     method: "POST",
     body: JSON.stringify({
@@ -38,19 +39,33 @@ export function createSharedMoment({
       participantIds,
       initialItem,
     }),
+    signal,
+    timeoutMs,
   });
 }
 
-export function respondToSharedMoment(momentId, status) {
+export function respondToSharedMoment(
+  momentId,
+  status,
+  { signal, timeoutMs } = {}
+) {
   return apiFetch(`/moments/${momentId}/respond`, {
     method: "POST",
     body: JSON.stringify({ status }),
+    signal,
+    timeoutMs,
   });
 }
 
-export function addSharedMomentItem(momentId, item) {
+export function addSharedMomentItem(
+  momentId,
+  item,
+  { signal, timeoutMs } = {}
+) {
   return apiFetch(`/moments/${momentId}/items`, {
     method: "POST",
     body: JSON.stringify(item),
+    signal,
+    timeoutMs,
   });
 }

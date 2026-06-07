@@ -49,6 +49,31 @@ function installFetchCapture(responseData = {}) {
 }
 
 describe("moment api", () => {
+  it("passes timeout options through apiFetch", async () => {
+    const timeoutCalls = [];
+    globalThis.window = {
+      setTimeout(callback, timeoutMs) {
+        timeoutCalls.push(timeoutMs);
+        return 1;
+      },
+      clearTimeout() {},
+    };
+    installFetchCapture({ moment: { id: 1 }, moments: [] });
+
+    await getSharedMoments({ timeoutMs: 1234 });
+    await createSharedMoment(
+      {
+        title: "Trip",
+        participantIds: [2],
+      },
+      {
+        timeoutMs: 5678,
+      }
+    );
+
+    assert.deepEqual(timeoutCalls, [1234, 5678]);
+  });
+
   it("builds list and detail URLs", async () => {
     installWindow();
     const requests = installFetchCapture({ moments: [] });

@@ -13199,6 +13199,16 @@ textarea:focus-visible {
   text-decoration: none;
 }
 
+.feed-moment-create-friend-list p button {
+  border: 0;
+  background: transparent;
+  color: #2d88ff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+}
+
 .feed-moment-create-friend-list button {
   min-width: 0;
   display: grid;

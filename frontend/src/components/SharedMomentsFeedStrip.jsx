@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -8,7 +8,13 @@ import {
   getSharedMoments,
   respondToSharedMoment,
 } from "../api/moment.api.js";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import { formatRelativeTime } from "../utils/time.js";
+
+const MOMENT_NOTIFICATION_TYPES = new Set([
+  "shared_moment_invite",
+  "shared_moment_accept",
+]);
 
 function getInitial(value) {
   return value?.charAt(0)?.toUpperCase() || "K";
@@ -85,6 +91,7 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
   const [loading, setLoading] = useState(true);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [error, setError] = useState("");
+  const [friendError, setFriendError] = useState("");
   const [respondingById, setRespondingById] = useState({});
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
@@ -110,6 +117,13 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
     });
   }, [moments]);
 
+  const pendingInviteCount = useMemo(
+    () =>
+      prioritizedMoments.filter((moment) => moment.myStatus === "pending")
+        .length,
+    [prioritizedMoments]
+  );
+
   const filteredFriends = useMemo(() => {
     const keyword = friendSearch.trim().toLowerCase();
 
@@ -122,82 +136,104 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
     );
   }, [friendSearch, friends]);
 
-  useEffect(() => {
-    let isActive = true;
-    const controller = new AbortController();
-
-    async function loadMoments() {
+  const loadMoments = useCallback(
+    async function loadMoments({ signal, silent = false } = {}) {
       try {
-        setLoading(true);
+        if (!silent) {
+          setLoading(true);
+        }
+
         setError("");
 
         const data = await getSharedMoments({
           limit: 8,
-          signal: controller.signal,
+          signal,
+          timeoutMs: 6000,
         });
 
-        if (isActive) {
-          setMoments(data.moments || []);
-        }
+        setMoments(data.moments || []);
       } catch (error) {
-        if (isActive && error.name !== "AbortError") {
+        if (error.name !== "AbortError" && !signal?.aborted) {
           setError(error.message);
         }
       } finally {
-        if (isActive) {
+        if (!silent && !signal?.aborted) {
           setLoading(false);
         }
       }
-    }
+    },
+    []
+  );
 
-    loadMoments();
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      loadMoments({
+        signal: controller.signal,
+      });
+    }, 0);
 
     return () => {
-      isActive = false;
+      window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, []);
+  }, [loadMoments]);
+
+  useRealtimeSubscription(
+    "notifications",
+    "notification",
+    (event) => {
+      const notification = JSON.parse(event.data);
+
+      if (MOMENT_NOTIFICATION_TYPES.has(notification.type)) {
+        loadMoments({ silent: true });
+      }
+    }
+  );
+
+  const loadFriends = useCallback(
+    async function loadFriends({ signal } = {}) {
+      try {
+        setLoadingFriends(true);
+        setFriendError("");
+
+        const data = await getFriends({
+          page: 1,
+          limit: 50,
+          signal,
+        });
+
+        setFriends(data.users || []);
+      } catch (error) {
+        if (error.name !== "AbortError" && !signal?.aborted) {
+          setFriendError(error.message);
+        }
+      } finally {
+        if (!signal?.aborted) {
+          setLoadingFriends(false);
+        }
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!createOpen || friends.length > 0) {
       return undefined;
     }
 
-    let isActive = true;
     const controller = new AbortController();
-
-    async function loadFriends() {
-      try {
-        setLoadingFriends(true);
-        setError("");
-
-        const data = await getFriends({
-          page: 1,
-          limit: 50,
-          signal: controller.signal,
-        });
-
-        if (isActive) {
-          setFriends(data.users || []);
-        }
-      } catch (error) {
-        if (isActive && error.name !== "AbortError") {
-          setError(error.message);
-        }
-      } finally {
-        if (isActive) {
-          setLoadingFriends(false);
-        }
-      }
-    }
-
-    loadFriends();
+    const timeoutId = window.setTimeout(() => {
+      loadFriends({
+        signal: controller.signal,
+      });
+    }, 0);
 
     return () => {
-      isActive = false;
+      window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [createOpen, friends.length]);
+  }, [createOpen, friends.length, loadFriends]);
 
   async function handleRespond(momentId, status) {
     try {
@@ -207,7 +243,9 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
       }));
       setError("");
 
-      const data = await respondToSharedMoment(momentId, status);
+      const data = await respondToSharedMoment(momentId, status, {
+        timeoutMs: 10000,
+      });
 
       setMoments((currentMoments) => {
         if (status === "declined") {
@@ -287,6 +325,8 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
         title: createTitle,
         note: createNote,
         participantIds: selectedFriendIds,
+      }, {
+        timeoutMs: 10000,
       });
 
       setMoments((currentMoments) => [
@@ -310,9 +350,7 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
       <div className="feed-moments-header">
         <div>
           <h2>Khoảnh Khắc Chung</h2>
-          {prioritizedMoments.some((moment) => moment.myStatus === "pending") && (
-            <span>Lời mời mới</span>
-          )}
+          {pendingInviteCount > 0 && <span>{pendingInviteCount} lời mời</span>}
         </div>
         <Link to="/moments">Xem tất cả</Link>
       </div>
@@ -359,14 +397,7 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
           <span>{error}</span>
           <button
             type="button"
-            onClick={() => {
-              setError("");
-              setLoading(true);
-              getSharedMoments({ limit: 8 })
-                .then((data) => setMoments(data.moments || []))
-                .catch((error) => setError(error.message))
-                .finally(() => setLoading(false));
-            }}
+            onClick={() => loadMoments()}
           >
             Thử lại
           </button>
@@ -440,6 +471,16 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
                 <div className="feed-moment-create-friend-list">
                   {loadingFriends ? (
                     <p>Đang tải bạn bè...</p>
+                  ) : friendError ? (
+                    <p>
+                      Không tải được danh sách bạn bè.{" "}
+                      <button
+                        type="button"
+                        onClick={() => loadFriends()}
+                      >
+                        Thử lại
+                      </button>
+                    </p>
                   ) : friends.length === 0 ? (
                     <p>
                       Chưa có bạn bè để mời.{" "}

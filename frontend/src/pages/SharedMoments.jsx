@@ -10,7 +10,13 @@ import {
   getSharedMoments,
   respondToSharedMoment,
 } from "../api/moment.api.js";
+import { useRealtimeSubscription } from "../context/useRealtime.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
+
+const MOMENT_NOTIFICATION_TYPES = new Set([
+  "shared_moment_invite",
+  "shared_moment_accept",
+]);
 
 const moodOptions = [
   { value: "", label: "Chọn sắc thái" },
@@ -167,6 +173,7 @@ export default function SharedMoments() {
       status: statusFilter,
       limit: 30,
       signal,
+      timeoutMs: 8000,
     });
 
     setMoments(data.moments || []);
@@ -257,6 +264,7 @@ export default function SharedMoments() {
         setLoadingDetail(true);
         const data = await getSharedMoment(selectedMomentId, {
           signal: controller.signal,
+          timeoutMs: 8000,
         });
 
         if (isActive) {
@@ -302,6 +310,18 @@ export default function SharedMoments() {
     setSelectedMomentId(nextSelectedMomentId || nextMoments[0]?.id || "");
   }
 
+  useRealtimeSubscription(
+    "notifications",
+    "notification",
+    (event) => {
+      const notification = JSON.parse(event.data);
+
+      if (MOMENT_NOTIFICATION_TYPES.has(notification.type)) {
+        refreshMoments(selectedMomentId).catch(() => {});
+      }
+    }
+  );
+
   async function handleCreateMoment(event) {
     event.preventDefault();
 
@@ -321,6 +341,8 @@ export default function SharedMoments() {
         mood,
         participantIds: selectedFriendIds,
         initialItem: sourceItem,
+      }, {
+        timeoutMs: 10000,
       });
 
       setTitle("");
@@ -344,7 +366,9 @@ export default function SharedMoments() {
       setError("");
       setNotice("");
 
-      const data = await respondToSharedMoment(momentId, status);
+      const data = await respondToSharedMoment(momentId, status, {
+        timeoutMs: 10000,
+      });
 
       if (status === "accepted") {
         setSelectedMoment(data.moment);
@@ -377,6 +401,8 @@ export default function SharedMoments() {
       const data = await addSharedMomentItem(selectedMomentId, {
         itemType: "note",
         content: newItemText,
+      }, {
+        timeoutMs: 10000,
       });
 
       setSelectedMoment(data.moment);
@@ -397,7 +423,9 @@ export default function SharedMoments() {
     try {
       setAddingItem(true);
       setError("");
-      const data = await addSharedMomentItem(selectedMomentId, sourceItem);
+      const data = await addSharedMomentItem(selectedMomentId, sourceItem, {
+        timeoutMs: 10000,
+      });
 
       setSelectedMoment(data.moment);
       await refreshMoments(String(selectedMomentId));

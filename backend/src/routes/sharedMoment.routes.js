@@ -4,17 +4,15 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireActiveAccount } from "../middleware/requireActiveAccount.js";
 import { createNotification } from "../models/notification.model.js";
 import {
-  addSharedMomentItem,
-  createSharedMoment,
-  findSharedMomentByIdForUser,
-  findSharedMomentsForUser,
+  addSharedMomentItem as defaultAddSharedMomentItem,
+  createSharedMoment as defaultCreateSharedMoment,
+  findSharedMomentByIdForUser as defaultFindSharedMomentByIdForUser,
+  findSharedMomentsForUser as defaultFindSharedMomentsForUser,
   parsePositiveInt,
-  resolveSharedMomentItem,
-  respondToSharedMoment,
-  validateSharedMomentInput,
+  resolveSharedMomentItem as defaultResolveSharedMomentItem,
+  respondToSharedMoment as defaultRespondToSharedMoment,
+  validateSharedMomentInput as defaultValidateSharedMomentInput,
 } from "../models/sharedMoment.model.js";
-
-const router = Router();
 
 function normalizePositiveInt(value, fallback) {
   return parsePositiveInt(value) || fallback;
@@ -26,7 +24,21 @@ function badRequest(res, message) {
   });
 }
 
-router.get("/", requireAuth, async (req, res, next) => {
+export function createSharedMomentRouter({
+  addSharedMomentItem = defaultAddSharedMomentItem,
+  createNotificationForUser = createNotification,
+  createSharedMoment = defaultCreateSharedMoment,
+  findSharedMomentByIdForUser = defaultFindSharedMomentByIdForUser,
+  findSharedMomentsForUser = defaultFindSharedMomentsForUser,
+  requireActiveAccountMiddleware = requireActiveAccount,
+  requireAuthMiddleware = requireAuth,
+  resolveSharedMomentItem = defaultResolveSharedMomentItem,
+  respondToSharedMoment = defaultRespondToSharedMoment,
+  validateSharedMomentInput = defaultValidateSharedMomentInput,
+} = {}) {
+  const router = Router();
+
+router.get("/", requireAuthMiddleware, async (req, res, next) => {
   try {
     const page = normalizePositiveInt(req.query.page, 1);
     const limit = Math.min(normalizePositiveInt(req.query.limit, 20), 50);
@@ -47,7 +59,7 @@ router.get("/", requireAuth, async (req, res, next) => {
   }
 });
 
-router.post("/", requireAuth, requireActiveAccount, async (req, res, next) => {
+router.post("/", requireAuthMiddleware, requireActiveAccountMiddleware, async (req, res, next) => {
   try {
     const validation = validateSharedMomentInput(req.body, req.user.id);
 
@@ -82,7 +94,7 @@ router.post("/", requireAuth, requireActiveAccount, async (req, res, next) => {
 
     await Promise.all(
       result.invitedUserIds.map((recipientId) =>
-        createNotification({
+        createNotificationForUser({
           recipientId,
           actorId: req.user.id,
           type: "shared_moment_invite",
@@ -102,7 +114,7 @@ router.post("/", requireAuth, requireActiveAccount, async (req, res, next) => {
   }
 });
 
-router.get("/:momentId", requireAuth, async (req, res, next) => {
+router.get("/:momentId", requireAuthMiddleware, async (req, res, next) => {
   try {
     const momentId = parsePositiveInt(req.params.momentId);
 
@@ -128,8 +140,8 @@ router.get("/:momentId", requireAuth, async (req, res, next) => {
 
 router.post(
   "/:momentId/respond",
-  requireAuth,
-  requireActiveAccount,
+  requireAuthMiddleware,
+  requireActiveAccountMiddleware,
   async (req, res, next) => {
     try {
       const momentId = parsePositiveInt(req.params.momentId);
@@ -168,7 +180,7 @@ router.post(
       }
 
       if (status === "accepted") {
-        await createNotification({
+        await createNotificationForUser({
           recipientId: currentMoment.creatorId,
           actorId: req.user.id,
           type: "shared_moment_accept",
@@ -188,8 +200,8 @@ router.post(
 
 router.post(
   "/:momentId/items",
-  requireAuth,
-  requireActiveAccount,
+  requireAuthMiddleware,
+  requireActiveAccountMiddleware,
   async (req, res, next) => {
     try {
       const momentId = parsePositiveInt(req.params.momentId);
@@ -223,4 +235,7 @@ router.post(
   }
 );
 
-export default router;
+  return router;
+}
+
+export default createSharedMomentRouter();
