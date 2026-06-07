@@ -38,7 +38,12 @@ export function getFriendRequests({
   return apiFetch(`/friends/requests?${params.toString()}`);
 }
 
-export function getFriends({ userId = "", page = 1, limit = 10 } = {}) {
+export function getFriends({
+  userId = "",
+  page = 1,
+  limit = 10,
+  signal,
+} = {}) {
   const params = new URLSearchParams();
 
   if (userId) {
@@ -48,7 +53,7 @@ export function getFriends({ userId = "", page = 1, limit = 10 } = {}) {
   params.set("page", page);
   params.set("limit", limit);
 
-  return apiFetch(`/friends?${params.toString()}`);
+  return apiFetch(`/friends?${params.toString()}`, { signal });
 }
 
 export function getFriendSuggestions({ limit = 10 } = {}) {

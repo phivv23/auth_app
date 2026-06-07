@@ -12784,11 +12784,20 @@ textarea:focus-visible {
 }
 
 .feed-moments-header a,
-.feed-moment-empty a {
+.feed-moment-empty a,
+.feed-moment-empty button {
   color: #1877f2;
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.feed-moment-empty button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
 }
 
 .feed-moments-row {
@@ -12823,11 +12832,14 @@ textarea:focus-visible {
 }
 
 .feed-moment-create-card {
+  border: 1px solid #eaecf0;
   display: grid;
   place-items: center;
   align-content: center;
   gap: 8px;
   color: #1877f2;
+  cursor: pointer;
+  font: inherit;
   text-align: center;
   text-decoration: none;
   padding: 14px;
@@ -13039,6 +13051,249 @@ textarea:focus-visible {
   font: inherit;
   font-weight: 800;
   padding: 7px 10px;
+}
+
+.feed-moment-create-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.58);
+  padding: 18px;
+}
+
+.feed-moment-create-modal {
+  width: min(100%, 560px);
+  max-height: min(88dvh, 720px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #3a3b3c;
+  border-radius: 8px;
+  background: #242526;
+  color: #e4e6eb;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+
+.feed-moment-create-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #3a3b3c;
+  padding: 16px 18px;
+}
+
+.feed-moment-create-modal h2,
+.feed-moment-create-modal p {
+  margin: 0;
+}
+
+.feed-moment-create-modal h2 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.feed-moment-create-modal p {
+  margin-top: 4px;
+  color: #b0b3b8;
+  font-size: 13px;
+}
+
+.feed-moment-create-modal > header > button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.feed-moment-create-modal > header > button:hover {
+  background: #4e4f50;
+}
+
+.feed-moment-create-modal form {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+  overflow: hidden;
+  padding: 16px 18px 18px;
+}
+
+.feed-moment-create-modal label {
+  display: grid;
+  gap: 6px;
+  color: #e4e6eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.feed-moment-create-modal input,
+.feed-moment-create-modal textarea,
+.feed-moment-create-friends > input {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.feed-moment-create-modal textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.feed-moment-create-modal input::placeholder,
+.feed-moment-create-modal textarea::placeholder {
+  color: #b0b3b8;
+}
+
+.feed-moment-create-friends {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.feed-moment-create-friends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-moment-create-friends-header small {
+  color: #b0b3b8;
+  font-weight: 800;
+}
+
+.feed-moment-create-friend-list {
+  min-height: 150px;
+  max-height: 260px;
+  display: grid;
+  align-content: flex-start;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.feed-moment-create-friend-list p {
+  margin: 0;
+  border-radius: 8px;
+  background: #18191a;
+  color: #b0b3b8;
+  padding: 12px;
+}
+
+.feed-moment-create-friend-list a {
+  color: #2d88ff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.feed-moment-create-friend-list button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e4e6eb;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px;
+  text-align: left;
+}
+
+.feed-moment-create-friend-list button:hover,
+.feed-moment-create-friend-list button.selected {
+  background: #3a3b3c;
+}
+
+.feed-moment-create-friend-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.feed-moment-create-friend-list img,
+.feed-moment-create-friend-list button > span {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e7f3ff;
+  color: #1877f2;
+  font-weight: 900;
+  object-fit: cover;
+}
+
+.feed-moment-create-friend-list strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #e4e6eb;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-moment-create-friend-list small {
+  color: #2d88ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.feed-moment-create-modal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #3a3b3c;
+  padding-top: 14px;
+}
+
+.feed-moment-create-modal footer > a {
+  color: #2d88ff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.feed-moment-create-modal footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.feed-moment-create-modal footer button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2d88ff;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 8px 14px;
+}
+
+.feed-moment-create-modal footer button.secondary {
+  background: #3a3b3c;
+  color: #e4e6eb;
+}
+
+.feed-moment-create-modal footer button:disabled,
+.feed-moment-create-modal > header > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .moments-page {
@@ -13487,5 +13742,29 @@ textarea:focus-visible {
 
   .moment-note-form {
     grid-template-columns: 1fr;
+  }
+
+  .feed-moment-create-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .feed-moment-create-modal {
+    width: 100%;
+    max-height: 92dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .feed-moment-create-modal footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .feed-moment-create-modal footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
