@@ -835,6 +835,19 @@
   padding: 0;
 }
 
+.messages-notice {
+  width: fit-content;
+  max-width: min(92%, 520px);
+  align-self: center;
+  border-radius: 999px;
+  background: rgba(45, 136, 255, 0.14);
+  color: #dce9ff;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0 auto 10px;
+  padding: 8px 12px;
+}
+
 .messages-main .message-row:hover .message-reply-button,
 .messages-main .message-row:hover .message-moment-button,
 .messages-main .message-reply-button:focus-visible,
@@ -8670,7 +8683,8 @@ img.chat-popup-media {
   transform: translateY(-1px) scale(1.06);
 }
 
-.chat-popup-reply-button {
+.chat-popup-reply-button,
+.chat-popup-moment-button {
   width: 26px;
   height: 26px;
   align-self: center;
@@ -8685,12 +8699,25 @@ img.chat-popup-media {
 }
 
 .chat-popup-row:hover .chat-popup-reply-button,
-.chat-popup-reply-button:focus-visible {
+.chat-popup-row:hover .chat-popup-moment-button,
+.chat-popup-reply-button:focus-visible,
+.chat-popup-moment-button:focus-visible {
   opacity: 1;
 }
 
-.chat-popup-reply-button:hover {
+.chat-popup-reply-button:hover,
+.chat-popup-moment-button:hover {
   background: #f0f2f5;
+}
+
+.chat-popup-notice {
+  margin: 8px 10px 0;
+  border-radius: 8px;
+  background: #e7f3ff;
+  color: #1877f2;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 10px;
 }
 
 .chat-popup-composer {
@@ -13306,6 +13333,346 @@ textarea:focus-visible {
   opacity: 0.62;
 }
 
+.save-moment-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.62);
+  padding: 18px;
+}
+
+.save-moment-dialog {
+  width: min(100%, 560px);
+  max-height: min(88dvh, 720px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #3a3b3c;
+  border-radius: 8px;
+  background: #242526;
+  color: #e4e6eb;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+
+.save-moment-dialog > header,
+.save-moment-dialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: #3a3b3c;
+  padding: 16px 18px;
+}
+
+.save-moment-dialog > header {
+  border-bottom: 1px solid #3a3b3c;
+}
+
+.save-moment-dialog > footer {
+  border-top: 1px solid #3a3b3c;
+}
+
+.save-moment-dialog h2,
+.save-moment-dialog p {
+  margin: 0;
+}
+
+.save-moment-dialog h2 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.save-moment-dialog header p,
+.save-moment-source small,
+.save-moment-list small,
+.save-moment-friends-header small {
+  color: #b0b3b8;
+  font-size: 13px;
+}
+
+.save-moment-dialog > header > button,
+.save-moment-dialog > footer > button {
+  border: 0;
+  border-radius: 999px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.save-moment-dialog > header > button {
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.save-moment-dialog > footer > button {
+  min-height: 36px;
+  padding: 8px 14px;
+}
+
+.save-moment-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.save-moment-dialog > footer > a {
+  color: #2d88ff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.save-moment-body {
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+  padding: 16px 18px;
+}
+
+.save-moment-source {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border-radius: 8px;
+  background: #18191a;
+  padding: 10px;
+}
+
+.save-moment-source > span {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #263951;
+  color: #2d88ff;
+  font-size: 20px;
+}
+
+.save-moment-source div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.save-moment-source strong,
+.save-moment-list strong,
+.save-moment-friend-list strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #e4e6eb;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-moment-error {
+  border-radius: 8px;
+  background: rgba(250, 56, 62, 0.14);
+  color: #ffb4b8;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.save-moment-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.save-moment-tabs button,
+.save-moment-create > button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.save-moment-tabs button.active,
+.save-moment-create > button {
+  background: #2d88ff;
+  color: #fff;
+}
+
+.save-moment-list,
+.save-moment-create,
+.save-moment-friend-list {
+  min-height: 0;
+  display: grid;
+  align-content: flex-start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.save-moment-list {
+  max-height: 320px;
+}
+
+.save-moment-list > button,
+.save-moment-friend-list > button {
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e4e6eb;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.save-moment-list > button {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px;
+}
+
+.save-moment-list > button:hover,
+.save-moment-friend-list > button:hover,
+.save-moment-friend-list > button.selected {
+  background: #3a3b3c;
+}
+
+.save-moment-list img,
+.save-moment-list button > span:first-child,
+.save-moment-friend-list img,
+.save-moment-friend-list button > span:first-child {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e7f3ff;
+  color: #1877f2;
+  font-weight: 900;
+  object-fit: cover;
+}
+
+.save-moment-list button > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.save-moment-list em {
+  color: #2d88ff;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.save-moment-list p,
+.save-moment-friend-list p,
+.save-moment-empty {
+  margin: 0;
+  border-radius: 8px;
+  background: #18191a;
+  color: #b0b3b8;
+  padding: 12px;
+}
+
+.save-moment-list p button,
+.save-moment-friend-list p button,
+.save-moment-empty button {
+  border: 0;
+  background: transparent;
+  color: #2d88ff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+}
+
+.save-moment-empty {
+  display: grid;
+  gap: 6px;
+}
+
+.save-moment-empty strong {
+  color: #e4e6eb;
+}
+
+.save-moment-create {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  max-height: 430px;
+}
+
+.save-moment-create label,
+.save-moment-friends {
+  display: grid;
+  gap: 7px;
+}
+
+.save-moment-create label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.save-moment-create input,
+.save-moment-create textarea,
+.save-moment-friends > input {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: #3a3b3c;
+  color: #e4e6eb;
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.save-moment-create textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.save-moment-create input::placeholder,
+.save-moment-create textarea::placeholder {
+  color: #b0b3b8;
+}
+
+.save-moment-friends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.save-moment-friend-list {
+  max-height: 190px;
+}
+
+.save-moment-friend-list > button {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px;
+}
+
+.save-moment-friend-list img,
+.save-moment-friend-list button > span:first-child {
+  width: 40px;
+  height: 40px;
+}
+
+.save-moment-friend-list small {
+  color: #2d88ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .moments-page {
   width: min(100%, 1040px);
   display: grid;
@@ -13588,7 +13955,33 @@ textarea:focus-visible {
   padding: 18px;
 }
 
-.moment-detail-header span {
+.moment-detail-cover {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e7f3ff, #dbeafe);
+  color: #1877f2;
+  font-size: 34px;
+  font-weight: 900;
+}
+
+.moment-detail-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.moment-detail-summary {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.moment-detail-summary > span {
   color: #1877f2;
   font-size: 13px;
   font-weight: 900;
@@ -13604,6 +13997,22 @@ textarea:focus-visible {
 .moment-detail-header small,
 .moment-item-card small {
   color: #667085;
+}
+
+.moment-detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0 8px;
+}
+
+.moment-detail-stats strong {
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 9px;
 }
 
 .moment-invite-actions {
@@ -13654,6 +14063,28 @@ textarea:focus-visible {
   padding: 18px;
 }
 
+.moment-day-group {
+  display: grid;
+  gap: 10px;
+}
+
+.moment-day-group h3 {
+  width: fit-content;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 6px 12px;
+  text-transform: capitalize;
+}
+
+.moment-day-items {
+  display: grid;
+  gap: 14px;
+}
+
 .moment-item {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -13677,6 +14108,31 @@ textarea:focus-visible {
 .moment-item-card header div {
   display: grid;
   gap: 2px;
+}
+
+.moment-item-type {
+  width: fit-content;
+  border-radius: 999px;
+  background: #e7f3ff;
+  color: #1877f2;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 7px;
+}
+
+.moment-item-type.story {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.moment-item-type.message {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.moment-item-type.note {
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .moment-item-card header a {
@@ -13712,6 +14168,13 @@ textarea:focus-visible {
   min-height: 520px;
   padding: 24px;
   text-align: center;
+}
+
+.moments-empty-state.compact {
+  min-height: 240px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .moments-empty {
@@ -13759,6 +14222,11 @@ textarea:focus-visible {
     padding: 0;
   }
 
+  .save-moment-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
   .feed-moment-create-modal {
     width: 100%;
     max-height: 92dvh;
@@ -13768,7 +14236,21 @@ textarea:focus-visible {
     border-radius: 12px 12px 0 0;
   }
 
+  .save-moment-dialog {
+    width: 100%;
+    max-height: 92dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+  }
+
   .feed-moment-create-modal footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .save-moment-dialog > footer {
     align-items: stretch;
     flex-direction: column;
   }

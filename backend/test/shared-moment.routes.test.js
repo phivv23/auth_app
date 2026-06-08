@@ -134,23 +134,80 @@ function createMomentTestApp() {
       return notification;
     },
     resolveSharedMomentItem: async (input) => {
-      if (input.itemType !== "note" || !String(input.content || "").trim()) {
+      const itemType = String(input.itemType || "");
+      const postId = Number(input.postId || 0);
+      const storyId = Number(input.storyId || 0);
+      const messageId = Number(input.messageId || 0);
+      const content = String(input.content || "").trim();
+
+      if (itemType === "note" && content) {
+        return {
+          value: {
+            itemType,
+            content,
+            postId: null,
+            storyId: null,
+            messageId: null,
+            conversationId: null,
+            mediaUrl: null,
+            mediaType: null,
+          },
+        };
+      }
+
+      if (itemType === "post" && postId > 0) {
+        return {
+          value: {
+            itemType,
+            content: "Post item",
+            postId,
+            storyId: null,
+            messageId: null,
+            conversationId: null,
+            mediaUrl: null,
+            mediaType: null,
+          },
+        };
+      }
+
+      if (itemType === "story" && storyId > 0) {
+        return {
+          value: {
+            itemType,
+            content: "Story item",
+            postId: null,
+            storyId,
+            messageId: null,
+            conversationId: null,
+            mediaUrl: null,
+            mediaType: null,
+          },
+        };
+      }
+
+      if (itemType === "message" && messageId > 0) {
+        return {
+          value: {
+            itemType,
+            content: "Message item",
+            postId: null,
+            storyId: null,
+            messageId,
+            conversationId: 4,
+            mediaUrl: null,
+            mediaType: null,
+          },
+        };
+      }
+
+      if (itemType === "note") {
         return {
           error: "Bạn cần nhập nội dung ghi chú.",
         };
       }
 
       return {
-        value: {
-          itemType: "note",
-          content: String(input.content).trim(),
-          postId: null,
-          storyId: null,
-          messageId: null,
-          conversationId: null,
-          mediaUrl: null,
-          mediaType: null,
-        },
+        error: "Loại nội dung khoảnh khắc không hợp lệ.",
       };
     },
     createSharedMoment: async ({
@@ -259,18 +316,45 @@ function createMomentTestApp() {
         return null;
       }
 
+      const duplicate = moment.items.find((entry) => {
+        if (entry.itemType !== item.itemType) {
+          return false;
+        }
+
+        if (item.itemType === "post") {
+          return Number(entry.postId) === Number(item.postId);
+        }
+
+        if (item.itemType === "story") {
+          return Number(entry.storyId) === Number(item.storyId);
+        }
+
+        if (item.itemType === "message") {
+          return Number(entry.messageId) === Number(item.messageId);
+        }
+
+        return false;
+      });
+
+      if (duplicate) {
+        return {
+          error: "Nội dung này đã có trong khoảnh khắc.",
+          code: "MOMENT_ITEM_ALREADY_EXISTS",
+        };
+      }
+
       const createdAt = now();
       moment.items.push({
         id: moment.items.length + 1,
         momentId,
         itemType: item.itemType,
         content: item.content,
-        postId: null,
-        storyId: null,
-        messageId: null,
-        conversationId: null,
-        mediaUrl: "",
-        mediaType: "",
+        postId: item.postId,
+        storyId: item.storyId,
+        messageId: item.messageId,
+        conversationId: item.conversationId,
+        mediaUrl: item.mediaUrl || "",
+        mediaType: item.mediaType || "",
         createdById: userId,
         createdAt,
         createdBy: {
@@ -420,6 +504,89 @@ describe("shared moment routes", () => {
     assert.equal(addItemResponse.status, 201);
     assert.equal(addItemResponse.body.moment.items.length, 1);
     assert.equal(addItemResponse.body.moment.items[0].content, "Great memory");
+  });
+
+  it("adds post, story and message items to an accepted moment", async () => {
+    const { app } = createMomentTestApp();
+
+    await request(
+      app,
+      "/api/moments",
+      jsonRequestOptions(1, {
+        title: "Saved sources",
+        participantIds: [2],
+      })
+    );
+
+    const postResponse = await request(
+      app,
+      "/api/moments/1/items",
+      jsonRequestOptions(1, {
+        itemType: "post",
+        postId: 10,
+      })
+    );
+    const storyResponse = await request(
+      app,
+      "/api/moments/1/items",
+      jsonRequestOptions(1, {
+        itemType: "story",
+        storyId: 20,
+      })
+    );
+    const messageResponse = await request(
+      app,
+      "/api/moments/1/items",
+      jsonRequestOptions(1, {
+        itemType: "message",
+        messageId: 30,
+      })
+    );
+
+    assert.equal(postResponse.status, 201);
+    assert.equal(storyResponse.status, 201);
+    assert.equal(messageResponse.status, 201);
+    assert.deepEqual(
+      messageResponse.body.moment.items.map((item) => item.itemType),
+      ["post", "story", "message"]
+    );
+    assert.equal(messageResponse.body.moment.items[0].postId, 10);
+    assert.equal(messageResponse.body.moment.items[1].storyId, 20);
+    assert.equal(messageResponse.body.moment.items[2].messageId, 30);
+  });
+
+  it("returns a conflict when adding the same source twice", async () => {
+    const { app } = createMomentTestApp();
+
+    await request(
+      app,
+      "/api/moments",
+      jsonRequestOptions(1, {
+        title: "Duplicate guard",
+        participantIds: [2],
+      })
+    );
+
+    const firstResponse = await request(
+      app,
+      "/api/moments/1/items",
+      jsonRequestOptions(1, {
+        itemType: "post",
+        postId: 10,
+      })
+    );
+    const duplicateResponse = await request(
+      app,
+      "/api/moments/1/items",
+      jsonRequestOptions(1, {
+        itemType: "post",
+        postId: 10,
+      })
+    );
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(duplicateResponse.status, 409);
+    assert.equal(duplicateResponse.body.code, "MOMENT_ITEM_ALREADY_EXISTS");
   });
 
   it("hides declined moments and blocks users outside the moment", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
@@ -12,9 +12,14 @@ import {
 import { useAuth } from "../context/useAuth.js";
 import { useRealtimeSubscription } from "../context/useRealtime.js";
 import LinkifiedText from "../utils/linkify.jsx";
+import {
+  buildSharedMomentDeepLink,
+  createSharedMomentSourceItem,
+} from "../utils/sharedMomentSource.js";
 import { stripSharedPostUrl } from "../utils/sharedPostMessage.js";
 import { formatRelativeTime } from "../utils/time.js";
 import SharedPostMessagePreview from "./SharedPostMessagePreview.jsx";
+import SaveToMomentDialog from "./SaveToMomentDialog.jsx";
 
 function upsertMessage(messages, nextMessage) {
   const withoutDuplicate = messages.filter(
@@ -185,12 +190,26 @@ export default function MessagePopups() {
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
   const [reactingMessageId, setReactingMessageId] = useState(null);
   const [replyingToMessage, setReplyingToMessage] = useState(null);
+  const [momentDialogMessage, setMomentDialogMessage] = useState(null);
   const [quickEmoji] = useState("👍");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   const isMessagesPage = location.pathname === "/messages";
+  const momentDialogSourceItem = useMemo(
+    () => createSharedMomentSourceItem("message", momentDialogMessage?.id),
+    [momentDialogMessage?.id]
+  );
+  const momentDialogFullPageUrl = useMemo(
+    () =>
+      buildSharedMomentDeepLink(momentDialogSourceItem, {
+        conversationId:
+          momentDialogMessage?.conversationId || popup?.conversation?.id,
+      }),
+    [momentDialogMessage?.conversationId, momentDialogSourceItem, popup?.conversation?.id]
+  );
 
   async function openConversation(conversation, initialMessages = []) {
     setReplyingToMessage(null);
@@ -546,6 +565,13 @@ export default function MessagePopups() {
     setGifPickerOpen(false);
   }
 
+  function handleSaveMessageToMoment(message) {
+    setMomentDialogMessage(message);
+    setReactionPickerMessageId(null);
+    setEmojiPickerOpen(false);
+    setGifPickerOpen(false);
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
     submitMessage({ allowQuickEmoji: true });
@@ -621,6 +647,7 @@ export default function MessagePopups() {
   }
 
   return (
+    <>
     <section className="chat-popup" aria-label={`Chat với ${otherUser.name}`}>
       <header className="chat-popup-header">
         <Link className="chat-popup-user" to={`/users/${otherUser.id}`}>
@@ -667,6 +694,7 @@ export default function MessagePopups() {
       </header>
 
       {error && <p className="chat-popup-error">{error}</p>}
+      {notice && <p className="chat-popup-notice">{notice}</p>}
 
       <div className="chat-popup-thread">
         {popup.messages.length === 0 ? (
@@ -788,6 +816,18 @@ export default function MessagePopups() {
                     title="Trả lời"
                   >
                     ↩
+                  </button>
+                )}
+
+                {!isDeleted && (
+                  <button
+                    className="chat-popup-moment-button"
+                    type="button"
+                    onClick={() => handleSaveMessageToMoment(message)}
+                    aria-label="Lưu tin nhắn vào khoảnh khắc"
+                    title="Lưu vào khoảnh khắc"
+                  >
+                    ✦
                   </button>
                 )}
               </div>
@@ -918,5 +958,17 @@ export default function MessagePopups() {
         </button>
       </form>
     </section>
+    <SaveToMomentDialog
+      open={Boolean(momentDialogMessage)}
+      sourceItem={momentDialogSourceItem}
+      fullPageUrl={momentDialogFullPageUrl}
+      onClose={() => setMomentDialogMessage(null)}
+      onSaved={() => {
+        setMomentDialogMessage(null);
+        setError("");
+        setNotice("Đã lưu tin nhắn vào khoảnh khắc.");
+      }}
+    />
+    </>
   );
 }

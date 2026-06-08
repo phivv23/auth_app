@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { getFileUrl } from "../api/client.js";
 import {
@@ -15,11 +15,16 @@ import {
   startConversation,
 } from "../api/message.api.js";
 import ReportDialog from "../components/ReportDialog.jsx";
+import SaveToMomentDialog from "../components/SaveToMomentDialog.jsx";
 import SharedPostMessagePreview from "../components/SharedPostMessagePreview.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useRealtimeSubscription } from "../context/useRealtime.js";
 import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import LinkifiedText from "../utils/linkify.jsx";
+import {
+  buildSharedMomentDeepLink,
+  createSharedMomentSourceItem,
+} from "../utils/sharedMomentSource.js";
 import { stripSharedPostUrl } from "../utils/sharedPostMessage.js";
 import { formatRelativeTime } from "../utils/time.js";
 
@@ -240,7 +245,6 @@ function shouldShowTimeSeparator(messages, index) {
 export default function Messages() {
   const { user } = useAuth();
   const { actionDialog, confirmAction, promptAction } = useActionDialog();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const bottomRef = useRef(null);
   const threadRef = useRef(null);
@@ -287,6 +291,8 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const [typingByConversation, setTypingByConversation] = useState({});
   const [reportMessage, setReportMessage] = useState(null);
+  const [momentDialogMessage, setMomentDialogMessage] = useState(null);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [olderMessagesError, setOlderMessagesError] = useState("");
 
@@ -296,6 +302,17 @@ export default function Messages() {
   const activePeerName = activeOtherUser
     ? nicknames[activeOtherUser.id] || activeOtherUser.name
     : "";
+  const momentDialogSourceItem = useMemo(
+    () => createSharedMomentSourceItem("message", momentDialogMessage?.id),
+    [momentDialogMessage?.id]
+  );
+  const momentDialogFullPageUrl = useMemo(
+    () =>
+      buildSharedMomentDeepLink(momentDialogSourceItem, {
+        conversationId: momentDialogMessage?.conversationId || activeConversationId,
+      }),
+    [activeConversationId, momentDialogMessage?.conversationId, momentDialogSourceItem]
+  );
 
   const unreadConversationCount = conversations.filter(
     (conversation) => conversation.unreadCount > 0
@@ -1114,17 +1131,9 @@ export default function Messages() {
   }
 
   function handleSaveMessageToMoment(message) {
-    const params = new URLSearchParams({
-      messageId: String(message.id),
-    });
-
-    if (activeConversationId) {
-      params.set("conversationId", String(activeConversationId));
-    }
-
     setMessageMenuId(null);
     setReactionPickerMessageId(null);
-    navigate(`/moments?${params.toString()}`);
+    setMomentDialogMessage(message);
   }
 
   async function handleSaveMessageEdit(event) {
@@ -1438,6 +1447,7 @@ export default function Messages() {
               onScroll={handleThreadScroll}
             >
               {error && <p className="error messages-error">{error}</p>}
+              {notice && <p className="messages-notice">{notice}</p>}
 
               {loadingMessages ? (
                 <p className="messages-empty">Đang tải tin nhắn...</p>
@@ -2209,6 +2219,17 @@ export default function Messages() {
         targetId={reportMessage?.id}
         title="Báo cáo tin nhắn"
         onClose={() => setReportMessage(null)}
+      />
+      <SaveToMomentDialog
+        open={Boolean(momentDialogMessage)}
+        sourceItem={momentDialogSourceItem}
+        fullPageUrl={momentDialogFullPageUrl}
+        onClose={() => setMomentDialogMessage(null)}
+        onSaved={() => {
+          setMomentDialogMessage(null);
+          setError("");
+          setNotice("Đã lưu tin nhắn vào khoảnh khắc.");
+        }}
       />
       {actionDialog}
     </div>

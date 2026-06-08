@@ -228,6 +228,16 @@ router.post(
         });
       }
 
+      if (result.error) {
+        const statusCode =
+          result.code === "MOMENT_ITEM_ALREADY_EXISTS" ? 409 : 400;
+
+        return res.status(statusCode).json({
+          message: result.error,
+          code: result.code || "MOMENT_ITEM_ERROR",
+        });
+      }
+
       return res.status(201).json(result);
     } catch (error) {
       next(error);

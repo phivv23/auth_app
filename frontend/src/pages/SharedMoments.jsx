@@ -40,6 +40,37 @@ const itemTypeLabels = {
   note: "Ghi chú",
 };
 
+function formatMomentDay(timestamp) {
+  if (!timestamp) {
+    return "Chưa rõ ngày";
+  }
+
+  return new Date(timestamp).toLocaleDateString("vi-VN", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function groupMomentItemsByDay(items = []) {
+  return items.reduce((groups, item) => {
+    const dayLabel = formatMomentDay(item.createdAt);
+    const existingGroup = groups.find((group) => group.label === dayLabel);
+
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({
+        label: dayLabel,
+        items: [item],
+      });
+    }
+
+    return groups;
+  }, []);
+}
+
 function getInitial(name) {
   return name?.charAt(0)?.toUpperCase() || "U";
 }
@@ -166,6 +197,10 @@ export default function SharedMoments() {
   const selectedMomentIsAccepted = selectedMoment?.myStatus === "accepted";
   const sourceAlreadyAdded = selectedMoment?.items?.some((item) =>
     isSameSource(item, sourceItem)
+  );
+  const selectedMomentItemGroups = useMemo(
+    () => groupMomentItemsByDay(selectedMoment?.items || []),
+    [selectedMoment?.items]
   );
 
   const loadMoments = useCallback(async function loadMoments(signal) {
@@ -625,10 +660,25 @@ export default function SharedMoments() {
           ) : (
             <>
               <header className="moment-detail-header">
-                <div>
+                <div className="moment-detail-cover">
+                  {selectedMoment.coverMediaUrl ? (
+                    <img src={getFileUrl(selectedMoment.coverMediaUrl)} alt="" />
+                  ) : (
+                    <span>{getInitial(selectedMoment.title)}</span>
+                  )}
+                </div>
+
+                <div className="moment-detail-summary">
                   <span>{selectedMoment.mood || "Khoảnh khắc"}</span>
                   <h2>{selectedMoment.title}</h2>
                   <p>{selectedMoment.note || "Chưa có lời nhắn mở đầu."}</p>
+                  <div className="moment-detail-stats">
+                    <strong>{selectedMoment.participantCount || 1} người tham gia</strong>
+                    <strong>{selectedMoment.itemCount || 0} nội dung</strong>
+                    {selectedMoment.pendingCount > 0 && (
+                      <strong>{selectedMoment.pendingCount} lời mời chờ</strong>
+                    )}
+                  </div>
                   <small title={formatVietnamDateTime(selectedMoment.updatedAt)}>
                     Cập nhật {formatRelativeTime(selectedMoment.updatedAt)}
                   </small>
@@ -681,37 +731,57 @@ export default function SharedMoments() {
               )}
 
               <div className="moment-timeline">
-                {selectedMoment.items?.length === 0 ? (
-                  <p className="moments-empty">
-                    Khoảnh khắc này chưa có nội dung nào.
-                  </p>
+                {selectedMomentItemGroups.length === 0 ? (
+                  <div className="moments-empty-state compact">
+                    <h2>Chưa có nội dung nào</h2>
+                    <p>
+                      Thêm bài viết từ Feed, story đang xem hoặc tin nhắn trong
+                      Messenger để bắt đầu dòng kỷ niệm này.
+                    </p>
+                  </div>
                 ) : (
-                  selectedMoment.items?.map((item) => (
-                    <article key={item.id} className={`moment-item ${item.itemType}`}>
-                      <div className="moment-item-avatar">
-                        <MomentAvatar user={item.createdBy} />
+                  selectedMomentItemGroups.map((group) => (
+                    <section className="moment-day-group" key={group.label}>
+                      <h3>{group.label}</h3>
+                      <div className="moment-day-items">
+                        {group.items.map((item) => (
+                          <article
+                            key={item.id}
+                            className={`moment-item ${item.itemType}`}
+                          >
+                            <div className="moment-item-avatar">
+                              <MomentAvatar user={item.createdBy} />
+                            </div>
+                            <div className="moment-item-card">
+                              <header>
+                                <div>
+                                  <span className={`moment-item-type ${item.itemType}`}>
+                                    {itemTypeLabels[item.itemType]}
+                                  </span>
+                                  <strong>{item.createdBy.name}</strong>
+                                  <small>{formatRelativeTime(item.createdAt)}</small>
+                                </div>
+                                {item.postId && (
+                                  <Link to={`/posts/${item.postId}`}>Mở bài</Link>
+                                )}
+                                {item.storyId && (
+                                  <Link to={`/stories/${item.storyId}`}>Mở story</Link>
+                                )}
+                                {item.messageId && item.conversationId && (
+                                  <Link
+                                    to={`/messages?conversationId=${item.conversationId}`}
+                                  >
+                                    Mở chat
+                                  </Link>
+                                )}
+                              </header>
+                              {item.content && <p>{item.content}</p>}
+                              <MomentMedia item={item} />
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                      <div className="moment-item-card">
-                        <header>
-                          <div>
-                            <strong>{item.createdBy.name}</strong>
-                            <small>
-                              {itemTypeLabels[item.itemType]} ·{" "}
-                              {formatRelativeTime(item.createdAt)}
-                            </small>
-                          </div>
-                          {item.postId && <Link to={`/posts/${item.postId}`}>Mở bài</Link>}
-                          {item.storyId && <Link to={`/stories/${item.storyId}`}>Mở story</Link>}
-                          {item.messageId && item.conversationId && (
-                            <Link to={`/messages?conversationId=${item.conversationId}`}>
-                              Mở chat
-                            </Link>
-                          )}
-                        </header>
-                        {item.content && <p>{item.content}</p>}
-                        <MomentMedia item={item} />
-                      </div>
-                    </article>
+                    </section>
                   ))
                 )}
               </div>

@@ -447,6 +447,40 @@ async function insertMomentItem(connection, momentId, userId, item) {
   return result.insertId;
 }
 
+async function findDuplicateMomentItem(connection, momentId, item) {
+  const duplicateFieldByType = {
+    post: "post_id",
+    story: "story_id",
+    message: "message_id",
+  };
+  const duplicateValueByType = {
+    post: item.postId,
+    story: item.storyId,
+    message: item.messageId,
+  };
+  const duplicateField = duplicateFieldByType[item.itemType];
+  const duplicateValue = duplicateValueByType[item.itemType];
+
+  if (!duplicateField || !duplicateValue) {
+    return null;
+  }
+
+  const rows = await execute(
+    connection,
+    `
+    SELECT id
+    FROM shared_moment_items
+    WHERE moment_id = ?
+      AND item_type = ?
+      AND ${duplicateField} = ?
+    LIMIT 1
+    `,
+    [momentId, item.itemType, duplicateValue]
+  );
+
+  return rows[0] || null;
+}
+
 export async function createSharedMoment({
   creatorId,
   title,
@@ -740,6 +774,21 @@ export async function addSharedMomentItem({ momentId, userId, item }) {
 
   try {
     await connection.beginTransaction();
+    const duplicateItem = await findDuplicateMomentItem(
+      connection,
+      momentId,
+      item
+    );
+
+    if (duplicateItem) {
+      await connection.rollback();
+
+      return {
+        error: "Nội dung này đã có trong khoảnh khắc.",
+        code: "MOMENT_ITEM_ALREADY_EXISTS",
+      };
+    }
+
     await insertMomentItem(connection, momentId, userId, item);
     await connection.commit();
 

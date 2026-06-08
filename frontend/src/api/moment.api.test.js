@@ -102,7 +102,7 @@ describe("moment api", () => {
       initialItem: { itemType: "post", postId: 9 },
     });
     await respondToSharedMoment(1, "accepted");
-    await addSharedMomentItem(1, { itemType: "note", content: "hello" });
+    await addSharedMomentItem(1, { itemType: "message", messageId: 11 });
 
     assert.equal(requests[0].options.method, "POST");
     assert.deepEqual(JSON.parse(requests[0].options.body), {
@@ -118,8 +118,8 @@ describe("moment api", () => {
     });
     assert.equal(new URL(requests[2].url).pathname, "/api/moments/1/items");
     assert.deepEqual(JSON.parse(requests[2].options.body), {
-      itemType: "note",
-      content: "hello",
+      itemType: "message",
+      messageId: 11,
     });
   });
 });

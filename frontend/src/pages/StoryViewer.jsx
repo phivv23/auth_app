@@ -11,8 +11,10 @@ import {
   replyStory,
 } from "../api/story.api.js";
 import ReportDialog from "../components/ReportDialog.jsx";
+import SaveToMomentDialog from "../components/SaveToMomentDialog.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useActionDialog } from "../hooks/useActionDialog.jsx";
+import { createSharedMomentSourceItem } from "../utils/sharedMomentSource.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const reactionOptions = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
@@ -136,11 +138,16 @@ export default function StoryViewer() {
   const [recentReaction, setRecentReaction] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [saveMomentOpen, setSaveMomentOpen] = useState(false);
 
   const activeStoryId =
     routeStoryId || (stories[0]?.id ? String(stories[0].id) : "");
   const activeStory = stories.find(
     (story) => String(story.id) === String(activeStoryId)
+  );
+  const activeStoryMomentSource = useMemo(
+    () => createSharedMomentSourceItem("story", activeStory?.id),
+    [activeStory?.id]
   );
   const activeIndex = stories.findIndex(
     (story) => String(story.id) === String(activeStoryId)
@@ -556,7 +563,8 @@ export default function StoryViewer() {
     }
 
     setMenuOpen(false);
-    navigate(`/moments?storyId=${activeStory.id}`);
+    setIsPaused(true);
+    setSaveMomentOpen(true);
   }
 
   function handleReportStory() {
@@ -954,6 +962,19 @@ export default function StoryViewer() {
         onReported={() => {
           setReportDialogOpen(false);
           showToast("Đã gửi báo cáo story.", "success");
+        }}
+      />
+      <SaveToMomentDialog
+        open={saveMomentOpen}
+        sourceItem={activeStoryMomentSource}
+        onClose={() => {
+          setSaveMomentOpen(false);
+          setIsPaused(false);
+        }}
+        onSaved={() => {
+          setSaveMomentOpen(false);
+          setIsPaused(false);
+          showToast("Đã lưu story vào khoảnh khắc.", "success");
         }}
       />
       {actionDialog}

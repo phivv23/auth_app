@@ -18,10 +18,12 @@ import { sendMessage, startConversation } from "../api/message.api.js";
 import { getFileUrl } from "../api/client.js";
 import MediaViewer from "./MediaViewer.jsx";
 import ReportDialog from "./ReportDialog.jsx";
+import SaveToMomentDialog from "./SaveToMomentDialog.jsx";
 import { CommentListSkeleton } from "./Skeleton.jsx";
 import { useAuth } from "../context/useAuth.js";
 import { useActionDialog } from "../hooks/useActionDialog.jsx";
 import { isVideoMedia } from "../utils/postMedia.js";
+import { createSharedMomentSourceItem } from "../utils/sharedMomentSource.js";
 import { formatRelativeTime, formatVietnamDateTime } from "../utils/time.js";
 
 const reactions = [
@@ -335,6 +337,7 @@ export default function SocialPostCard({
   const [bookmarking, setBookmarking] = useState(false);
   const [mediaViewerSession, setMediaViewerSession] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
+  const [saveMomentOpen, setSaveMomentOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -375,6 +378,10 @@ export default function SocialPostCard({
   const quickForwardFriends = forwardFriends.slice(0, 7);
   const canForwardPost =
     !forwardSubmitting && selectedForwardFriendIds.length > 0;
+  const momentSourceItem = useMemo(
+    () => createSharedMomentSourceItem("post", post.id),
+    [post.id]
+  );
 
   useEffect(() => {
     if (defaultCommentsOpen) {
@@ -1825,9 +1832,13 @@ export default function SocialPostCard({
           Chia sẻ
         </button>
 
-        <Link className="feed-action-button" to={`/moments?postId=${post.id}`}>
+        <button
+          className="feed-action-button"
+          type="button"
+          onClick={() => setSaveMomentOpen(true)}
+        >
           Khoảnh khắc
-        </Link>
+        </button>
 
         <button
           className={`feed-action-button ${post.bookmarkedByMe ? "active" : ""}`}
@@ -2225,6 +2236,16 @@ export default function SocialPostCard({
         title={reportTarget?.title || "Báo cáo nội dung"}
         onClose={() => setReportTarget(null)}
         onReported={() => setNotice("Đã gửi báo cáo.")}
+      />
+      <SaveToMomentDialog
+        open={saveMomentOpen}
+        sourceItem={momentSourceItem}
+        onClose={() => setSaveMomentOpen(false)}
+        onSaved={() => {
+          setSaveMomentOpen(false);
+          setError("");
+          setNotice("Đã lưu bài viết vào khoảnh khắc.");
+        }}
       />
       {actionDialog}
     </article>

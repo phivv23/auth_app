@@ -191,6 +191,30 @@ export default function SharedMomentsFeedStrip({ onNotice }) {
     }
   );
 
+  useEffect(() => {
+    function handleMomentSaved(event) {
+      const nextMoment = event.detail?.moment;
+
+      if (!nextMoment) {
+        loadMoments({ silent: true });
+        return;
+      }
+
+      setMoments((currentMoments) => [
+        nextMoment,
+        ...currentMoments.filter(
+          (moment) => Number(moment.id) !== Number(nextMoment.id)
+        ),
+      ]);
+    }
+
+    window.addEventListener("shared-moment-saved", handleMomentSaved);
+
+    return () => {
+      window.removeEventListener("shared-moment-saved", handleMomentSaved);
+    };
+  }, [loadMoments]);
+
   const loadFriends = useCallback(
     async function loadFriends({ signal } = {}) {
       try {
