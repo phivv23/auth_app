@@ -806,7 +806,7 @@ Khi update avatar/cover/post image, code co logic xoa file cu sau khi DB update 
 - CDN/object storage cho media.
 - Database indexes va query optimization cho scale lon.
 
-## 11. Ghi Chu Cho AI/Engineer Tiep Theo
+## 11. 
 
 - Project dang o trang thai prototype social network, khong con chi la auth app.
 - Neu can lam feature moi, nen doc truoc:
